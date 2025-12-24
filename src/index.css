@@ -1,0 +1,235 @@
+@import "tailwindcss";
+
+/* Google Sans Font */
+@import url("https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap");
+
+/* Custom CSS Variables */
+:root {
+  /* Google Theme Colors */
+  --color-primary: #1a73e8;
+  --color-primary-hover: #1557b0;
+  --color-primary-light: #e8f0fe;
+  --color-google-blue: #1a73e8;
+  --color-google-red: #ea4335;
+  --color-google-yellow: #fbbc05;
+  --color-google-green: #34a853;
+  --color-background: #f8f9fa;
+  --color-surface: #ffffff;
+  --color-border: #e8eaed;
+  --color-text-primary: #202124;
+  --color-text-secondary: #5f6368;
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: "Google Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Google-style pill button */
+.btn-pill {
+  padding: 0.5rem 1.5rem;
+  border-radius: 100px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  color: white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.btn-secondary:hover {
+  background-color: #f1f3f4;
+}
+
+/* Google-style card */
+.card {
+  background-color: var(--color-surface);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Action chip */
+.chip {
+  padding: 0.5rem 1rem;
+  border-radius: 100px;
+  border: 1px solid var(--color-border);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-primary);
+  transition: background-color 0.2s;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chip:hover {
+  background-color: var(--color-primary-light);
+}
+
+/* Navigation tab (pill style) */
+.nav-tab {
+  padding: 0.5rem 1rem;
+  border-radius: 100px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.nav-tab-active {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.nav-tab-inactive {
+  color: var(--color-text-secondary);
+}
+
+.nav-tab-inactive:hover {
+  background-color: #f1f3f4;
+}
+
+/* Stats card */
+.stats-card {
+  background-color: var(--color-surface);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stats-value {
+  font-size: 2.25rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.stats-label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.stats-trend {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.stats-trend-up {
+  color: var(--color-google-green);
+}
+
+.stats-trend-down {
+  color: var(--color-google-red);
+}
+
+/* Chat input */
+.chat-input {
+  width: 100%;
+  padding: 0.75rem 1.25rem;
+  border-radius: 100px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  font-size: 0.875rem;
+}
+
+.chat-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary);
+  border-color: transparent;
+}
+
+.chat-input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+/* Chat message bubble */
+.chat-bubble {
+  padding: 1rem;
+  border-radius: 1rem;
+  max-width: 80%;
+}
+
+.chat-bubble-user {
+  background-color: var(--color-primary);
+  color: white;
+  margin-left: auto;
+  border-bottom-right-radius: 0.25rem;
+}
+
+.chat-bubble-assistant {
+  background-color: #f1f3f4;
+  color: var(--color-text-primary);
+  border-bottom-left-radius: 0.25rem;
+}
+
+/* Sidebar link */
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.sidebar-link-active {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.sidebar-link-inactive {
+  color: var(--color-text-secondary);
+}
+
+.sidebar-link-inactive:hover {
+  background-color: #f1f3f4;
+}
+
+/* Status badge */
+.badge {
+  padding: 0.125rem 0.625rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge-matched {
+  background-color: rgba(52, 168, 83, 0.1);
+  color: var(--color-google-green);
+}
+
+.badge-pending {
+  background-color: rgba(251, 188, 5, 0.1);
+  color: #b06000;
+}
+
+.badge-claimed {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+}
