@@ -17,5 +17,16 @@
         </ul>
       </td>
     </tr>
+    <tr>
+      <td>2</td>
+      <td>v1.1.0</td>
+      <td>
+        <ul>
+          <li><strong>UI Refinements:</strong> Glassmorphic header, footer redesign (no Google links), black text adjustments on Landing/Auth pages.</li>
+          <li><strong>Branding:</strong> Replaced placeholder logo with <code>Logo.png</code> (circular style) for Navbar, Footer, and Favicon.</li>
+          <li><strong>Admin Security:</strong> Implemented <code>AdminRoute</code> and whitelist logic for <code>workingspace4321@gmail.com</code>.</li>
+        </ul>
+      </td>
+    </tr>
   </tbody>
 </table>

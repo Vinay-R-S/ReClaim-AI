@@ -10,6 +10,13 @@ ReClaim AI is an AI-powered Lost & Found web application that matches lost and f
 - **Icons**: [Lucide React](https://lucide.dev/)
 - **Routing**: [React Router DOM](https://reactrouter.com/)
 
+## Key Features
+
+- **AI-Powered Matching**: Uses Google Gemini to match lost and found items.
+- **Secure Authentication**: Google OAuth and Email/Password login.
+- **Admin Dashboard**: Secure admin access for managing reports (Whitelisted emails only).
+- **Responsive Design**: Modern, glassmorphic UI with dark/light mode support (Google-themed).
+
 ## Prerequisites
 
 Ensure you have the following installed on your machine:

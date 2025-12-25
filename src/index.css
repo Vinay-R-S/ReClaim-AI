@@ -233,3 +233,88 @@ body {
   background-color: var(--color-primary-light);
   color: var(--color-primary);
 }
+
+/* Glassmorphism */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass {
+  background: rgba(0, 0, 0, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Additional Theme Utilities */
+.bg-primary {
+  background-color: var(--color-primary);
+}
+
+.bg-primary-light {
+  background-color: var(--color-primary-light);
+}
+
+.bg-google-blue {
+  background-color: var(--color-google-blue);
+}
+
+.bg-google-red {
+  background-color: var(--color-google-red);
+}
+
+.bg-google-yellow {
+  background-color: var(--color-google-yellow);
+}
+
+.bg-google-green {
+  background-color: var(--color-google-green);
+}
+
+.text-primary {
+  color: var(--color-primary);
+}
+
+.text-google-blue {
+  color: var(--color-google-blue);
+}
+
+.text-google-red {
+  color: var(--color-google-red);
+}
+
+.text-google-yellow {
+  color: var(--color-google-yellow);
+}
+
+.text-google-green {
+  color: var(--color-google-green);
+}
+
+/* Pill Button Border Radius */
+.rounded-pill {
+  border-radius: 100px;
+}
+
+/* Animation for loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Focus ring styles */
+.focus\:ring-primary:focus {
+  --tw-ring-color: var(--color-primary);
+}
+
+/* Shadow utilities */
+.shadow-lg {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
