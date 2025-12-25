@@ -43,6 +43,29 @@ Install the project dependencies using npm:
 npm ci
 ```
 
+### 3. Firebase Configuration
+
+This project uses Firebase for Authentication and Database.
+
+1.  Create a project at [Firebase Console](https://console.firebase.google.com/).
+2.  Navigate to **Project Settings** > **General** and add a Web App to get your configuration keys.
+3.  Enable **Authentication**:
+    - Go to **Build** > **Authentication** > **Sign-in method**.
+    - Enable **Email/Password** and **Google** providers.
+4.  Enable **Firestore Database**:
+    - Go to **Build** > **Firestore Database** > **Create Database**.
+    - Start in **Test mode** (or Production mode and set up security rules).
+5.  Set up Environment Variables:
+    - Copy `.env.example` to a new file named `.env`:
+      ```bash
+      cp .env.example .env
+      ```
+    - Fill in the Firebase configuration values in `.env`.
+    - Set the **Admin Email** in `.env` to grant admin privileges:
+      ```properties
+      VITE_ADMIN_EMAIL="your-admin-email@gmail.com"
+      ```
+
 ## Available Scripts
 
 In the project directory, you can run the following scripts:

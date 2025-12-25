@@ -1,5 +1,7 @@
 # Project specific files
 .env
+.env.example
+FireBase.md
 
 # Logs
 logs
