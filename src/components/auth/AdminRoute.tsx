@@ -6,7 +6,7 @@ interface AdminRouteProps {
 }
 
 export function AdminRoute({ children }: AdminRouteProps) {
-  const { user, loading } = useAuth();
+  const { user, role, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -23,8 +23,8 @@ export function AdminRoute({ children }: AdminRouteProps) {
     );
   }
 
-  // Check if user is authenticated and has the specific admin email
-  if (!user || user.email !== import.meta.env.VITE_ADMIN_EMAIL) {
+  // Check if user is authenticated and has admin role
+  if (!user || role !== "admin") {
     // Redirect non-admins to app or auth
     return (
       <Navigate

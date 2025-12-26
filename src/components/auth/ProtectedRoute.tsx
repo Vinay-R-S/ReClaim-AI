@@ -6,7 +6,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
+  const { user, role, loading } = useAuth();
   const location = useLocation();
 
   // Show loading state while checking auth
@@ -28,6 +28,11 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Redirect to auth page if not authenticated
   if (!user) {
     return <Navigate to="/auth" state={{ from: location }} replace />;
+  }
+
+  // Redirect admin to admin dashboard
+  if (role === "admin") {
+    return <Navigate to="/admin" replace />;
   }
 
   // Render protected content

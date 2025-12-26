@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Camera, MapPin, Mic, Send } from "lucide-react";
-import { cn } from "../../lib/utils";
 
 interface Message {
   id: string;

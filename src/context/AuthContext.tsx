@@ -20,6 +20,7 @@ import { auth, googleProvider, db } from "../lib/firebase";
 // Types
 interface AuthContextType {
   user: User | null;
+  role: "user" | "admin" | null;
   loading: boolean;
   error: string | null;
   signInWithGoogle: () => Promise<void>;
@@ -43,23 +44,52 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Provider component
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
+  const [role, setRole] = useState<"user" | "admin" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Listen to auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      setLoading(false);
-
-      // Save user to Firestore on sign in
       if (user) {
-        await saveUserToFirestore(user);
+        setUser(user);
+        // Fetch user role from Firestore
+        await fetchUserRole(user.uid);
+      } else {
+        setUser(null);
+        setRole(null);
+        setLoading(false);
       }
     });
 
     return () => unsubscribe();
   }, []);
+
+  // Fetch user role
+  const fetchUserRole = async (uid: string) => {
+    try {
+      const userDoc = await getDoc(doc(db, "users", uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setRole(userData.role || "user");
+
+        // Update last login
+        await setDoc(
+          doc(db, "users", uid),
+          { lastLoginAt: serverTimestamp() },
+          { merge: true }
+        );
+      } else {
+        // New user - handled by saveUserToFirestore
+        await saveUserToFirestore(auth.currentUser!);
+      }
+    } catch (err) {
+      console.error("Error fetching user role:", err);
+      setRole("user"); // Default to user on error
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Save user data to Firestore
   const saveUserToFirestore = async (user: User) => {
@@ -68,15 +98,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const userSnap = await getDoc(userRef);
 
       if (!userSnap.exists()) {
-        // New user - create document
-        await setDoc(userRef, {
+        // New user - create document with default 'user' role
+        const newUser = {
           uid: user.uid,
           email: user.email,
           displayName: user.displayName,
           photoURL: user.photoURL,
+          role: "user", // Default role
           createdAt: serverTimestamp(),
           lastLoginAt: serverTimestamp(),
-        });
+        };
+        await setDoc(userRef, newUser);
+        setRole("user");
       } else {
         // Existing user - update last login
         await setDoc(
@@ -86,6 +119,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           },
           { merge: true }
         );
+        // Role is set in fetchUserRole
       }
     } catch (err) {
       console.error("Error saving user to Firestore:", err);
@@ -165,6 +199,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const value: AuthContextType = {
     user,
+    role,
     loading,
     error,
     signInWithGoogle,

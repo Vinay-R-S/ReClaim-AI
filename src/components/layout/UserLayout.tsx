@@ -18,7 +18,7 @@ const navTabs = [
 export function UserLayout({ children }: UserLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, role, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -123,7 +123,7 @@ export function UserLayout({ children }: UserLayoutProps) {
 
               {/* Dropdown Menu */}
               {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-72 bg-surface rounded-xl border border-border shadow-lg py-2 z-50">
+                <div className="absolute right-0 mt-2 w-72 bg-surface/80 backdrop-blur-md rounded-xl border border-border shadow-lg py-2 z-50">
                   {/* User Info */}
                   <div className="px-4 py-3 border-b border-border">
                     <div className="flex items-center gap-3">
@@ -151,7 +151,7 @@ export function UserLayout({ children }: UserLayoutProps) {
 
                   {/* Menu Items */}
                   <div className="py-2">
-                    {user?.email === import.meta.env.VITE_ADMIN_EMAIL && (
+                    {role === "admin" && (
                       <Link
                         to="/admin"
                         className="w-full flex items-center gap-3 px-4 py-2 text-text-primary hover:bg-gray-50 transition-colors"
@@ -190,10 +190,7 @@ export function UserLayout({ children }: UserLayoutProps) {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex gap-6">
-          {/* Main Chat Area */}
-          <div className="flex-1 max-w-3xl">{children}</div>
-
-          {/* Right Sidebar */}
+          {/* Left Sidebar */}
           <aside className="hidden lg:block w-80">
             {/* Recent Activity */}
             <div className="card p-4 mb-4">
@@ -242,6 +239,9 @@ export function UserLayout({ children }: UserLayoutProps) {
               </div>
             </div>
           </aside>
+
+          {/* Main Chat Area */}
+          <div className="flex-1 max-w-3xl">{children}</div>
         </div>
       </main>
     </div>
