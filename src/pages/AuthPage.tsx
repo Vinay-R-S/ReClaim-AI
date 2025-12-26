@@ -26,7 +26,9 @@ export function AuthPage() {
     signInWithEmail,
     signUpWithEmail,
     error,
+    blockedError,
     clearError,
+    clearBlockedError,
   } = useAuth();
 
   const [isSignUp, setIsSignUp] = useState(
@@ -41,6 +43,11 @@ export function AuthPage() {
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Clear blocked error on mount
+  useEffect(() => {
+    clearBlockedError();
+  }, [clearBlockedError]);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -190,7 +197,20 @@ export function AuthPage() {
             <div className="flex-1 h-px bg-border"></div>
           </div>
 
-          {/* Error Message */}
+          {/* Blocked User Error Message */}
+          {blockedError && (
+            <div className="mb-4 p-4 bg-red-50 border-2 border-red-300 rounded-lg flex items-start gap-3">
+              <AlertCircle className="w-6 h-6 text-google-red flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-base font-medium text-google-red mb-1">
+                  Account Blocked
+                </p>
+                <p className="text-sm text-google-red">{blockedError}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Regular Error Message */}
           {(error || formError) && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-google-red flex-shrink-0 mt-0.5" />

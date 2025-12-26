@@ -6,7 +6,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, role, loading } = useAuth();
+  const { user, role, userStatus, loading } = useAuth();
   const location = useLocation();
 
   // Show loading state while checking auth
@@ -27,6 +27,12 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   // Redirect to auth page if not authenticated
   if (!user) {
+    return <Navigate to="/auth" state={{ from: location }} replace />;
+  }
+
+  // HARD BLOCK: Check if user is blocked
+  if (userStatus === "blocked") {
+    // This should already be handled by AuthContext, but as a safety measure
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
 

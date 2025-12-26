@@ -21,8 +21,10 @@ import { auth, googleProvider, db } from "../lib/firebase";
 interface AuthContextType {
   user: User | null;
   role: "user" | "admin" | null;
+  userStatus: "active" | "blocked" | null;
   loading: boolean;
   error: string | null;
+  blockedError: string | null;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (
@@ -32,6 +34,7 @@ interface AuthContextType {
   ) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
+  clearBlockedError: () => void;
 }
 
 interface AuthProviderProps {
@@ -45,8 +48,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<"user" | "admin" | null>(null);
+  const [userStatus, setUserStatus] = useState<"active" | "blocked" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [blockedError, setBlockedError] = useState<string | null>(null);
 
   // Listen to auth state changes
   useEffect(() => {
@@ -58,6 +63,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else {
         setUser(null);
         setRole(null);
+        setUserStatus(null);
+        setBlockedError(null); // Clear blocked error on sign out
         setLoading(false);
       }
     });
@@ -65,15 +72,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => unsubscribe();
   }, []);
 
-  // Fetch user role
+  // Fetch user role and status
   const fetchUserRole = async (uid: string) => {
     try {
       const userDoc = await getDoc(doc(db, "users", uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
+        const status = userData.status || "active";
         setRole(userData.role || "user");
+        setUserStatus(status);
 
-        // Update last login
+        // Check if user is blocked - HARD BLOCK
+        if (status === "blocked") {
+          setBlockedError(
+            "Your account has been blocked due to policy violations."
+          );
+          // Immediately sign out the blocked user
+          await firebaseSignOut(auth);
+          setUser(null);
+          setRole(null);
+          setUserStatus(null);
+          setLoading(false);
+          return;
+        }
+
+        // Update last login only for active users
         await setDoc(
           doc(db, "users", uid),
           { lastLoginAt: serverTimestamp() },
@@ -82,10 +105,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else {
         // New user - handled by saveUserToFirestore
         await saveUserToFirestore(auth.currentUser!);
+        setUserStatus("active"); // New users are active by default
       }
     } catch (err) {
       console.error("Error fetching user role:", err);
       setRole("user"); // Default to user on error
+      setUserStatus("active"); // Default to active on error
     } finally {
       setLoading(false);
     }
@@ -196,17 +221,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Clear error
   const clearError = () => setError(null);
+  const clearBlockedError = () => setBlockedError(null);
 
   const value: AuthContextType = {
     user,
     role,
+    userStatus,
     loading,
     error,
+    blockedError,
     signInWithGoogle,
     signInWithEmail,
     signUpWithEmail,
     signOut,
     clearError,
+    clearBlockedError,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -234,6 +234,16 @@ body {
   color: var(--color-primary);
 }
 
+.badge-active {
+  background-color: rgba(52, 168, 83, 0.1);
+  color: var(--color-google-green);
+}
+
+.badge-blocked {
+  background-color: rgba(234, 67, 53, 0.1);
+  color: var(--color-google-red);
+}
+
 /* Glassmorphism */
 .glass {
   background: rgba(255, 255, 255, 0.7);
