@@ -23,6 +23,7 @@ export interface Item {
     name: string;
     description: string;
     imageUrl?: string;
+    cloudinaryUrls?: string[]; // Images from chat flow
     type: "Lost" | "Found";
     location: string;
     date: Timestamp | Date;
@@ -30,6 +31,9 @@ export interface Item {
     matchScore?: number;
     tags?: string[];
     images?: string[];
+    contactEmail?: string; // Email for contact
+    collectionLocation?: string; // Where to collect found items
+    reportedBy?: string; // User ID who reported
     createdAt?: Timestamp;
     updatedAt?: Timestamp;
 }

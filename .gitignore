@@ -1,6 +1,8 @@
 # Project specific files
+node_modules
 .env
-FireBase.md
+dump
+old files
 
 # Logs
 logs

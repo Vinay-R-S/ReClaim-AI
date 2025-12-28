@@ -5,6 +5,7 @@ import { AdminRoute } from "./components/auth/AdminRoute";
 import { LandingPage } from "./pages/LandingPage";
 import { AuthPage } from "./pages/AuthPage";
 import { HomePage } from "./pages/user/HomePage";
+import { MyReportsPage } from "./pages/user/MyReportsPage";
 import { AdminPage } from "./pages/admin/AdminPage";
 import { UnderConstruction } from "./pages/UnderConstruction";
 import "./index.css";
@@ -36,7 +37,7 @@ function App() {
             path="/app/reports"
             element={
               <ProtectedRoute>
-                <HomePage />
+                <MyReportsPage />
               </ProtectedRoute>
             }
           />

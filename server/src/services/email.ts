@@ -1,0 +1,218 @@
+/**
+ * Email Service - Notifications via Resend
+ */
+
+import { Resend } from 'resend';
+
+// Lazy initialization - only create Resend client when needed
+let resend: Resend | null = null;
+
+function getResendClient(): Resend | null {
+  if (!process.env.RESEND_API_KEY) {
+    return null;
+  }
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resend;
+}
+
+const FROM_EMAIL = process.env.FROM_EMAIL || 'ReClaim AI <onboarding@resend.dev>';
+
+export interface EmailOptions {
+  to: string | string[];
+  subject: string;
+  html: string;
+  text?: string;
+}
+
+/**
+ * Send an email notification
+ */
+export async function sendEmail(options: EmailOptions): Promise<boolean> {
+  try {
+    const client = getResendClient();
+
+    if (!client) {
+      console.warn('Resend API key not configured, skipping email');
+      return false;
+    }
+
+    const { data, error } = await client.emails.send({
+      from: FROM_EMAIL,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+    });
+
+    if (error) {
+      console.error('Resend email error:', error);
+      return false;
+    }
+
+    console.log('Email sent successfully:', data?.id);
+    return true;
+  } catch (error) {
+    console.error('Email send failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Send match notification email
+ */
+export async function sendMatchNotification(
+  userEmail: string,
+  itemName: string,
+  matchScore: number,
+  collectionPoint?: string
+): Promise<boolean> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #4285f4, #34a853); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; }
+        .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
+        .match-badge { display: inline-block; background: #34a853; color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; }
+        .cta-button { display: inline-block; background: #4285f4; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🎉 Potential Match Found!</h1>
+        </div>
+        <div class="content">
+          <p>Great news! We've found a potential match for your item:</p>
+          <h2>${itemName}</h2>
+          <p><span class="match-badge">${matchScore}% Match</span></p>
+          ${collectionPoint ? `<p><strong>Collection Point:</strong> ${collectionPoint}</p>` : ''}
+          <p>Log in to ReClaim AI to view details and confirm if this is your item.</p>
+          <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}/app" class="cta-button">View Match</a>
+        </div>
+        <div class="footer">
+          <p>ReClaim AI - Connecting Lost Items with Their Owners</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject: `🔔 Potential Match Found: ${itemName}`,
+    html,
+    text: `Potential Match Found! We found a ${matchScore}% match for "${itemName}". Log in to ReClaim AI to view details.`,
+  });
+}
+
+/**
+ * Send item claimed notification
+ */
+export async function sendClaimConfirmation(
+  userEmail: string,
+  itemName: string,
+  collectionPoint: string
+): Promise<boolean> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #34a853, #4285f4); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; }
+        .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
+        .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #4285f4; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>✅ Claim Confirmed!</h1>
+        </div>
+        <div class="content">
+          <p>Your claim for the following item has been confirmed:</p>
+          <h2>${itemName}</h2>
+          <div class="info-box">
+            <p><strong>📍 Collection Point:</strong> ${collectionPoint}</p>
+            <p><strong>📋 What to bring:</strong> A valid ID for verification</p>
+          </div>
+          <p>Please visit the collection point during operating hours to pick up your item.</p>
+        </div>
+        <div class="footer">
+          <p>Thank you for using ReClaim AI!</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject: `✅ Claim Confirmed: ${itemName}`,
+    html,
+    text: `Your claim for "${itemName}" has been confirmed. Please visit ${collectionPoint} with a valid ID to collect your item.`,
+  });
+}
+
+/**
+ * Send credits earned notification
+ */
+export async function sendCreditsNotification(
+  userEmail: string,
+  creditsEarned: number,
+  reason: string,
+  totalCredits: number
+): Promise<boolean> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #fbbc05, #ea4335); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; }
+        .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; text-align: center; }
+        .credits { font-size: 48px; font-weight: bold; color: #34a853; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🏆 Credits Earned!</h1>
+        </div>
+        <div class="content">
+          <p class="credits">+${creditsEarned}</p>
+          <p><strong>Reason:</strong> ${reason}</p>
+          <p>Your total credits: <strong>${totalCredits}</strong></p>
+        </div>
+        <div class="footer">
+          <p>Keep contributing to the community!</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject: `🏆 You earned ${creditsEarned} credits!`,
+    html,
+    text: `You earned ${creditsEarned} credits for: ${reason}. Total credits: ${totalCredits}`,
+  });
+}
+
+/**
+ * Check if email service is configured
+ */
+export function isEmailConfigured(): boolean {
+  return !!process.env.RESEND_API_KEY;
+}
