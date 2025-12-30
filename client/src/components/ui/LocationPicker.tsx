@@ -45,10 +45,16 @@ export function LocationPicker({
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const onChangeRef = useRef(onChange);
+
+  // Keep ref updated
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   const apiKey = import.meta.env.VITE_GEOAPIFY_API_KEY;
 
-  // Initialize map
+  // Initialize map only once
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
@@ -88,7 +94,7 @@ export function LocationPicker({
           if (data.features?.[0]?.properties?.formatted) {
             const address = data.features[0].properties.formatted;
             setQuery(address);
-            onChange(address);
+            onChangeRef.current(address);
           }
         } catch (err) {
           console.error("Reverse geocoding failed:", err);
@@ -111,7 +117,7 @@ export function LocationPicker({
         mapRef.current = null;
       }
     };
-  }, [apiKey, onChange]);
+  }, [apiKey]); // Only depend on apiKey, not onChange
 
   // Update marker when location changes
   useEffect(() => {

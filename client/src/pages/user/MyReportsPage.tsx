@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Timestamp } from "firebase/firestore";
 import { UserLayout } from "../../components/layout/UserLayout";
 import { useAuth } from "../../context/AuthContext";
 import { type Item } from "../../services/itemService";
+import { EditReportModal } from "../../components/user/EditReportModal";
 import { Package, MapPin, Calendar, Edit2, Eye } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -13,38 +14,71 @@ export function MyReportsPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
 
   // Fetch user's items
-  useEffect(() => {
-    const fetchMyItems = async () => {
-      if (!user?.uid) return;
+  const fetchMyItems = useCallback(async () => {
+    if (!user?.uid) return;
 
-      try {
-        setLoading(true);
-        const response = await fetch(`${API_URL}/api/items/user/${user.uid}`);
-        if (response.ok) {
-          const data = await response.json();
-          setItems(data.items || []);
-        }
-      } catch (error) {
-        console.error("Error fetching my reports:", error);
-      } finally {
-        setLoading(false);
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/api/items/user/${user.uid}`);
+      if (response.ok) {
+        const data = await response.json();
+        setItems(data.items || []);
       }
-    };
-
-    fetchMyItems();
+    } catch (error) {
+      console.error("Error fetching my reports:", error);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
-  const formatDate = (date: Timestamp | Date) => {
-    const d = date instanceof Timestamp ? date.toDate() : new Date(date);
-    return d.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  useEffect(() => {
+    fetchMyItems();
+  }, [fetchMyItems]);
+
+  const formatDate = (date: Timestamp | Date | unknown) => {
+    try {
+      if (!date) return "Date not available";
+
+      let d: Date;
+      if (date instanceof Timestamp) {
+        d = date.toDate();
+      } else if (date instanceof Date) {
+        d = date;
+      } else if (
+        typeof date === "object" &&
+        date !== null &&
+        ("seconds" in date || "_seconds" in date)
+      ) {
+        // Handle Firestore Timestamp-like object (both seconds and _seconds formats)
+        const seconds =
+          (date as { seconds?: number; _seconds?: number }).seconds ??
+          (date as { _seconds: number })._seconds;
+        d = new Date(seconds * 1000);
+      } else if (typeof date === "string") {
+        // Handle ISO string
+        d = new Date(date);
+      } else {
+        d = new Date(date as number);
+      }
+
+      // Check if date is valid
+      if (isNaN(d.getTime())) {
+        return "Date not available";
+      }
+
+      return d.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "Date not available";
+    }
   };
 
   const getImageUrl = (item: Item) => {
@@ -240,7 +274,13 @@ export function MyReportsPage() {
                   >
                     Close
                   </button>
-                  <button className="flex-1 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => {
+                      setEditingItem(selectedItem);
+                      setSelectedItem(null);
+                    }}
+                    className="flex-1 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover flex items-center justify-center gap-2"
+                  >
                     <Edit2 className="w-4 h-4" />
                     Edit Report
                   </button>
@@ -248,6 +288,18 @@ export function MyReportsPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Edit Report Modal */}
+        {editingItem && (
+          <EditReportModal
+            item={editingItem}
+            onClose={() => setEditingItem(null)}
+            onUpdate={() => {
+              fetchMyItems();
+              setEditingItem(null);
+            }}
+          />
         )}
       </div>
     </UserLayout>

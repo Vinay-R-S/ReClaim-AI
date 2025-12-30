@@ -211,6 +211,81 @@ export async function sendCreditsNotification(
 }
 
 /**
+ * Send verification success email with collection details
+ */
+export async function sendVerificationSuccessEmail(
+  userEmail: string,
+  itemName: string,
+  confidenceScore: number,
+  collectionPoint: string,
+  collectionInstructions?: string
+): Promise<boolean> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #34a853, #4285f4); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; }
+        .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
+        .success-badge { display: inline-block; background: #34a853; color: white; padding: 8px 20px; border-radius: 25px; font-weight: bold; font-size: 18px; }
+        .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #34a853; }
+        .steps { background: white; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        .step { display: flex; align-items: flex-start; margin: 10px 0; }
+        .step-number { background: #4285f4; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; margin-right: 12px; flex-shrink: 0; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🎉 Ownership Verified!</h1>
+          <p class="success-badge">${confidenceScore}% Match</p>
+        </div>
+        <div class="content">
+          <p>Great news! Your ownership of the following item has been verified:</p>
+          <h2 style="color: #4285f4; margin: 15px 0;">${itemName}</h2>
+          
+          <div class="info-box">
+            <p style="margin: 0;"><strong>📍 Collection Point:</strong></p>
+            <p style="margin: 5px 0 0 0; font-size: 16px;">${collectionPoint}</p>
+            ${collectionInstructions ? `<p style="margin: 10px 0 0 0; color: #666;"><em>${collectionInstructions}</em></p>` : ''}
+          </div>
+
+          <div class="steps">
+            <p style="margin: 0 0 15px 0; font-weight: bold;">Next Steps:</p>
+            <div class="step">
+              <span class="step-number">1</span>
+              <span>Visit the collection point during operating hours</span>
+            </div>
+            <div class="step">
+              <span class="step-number">2</span>
+              <span>Bring a valid government-issued ID</span>
+            </div>
+            <div class="step">
+              <span class="step-number">3</span>
+              <span>Show this email confirmation to staff</span>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <p>Thank you for using ReClaim AI - Connecting Lost Items with Their Owners</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject: `🎉 Verification Complete: Collect Your ${itemName}`,
+    html,
+    text: `Your ownership of "${itemName}" has been verified with ${confidenceScore}% confidence. Please visit ${collectionPoint} with a valid ID to collect your item.${collectionInstructions ? ` Note: ${collectionInstructions}` : ''}`,
+  });
+}
+
+/**
  * Check if email service is configured
  */
 export function isEmailConfigured(): boolean {

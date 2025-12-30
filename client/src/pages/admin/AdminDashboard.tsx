@@ -63,13 +63,39 @@ export function AdminDashboard() {
   }, []);
 
   // Format date for display
-  const formatDate = (date: Timestamp | Date) => {
-    const d = date instanceof Timestamp ? date.toDate() : new Date(date);
-    return d.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+  const formatDate = (date: Timestamp | Date | unknown) => {
+    try {
+      if (!date) return "N/A";
+
+      let d: Date;
+      if (date instanceof Timestamp) {
+        d = date.toDate();
+      } else if (date instanceof Date) {
+        d = date;
+      } else if (
+        typeof date === "object" &&
+        date !== null &&
+        "seconds" in date
+      ) {
+        // Handle Firestore Timestamp-like object
+        d = new Date((date as { seconds: number }).seconds * 1000);
+      } else {
+        d = new Date(date as string | number);
+      }
+
+      // Check if date is valid
+      if (isNaN(d.getTime())) {
+        return "N/A";
+      }
+
+      return d.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return "N/A";
+    }
   };
 
   // Calculate stats

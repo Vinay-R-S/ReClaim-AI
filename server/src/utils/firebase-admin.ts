@@ -48,6 +48,7 @@ export const collections = {
     conversations: db.collection('conversations'),
     creditTransactions: db.collection('creditTransactions'),
     collectionPoints: db.collection('collectionPoints'),
+    verifications: db.collection('verifications'),
     settings: db.collection('settings'),
 } as const;
 

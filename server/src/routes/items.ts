@@ -123,13 +123,12 @@ router.post('/', async (req: Request, res: Response) => {
             }
         }
 
-        const newItem = {
+        const newItem: Record<string, unknown> = {
             name: item.name,
             description: item.description,
             type: item.type,
             status: 'Pending' as const,
             location: item.location,
-            coordinates: item.coordinates,
             date: Timestamp.fromDate(new Date(item.date)),
             tags: item.tags || [],
             cloudinaryUrls,
@@ -137,6 +136,11 @@ router.post('/', async (req: Request, res: Response) => {
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
         };
+
+        // Only add coordinates if defined
+        if (item.coordinates) {
+            newItem.coordinates = item.coordinates;
+        }
 
         const docRef = await collections.items.add(newItem);
 
@@ -157,19 +161,50 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { updates } = req.body;
+        const { updates, images } = req.body as {
+            updates: Partial<ItemInput>;
+            images?: string[]; // New base64 images
+        };
 
-        const doc = await collections.items.doc(id).get();
-        if (!doc.exists) {
+        const docSnapshot = await collections.items.doc(id).get();
+        if (!docSnapshot.exists) {
             return res.status(404).json({ error: 'Item not found' });
         }
 
-        await collections.items.doc(id).update({
+        // Prepare update data
+        const updateData: Record<string, unknown> = {
             ...updates,
             updatedAt: FieldValue.serverTimestamp(),
-        });
+        };
 
-        return res.json({ success: true });
+        // Convert date if provided
+        if (updates.date) {
+            updateData.date = Timestamp.fromDate(new Date(updates.date));
+        }
+
+        // Upload new images if provided
+        if (images && images.length > 0 && isCloudinaryConfigured()) {
+            try {
+                const results = await uploadMultipleImages(images);
+                const newUrls = results.map(r => r.url);
+                // Append to existing or replace
+                const existingItem = docSnapshot.data() as Item;
+                updateData.cloudinaryUrls = [...(existingItem.cloudinaryUrls || []), ...newUrls];
+            } catch (uploadError) {
+                console.error('Image upload failed:', uploadError);
+                // Continue without new images
+            }
+        }
+
+        await collections.items.doc(id).update(updateData);
+
+        // Fetch updated document
+        const updatedDoc = await collections.items.doc(id).get();
+
+        return res.json({
+            success: true,
+            item: { id: updatedDoc.id, ...updatedDoc.data() }
+        });
     } catch (error) {
         console.error('Update item error:', error);
         return res.status(500).json({ error: 'Failed to update item' });
@@ -185,7 +220,7 @@ router.put('/:id/status', async (req: Request, res: Response) => {
         const { id } = req.params;
         const { status, matchedUserId } = req.body;
 
-        const validStatuses = ['Pending', 'Matched', 'Claimed', 'Closed'];
+        const validStatuses = ['Pending', 'Matched', 'Claimed', 'Resolved'];
         if (!validStatuses.includes(status)) {
             return res.status(400).json({ error: 'Invalid status' });
         }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Paperclip, MapPin, Send, Loader2 } from "lucide-react";
+import { Paperclip, MapPin, Send, Loader2, X, Calendar } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import {
   startConversation,
@@ -9,20 +9,20 @@ import {
 } from "../../services/chatService";
 import type { ConversationContext } from "../../services/chatService";
 import { LocationModal } from "./LocationModal";
-
+import { DateTimeModal } from "./DateTimeModal";
+import { format } from "date-fns";
 interface Message {
   id: string;
   type: "user" | "assistant";
   content: string;
   chips?: { label: string; icon?: string }[];
   isLoading?: boolean;
+  imageUrl?: string; // URL of uploaded image to display
 }
 
 const CONTEXT_MAP: Record<string, ConversationContext> = {
-  "Report lost item": "report_lost",
-  "Report found item": "report_found",
   "Check matches": "check_matches",
-  "Find collection point": "find_collection",
+  "Claim item": "check_matches",
 };
 
 const initialMessages: Message[] = [
@@ -30,12 +30,10 @@ const initialMessages: Message[] = [
     id: "1",
     type: "assistant",
     content:
-      "Hello! I'm your ReClaim assistant. I can help you report lost items, log found items, or check for potential matches. What would you like to do?",
+      "Hello! I'm your ReClaim assistant. I can help you check for potential matches on your reported items or verify ownership to claim an item. What would you like to do?",
     chips: [
-      { label: "Report lost item", icon: "🔍" },
-      { label: "Report found item", icon: "📦" },
-      { label: "Check matches", icon: "🔔" },
-      { label: "Find collection point", icon: "📍" },
+      { label: "Check matches", icon: "" },
+      { label: "Claim item", icon: "" },
     ],
   },
 ];
@@ -50,6 +48,11 @@ export function ChatInterface() {
     useState<ConversationContext | null>(null);
   const [credits, setCredits] = useState<number>(0);
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showDateTimeModal, setShowDateTimeModal] = useState(false);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -277,11 +280,19 @@ export function ChatInterface() {
     try {
       const base64 = await fileToBase64(file);
 
-      // Add message indicating image upload
+      // Create a local preview URL for the image
+      const previewUrl = URL.createObjectURL(file);
+
+      // Show toast notification
+      setToast({ message: "Image uploaded! Analyzing...", type: "success" });
+      setTimeout(() => setToast(null), 3000);
+
+      // Add message with only the image (no text)
       const userMessage: Message = {
         id: Date.now().toString(),
         type: "user",
-        content: "📷 [Image uploaded]",
+        content: "", // Empty content - just show image
+        imageUrl: previewUrl,
       };
 
       const loadingMessage: Message = {
@@ -396,6 +407,62 @@ export function ChatInterface() {
     }
   };
 
+  // Handle date/time selection from modal
+  const handleDateTimeSelect = async (dateTime: Date) => {
+    if (!user?.uid) return;
+
+    setIsLoading(true);
+
+    const formattedDate = format(dateTime, "EEEE, MMMM d, yyyy 'at' h:mm a");
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      type: "user",
+      content: `Date/Time: ${formattedDate}`,
+    };
+
+    const loadingMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      type: "assistant",
+      content: "",
+      isLoading: true,
+    };
+
+    setMessages((prev) => [...prev, userMessage, loadingMessage]);
+
+    try {
+      const response = await sendMessage(
+        user.uid,
+        `The date and time is: ${dateTime.toISOString()}`,
+        {
+          conversationId: conversationId ?? undefined,
+          context: currentContext ?? undefined,
+        }
+      );
+
+      if (!conversationId) {
+        setConversationId(response.conversationId);
+      }
+
+      setMessages((prev) => {
+        const filtered = prev.filter((m) => !m.isLoading);
+        return [
+          ...filtered,
+          {
+            id: (Date.now() + 2).toString(),
+            type: "assistant",
+            content: response.message,
+            chips: response.chips,
+          },
+        ];
+      });
+    } catch (error) {
+      console.error("Failed to send date/time:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const getUserInitials = () => {
     if (user?.displayName) {
       return user.displayName
@@ -409,7 +476,27 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)]">
+    <div className="flex flex-col h-[calc(100vh-180px)] relative">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`absolute top-2 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in ${
+            toast.type === "success"
+              ? "bg-google-green text-white"
+              : "bg-google-red text-white"
+          }`}
+        >
+          <span>{toast.type === "success" ? "✓" : "✕"}</span>
+          <span className="text-sm font-medium">{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 hover:opacity-70"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Assistant Header */}
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-google-blue via-google-green to-google-yellow flex items-center justify-center">
@@ -468,7 +555,16 @@ export function ChatInterface() {
               <div className="flex justify-end">
                 <div className="flex items-end gap-2">
                   <div className="chat-bubble chat-bubble-user">
-                    <p className="text-sm">{message.content}</p>
+                    {message.imageUrl && (
+                      <img
+                        src={message.imageUrl}
+                        alt="Uploaded"
+                        className="max-w-[200px] max-h-[200px] rounded-lg mb-2 object-cover"
+                      />
+                    )}
+                    {message.content && (
+                      <p className="text-sm">{message.content}</p>
+                    )}
                   </div>
                   <div className="w-8 h-8 rounded-full bg-google-red flex items-center justify-center flex-shrink-0">
                     <span className="text-white text-xs font-medium">
@@ -520,6 +616,14 @@ export function ChatInterface() {
               <MapPin className="w-5 h-5 text-text-secondary" />
             </button>
             <button
+              className="p-2 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
+              onClick={() => setShowDateTimeModal(true)}
+              disabled={isLoading}
+              title="Set date and time"
+            >
+              <Calendar className="w-5 h-5 text-text-secondary" />
+            </button>
+            <button
               onClick={handleSend}
               disabled={isLoading || !inputValue.trim()}
               className="p-2 rounded-full bg-primary text-white hover:bg-primary-hover transition-colors disabled:opacity-50"
@@ -540,6 +644,13 @@ export function ChatInterface() {
         isOpen={showLocationModal}
         onClose={() => setShowLocationModal(false)}
         onSelectLocation={handleLocationSelect}
+      />
+
+      {/* Date/Time Modal */}
+      <DateTimeModal
+        isOpen={showDateTimeModal}
+        onClose={() => setShowDateTimeModal(false)}
+        onSelectDateTime={handleDateTimeSelect}
       />
     </div>
   );

@@ -15,7 +15,7 @@ export interface User {
 
 // ============ Item Types ============
 export type ItemType = 'Lost' | 'Found';
-export type ItemStatus = 'Pending' | 'Matched' | 'Claimed' | 'Closed';
+export type ItemStatus = 'Pending' | 'Matched' | 'Claimed' | 'Resolved';
 
 export interface Coordinates {
     lat: number;
@@ -32,10 +32,19 @@ export interface Item {
     coordinates?: Coordinates;
     date: Timestamp | Date;
     tags?: string[];
+    category?: string; // Electronics, Documents, Accessories, etc.
     imageUrl?: string;
     cloudinaryUrls?: string[];
     matchScore?: number;
     reportedBy: string; // User ID
+    reportedByEmail?: string; // For notifications
+    matchedItemId?: string; // ID of matched item
+    matchedUserId?: string; // User who claimed
+    verificationRequired?: boolean;
+    verificationConfidence?: number;
+    verifiedAt?: Timestamp;
+    collectionPoint?: string;
+    collectionInstructions?: string;
     createdAt?: Timestamp;
     updatedAt?: Timestamp;
 }
@@ -48,6 +57,7 @@ export interface ItemInput {
     coordinates?: Coordinates;
     date: Date;
     tags?: string[];
+    category?: string;
     images?: File[] | string[]; // Files or base64/urls
     reportedBy: string;
 }
@@ -120,6 +130,26 @@ export interface CreditTransaction {
     createdAt: Timestamp;
 }
 
+// ============ Verification Types ============
+export interface VerificationQuestion {
+    question: string;
+    expectedAnswer?: string; // From item attributes
+    userAnswer?: string;
+    score?: number; // 0-100
+}
+
+export interface Verification {
+    id: string;
+    itemId: string; // Found item being verified
+    claimantUserId: string; // User claiming the item
+    claimantEmail: string;
+    questions: VerificationQuestion[];
+    confidenceScore: number; // Weighted average
+    status: 'pending' | 'passed' | 'failed';
+    createdAt: Timestamp;
+    completedAt?: Timestamp;
+}
+
 // ============ API Types ============
 export interface ChatRequest {
     conversationId?: string;
@@ -144,7 +174,7 @@ export const SAFETY_LIMITS = {
     MAX_TURNS_PER_CONVERSATION: 15,
     SESSION_TIMEOUT_MINUTES: 5,
     CHAT_HISTORY_TTL_DAYS: 7,
-    MATCH_THRESHOLD_PERCENT: 70,
+    MATCH_THRESHOLD_PERCENT: 60,
     LOCATION_RADIUS_KM: 2,
 } as const;
 

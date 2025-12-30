@@ -1,11 +1,19 @@
 import { useState, useEffect } from "react";
-import { X, Edit2, Trash2, Save, XCircle } from "lucide-react";
+import {
+  X,
+  Edit2,
+  Trash2,
+  Save,
+  XCircle,
+  CheckCircle,
+  AlertCircle,
+} from "lucide-react";
 import { cn } from "../../lib/utils";
 import {
   type Item,
   type ItemInput,
-  updateItem,
-  deleteItem,
+  updateItemViaApi,
+  deleteItemViaApi,
 } from "../../services/itemService";
 import { Timestamp } from "firebase/firestore";
 
@@ -24,6 +32,10 @@ export function ItemDetailModal({
 }: ItemDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   const [formData, setFormData] = useState<ItemInput>({
     name: item.name,
     description: item.description,
@@ -51,12 +63,20 @@ export function ItemDetailModal({
   const handleSave = async () => {
     try {
       setLoading(true);
-      await updateItem(item.id, formData);
+      await updateItemViaApi(item.id, formData);
+      setToast({ type: "success", message: "Item updated successfully!" });
       setIsEditing(false);
-      onUpdate();
+      setTimeout(() => {
+        setToast(null);
+        onUpdate();
+      }, 1500);
     } catch (err) {
       console.error("Error updating item:", err);
-      alert("Failed to update item");
+      setToast({
+        type: "error",
+        message: "Failed to update item. Please try again.",
+      });
+      setTimeout(() => setToast(null), 3000);
     } finally {
       setLoading(false);
     }
@@ -67,12 +87,19 @@ export function ItemDetailModal({
 
     try {
       setLoading(true);
-      await deleteItem(item.id, item.imageUrl);
-      onDelete();
-      onClose();
+      await deleteItemViaApi(item.id);
+      setToast({ type: "success", message: "Item deleted successfully!" });
+      setTimeout(() => {
+        onDelete();
+        onClose();
+      }, 1000);
     } catch (err) {
       console.error("Error deleting item:", err);
-      alert("Failed to delete item");
+      setToast({
+        type: "error",
+        message: "Failed to delete item. Please try again.",
+      });
+      setTimeout(() => setToast(null), 3000);
     } finally {
       setLoading(false);
     }
@@ -86,6 +113,23 @@ export function ItemDetailModal({
       day: "numeric",
     });
   };
+
+  // Get all available images from item
+  const getItemImages = (): string[] => {
+    const images: string[] = [];
+    if (item.cloudinaryUrls && item.cloudinaryUrls.length > 0) {
+      images.push(...item.cloudinaryUrls);
+    }
+    if (item.imageUrl) {
+      images.push(item.imageUrl);
+    }
+    if (item.images && item.images.length > 0) {
+      images.push(...item.images);
+    }
+    return images;
+  };
+
+  const itemImages = getItemImages();
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -144,19 +188,29 @@ export function ItemDetailModal({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-          {/* Image */}
+          {/* Toast Notification */}
+          {toast && (
+            <div
+              className={cn(
+                "mb-4 p-3 rounded-lg flex items-center gap-2 text-sm",
+                toast.type === "success"
+                  ? "bg-green-50 text-green-700 border border-green-200"
+                  : "bg-red-50 text-red-700 border border-red-200"
+              )}
+            >
+              {toast.type === "success" ? (
+                <CheckCircle className="w-4 h-4" />
+              ) : (
+                <AlertCircle className="w-4 h-4" />
+              )}
+              {toast.message}
+            </div>
+          )}
+
           {/* Images */}
           <div className="mb-6 space-y-4">
-            {(item.images && item.images.length > 0
-              ? item.images
-              : item.imageUrl
-              ? [item.imageUrl]
-              : []
-            ).length > 0 ? (
-              (item.images && item.images.length > 0
-                ? item.images
-                : [item.imageUrl!]
-              ).map((img, idx) => (
+            {itemImages.length > 0 ? (
+              itemImages.map((img, idx) => (
                 <img
                   key={idx}
                   src={img}
@@ -258,7 +312,8 @@ export function ItemDetailModal({
                       status: e.target.value as
                         | "Pending"
                         | "Matched"
-                        | "Claimed",
+                        | "Claimed"
+                        | "Resolved",
                     })
                   }
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -266,6 +321,7 @@ export function ItemDetailModal({
                   <option value="Pending">Pending</option>
                   <option value="Matched">Matched</option>
                   <option value="Claimed">Claimed</option>
+                  <option value="Resolved">Resolved</option>
                 </select>
               ) : (
                 <span

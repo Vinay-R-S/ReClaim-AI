@@ -26,14 +26,23 @@ export interface Item {
     cloudinaryUrls?: string[]; // Images from chat flow
     type: "Lost" | "Found";
     location: string;
+    coordinates?: { lat: number; lng: number };
     date: Timestamp | Date;
-    status: "Pending" | "Matched" | "Claimed";
+    status: "Pending" | "Matched" | "Claimed" | "Resolved";
     matchScore?: number;
     tags?: string[];
+    category?: string;
     images?: string[];
     contactEmail?: string; // Email for contact
-    collectionLocation?: string; // Where to collect found items
     reportedBy?: string; // User ID who reported
+    reportedByEmail?: string; // For notifications
+    matchedItemId?: string; // ID of matched item
+    matchedUserId?: string; // User who claimed
+    verificationRequired?: boolean;
+    verificationConfidence?: number;
+    verifiedAt?: Timestamp;
+    collectionPoint?: string;
+    collectionInstructions?: string;
     createdAt?: Timestamp;
     updatedAt?: Timestamp;
 }
@@ -45,10 +54,12 @@ export interface ItemInput {
     imageUrl?: string;
     type: "Lost" | "Found";
     location: string;
+    coordinates?: { lat: number; lng: number };
     date: Date;
-    status: "Pending" | "Matched" | "Claimed";
+    status: "Pending" | "Matched" | "Claimed" | "Resolved";
     matchScore?: number;
     tags?: string[];
+    category?: string;
     images?: string[]; // Array of base64 strings for multiple images
 }
 
@@ -129,6 +140,43 @@ export async function deleteItem(id: string, imageUrl?: string): Promise<void> {
 
     const docRef = doc(db, ITEMS_COLLECTION, id);
     await deleteDoc(docRef);
+}
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
+// Update item via server API (recommended for consistency)
+export async function updateItemViaApi(
+    id: string,
+    updates: Partial<ItemInput>,
+    newImages?: string[] // Base64 images
+): Promise<void> {
+    const response = await fetch(`${API_URL}/api/items/${id}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            updates,
+            images: newImages
+        }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update item');
+    }
+}
+
+// Delete item via server API
+export async function deleteItemViaApi(id: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/items/${id}`, {
+        method: 'DELETE',
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete item');
+    }
 }
 
 // Helper to compress image

@@ -1,44 +1,26 @@
 /**
- * AI Agent Service - Orchestrates the chat interaction
+ * AI Agent Service - Orchestrates the chat interaction using LangGraph
+ * 
+ * This service acts as a bridge between the chat API routes and the
+ * LangGraph workflow. It manages conversation state persistence and
+ * invokes the appropriate graph flow.
  */
 
-import {
-    Conversation,
-    ChatRequest,
-    ChatResponse,
-    ConversationContext,
-    ItemInput,
-    SAFETY_LIMITS,
-} from '../types/index.js';
-import {
-    getOrCreateConversation,
-    updateConversation,
-    addMessage,
-    getGreetingMessage,
-    extractItemData,
-    getNextQuestion,
-    generateAIResponse,
-} from '../agents/conversationManager.js';
-import {
-    checkTurnLimit,
-    checkInvalidAttempts,
-    validateUserInput,
-    getInvalidInputWarning,
-} from '../utils/safety.js';
-import { findMatchesForLostItem, findMatchesForFoundItem } from './matching.js';
-import { uploadImage } from './cloudinary.js';
-import { awardFoundItemCredits } from './credits.js';
-import { collections } from '../utils/firebase-admin.js';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { collections } from '../utils/firebase-admin.js';
+import { reportFlowGraph, ReportFlowState, ConversationContext, SAFETY_LIMITS } from '../graph/index.js';
+import type { ChatRequest, ChatResponse, Conversation, Message, ConversationState, ItemInput } from '../types/index.js';
 
 /**
- * Process a chat message and return response
+ * Process a chat message using LangGraph workflow
  */
 export async function processChat(
     userId: string,
     request: ChatRequest
 ): Promise<ChatResponse> {
     const { conversationId, message, context, imageData, location } = request;
+
+    console.log('[processChat] Processing for user:', userId, 'context:', context, 'message:', message?.substring(0, 50));
 
     // Get or create conversation
     const conversation = await getOrCreateConversation(
@@ -47,542 +29,234 @@ export async function processChat(
         conversationId
     );
 
-    // If this is a new conversation with context, return greeting
-    if (conversation.turnCount === 0 && context && context !== 'idle') {
-        const greeting = getGreetingMessage(context);
-
-        // Add assistant greeting to conversation
-        await addMessage(conversation.id, {
-            role: 'assistant',
-            content: greeting.content,
-            metadata: { chips: greeting.chips },
-        });
-
-        return {
-            conversationId: conversation.id,
-            message: greeting.content,
-            state: conversation.state,
-            chips: greeting.chips,
-            isComplete: false,
-        };
-    }
-
     // Check safety limits
-    const turnCheck = checkTurnLimit(conversation.turnCount);
-    if (!turnCheck.isValid) {
-        await terminateConversation(conversation.id, turnCheck.reason!);
+    if (conversation.turnCount >= SAFETY_LIMITS.MAX_TURNS_PER_CONVERSATION) {
+        await terminateConversation(conversation.id, 'Maximum conversation turns reached. Please start a new conversation.');
         return {
             conversationId: conversation.id,
-            message: turnCheck.reason!,
+            message: 'Maximum conversation turns reached. Please start a new conversation.',
             state: 'terminated',
-            chips: getGreetingMessage('idle').chips,
+            chips: getIdleChips(),
             isComplete: true,
         };
     }
 
-    // Validate user input
-    const validation = await validateUserInput(message, conversation.context);
-    const invalidCheck = checkInvalidAttempts(conversation.invalidAttempts, validation.isValid);
+    // Build initial state for the graph
+    const initialState: Partial<ReportFlowState> = {
+        conversationId: conversation.id,
+        userId,
+        context: conversation.context as ConversationContext,
+        itemData: conversation.extractedData || {},
+        currentNode: conversation.state === 'idle' || conversation.turnCount === 0 ? 'greet' : getNodeFromState(conversation.state),
+        turnCount: conversation.turnCount,
+        invalidAttempts: conversation.invalidAttempts,
+        lastUserMessage: message || '',
+        imageBase64: imageData,
+        isComplete: false,
+    };
 
-    if (!invalidCheck.isValid && invalidCheck.shouldTerminate) {
-        await terminateConversation(conversation.id, invalidCheck.reason!);
-        return {
-            conversationId: conversation.id,
-            message: invalidCheck.reason!,
-            state: 'terminated',
-            chips: getGreetingMessage('idle').chips,
-            isComplete: true,
+    // Add location to item data if provided
+    if (location) {
+        initialState.itemData = {
+            ...initialState.itemData,
+            coordinates: location,
+            location: initialState.itemData?.location || `Near (${location.lat.toFixed(4)}, ${location.lng.toFixed(4)})`,
         };
     }
 
-    // Add user message
-    await addMessage(conversation.id, {
-        role: 'user',
-        content: message,
-        metadata: location ? { location } : undefined,
-    });
+    try {
+        // If this is a new conversation, just run the greet node
+        if (conversation.turnCount === 0 && context && context !== 'idle') {
+            console.log('[processChat] Starting new conversation with context:', context);
 
-    // If input was invalid, give warning
-    if (!validation.isValid) {
-        const warning = getInvalidInputWarning(invalidCheck.newInvalidCount!);
-        await updateConversation(conversation.id, { invalidAttempts: invalidCheck.newInvalidCount });
+            // Invoke the graph starting from greet
+            const result = await reportFlowGraph.invoke(initialState);
 
+            // Save the initial state
+            await updateConversation(conversation.id, {
+                state: mapNodeToState(result.currentNode),
+                extractedData: result.itemData,
+                turnCount: result.turnCount,
+            });
+
+            // Add assistant message
+            await addMessage(conversation.id, {
+                role: 'assistant',
+                content: result.responseMessage,
+                metadata: { chips: result.responseChips },
+            });
+
+            return {
+                conversationId: conversation.id,
+                message: result.responseMessage,
+                state: mapNodeToState(result.currentNode),
+                chips: result.responseChips,
+                matches: result.matches,
+                isComplete: result.isComplete,
+            };
+        }
+
+        // Add user message to history
+        if (message) {
+            await addMessage(conversation.id, {
+                role: 'user',
+                content: message,
+                metadata: location ? { location } : undefined,
+            });
+        }
+
+        // Invoke the graph with current state
+        console.log('[processChat] Invoking graph with state:', initialState.currentNode);
+        const result = await reportFlowGraph.invoke(initialState);
+
+        // Update conversation state
+        await updateConversation(conversation.id, {
+            state: mapNodeToState(result.currentNode),
+            extractedData: result.itemData,
+            turnCount: result.turnCount,
+            invalidAttempts: result.invalidAttempts,
+        });
+
+        // Add assistant response to history
         await addMessage(conversation.id, {
             role: 'assistant',
-            content: warning,
+            content: result.responseMessage,
+            metadata: { chips: result.responseChips },
+        });
+
+        // If complete, mark conversation as complete
+        if (result.isComplete) {
+            await updateConversation(conversation.id, { state: 'complete' });
+        }
+
+        return {
+            conversationId: conversation.id,
+            message: result.responseMessage,
+            state: mapNodeToState(result.currentNode),
+            chips: result.responseChips,
+            matches: result.matches,
+            isComplete: result.isComplete,
+        };
+
+    } catch (error) {
+        console.error('[processChat] Graph execution error:', error);
+
+        // Return error response
+        const errorMessage = 'Sorry, something went wrong. Please try again.';
+        await addMessage(conversation.id, {
+            role: 'assistant',
+            content: errorMessage,
         });
 
         return {
             conversationId: conversation.id,
-            message: warning,
-            state: conversation.state,
+            message: errorMessage,
+            state: 'idle',
+            chips: getIdleChips(),
             isComplete: false,
         };
     }
-
-    // Reset invalid attempts on valid input
-    if (invalidCheck.newInvalidCount === 0 && conversation.invalidAttempts > 0) {
-        await updateConversation(conversation.id, { invalidAttempts: 0 });
-    }
-
-    // Process based on context
-    switch (conversation.context) {
-        case 'report_lost':
-            return handleReportLost(conversation, message, imageData, location);
-
-        case 'report_found':
-            return handleReportFound(conversation, message, imageData, location, userId);
-
-        case 'check_matches':
-            return handleCheckMatches(conversation, userId);
-
-        case 'find_collection':
-            return handleFindCollection(conversation, message, location);
-
-        default:
-            return handleGenericQuery(conversation, message);
-    }
 }
 
+// ============ Helper Functions ============
+
 /**
- * Handle "Report Lost Item" flow
+ * Get or create a conversation
  */
-async function handleReportLost(
-    conversation: Conversation,
-    message: string,
-    imageData?: string,
-    location?: { lat: number; lng: number }
-): Promise<ChatResponse> {
-    // Extract data from message AND image if provided
-    const { extracted } = await extractItemData(message, conversation.extractedData, 'report_lost', imageData);
-
-    // Merge with existing data
-    const updatedData: Partial<ItemInput> = {
-        ...conversation.extractedData,
-        ...extracted,
-    };
-
-    // Handle location
-    if (location) {
-        updatedData.coordinates = location;
-        if (!updatedData.location) {
-            updatedData.location = `Near (${location.lat.toFixed(4)}, ${location.lng.toFixed(4)})`;
+async function getOrCreateConversation(
+    userId: string,
+    context: string,
+    conversationId?: string
+): Promise<Conversation> {
+    if (conversationId) {
+        const doc = await collections.conversations.doc(conversationId).get();
+        if (doc.exists) {
+            const data = doc.data()!;
+            if (data.userId === userId && data.state !== 'terminated' && data.state !== 'complete') {
+                return { id: doc.id, ...data } as Conversation;
+            }
         }
     }
 
-    // Handle date default
-    if (!updatedData.date) {
-        updatedData.date = new Date();
-    }
-
-    // Handle image
-    let imageUrl: string | undefined;
-    if (imageData) {
-        try {
-            const result = await uploadImage(imageData);
-            imageUrl = result.url;
-            (updatedData as any).cloudinaryUrls = [result.url];
-        } catch (error) {
-            console.error('Image upload failed:', error);
-        }
-    }
-
-    // Get next question
-    const { question, nextState, chips } = getNextQuestion(
-        conversation.state,
-        updatedData,
-        'report_lost'
+    // Create new conversation
+    const now = Timestamp.now();
+    const expiresAt = Timestamp.fromMillis(
+        now.toMillis() + SAFETY_LIMITS.CHAT_HISTORY_TTL_DAYS * 24 * 60 * 60 * 1000
     );
 
-    // Update conversation
-    await updateConversation(conversation.id, {
-        state: nextState,
-        extractedData: updatedData,
-    });
-
-    // If we're at search_matches state, actually search
-    if (nextState === 'search_matches') {
-        // Ensure date is a proper Date object
-        let itemDate: Date;
-        if (updatedData.date instanceof Date) {
-            itemDate = updatedData.date;
-        } else if (updatedData.date) {
-            itemDate = new Date(updatedData.date as any);
-        } else {
-            itemDate = new Date();
-        }
-
-        const matches = await findMatchesForLostItem({
-            name: updatedData.name || 'Unknown Item',
-            description: updatedData.description || '',
-            tags: updatedData.tags,
-            coordinates: updatedData.coordinates,
-            date: itemDate,
-            imageBase64: imageData,
-        });
-
-        // Build item data, excluding undefined values
-        const itemData: Record<string, any> = {
-            name: updatedData.name || 'Unknown Item',
-            description: updatedData.description || '',
-            type: 'Lost',
-            status: 'Pending',
-            location: updatedData.location || 'Unknown',
-            date: Timestamp.fromDate(itemDate),
-            tags: updatedData.tags || [],
-            reportedBy: conversation.userId,
-            createdAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-        };
-
-        // Only add coordinates if defined
-        if (updatedData.coordinates) {
-            itemData.coordinates = updatedData.coordinates;
-        }
-
-        // Only add cloudinaryUrls if defined
-        if ((updatedData as any).cloudinaryUrls) {
-            itemData.cloudinaryUrls = (updatedData as any).cloudinaryUrls;
-        }
-
-        // Save the lost item to database
-        await collections.items.add(itemData);
-
-        // Mark conversation complete
-        await updateConversation(conversation.id, { state: 'complete' });
-
-        const matchMessage = matches.length > 0
-            ? `🎉 Great news! I found ${matches.length} potential match${matches.length > 1 ? 'es' : ''} for your lost item!\n\n` +
-            matches.slice(0, 3).map((m, i) =>
-                `${i + 1}. **${m.item.name}** - ${m.score}% match\n   📍 ${m.item.location}`
-            ).join('\n\n') +
-            '\n\nWould you like to view these matches in detail?'
-            : "I've recorded your lost item. I'll notify you if we find any matches!";
-
-        await addMessage(conversation.id, {
-            role: 'assistant',
-            content: matchMessage,
-            metadata: { chips: getGreetingMessage('idle').chips },
-        });
-
-        return {
-            conversationId: conversation.id,
-            message: matchMessage,
-            state: 'complete',
-            matches: matches.slice(0, 5),
-            chips: getGreetingMessage('idle').chips,
-            isComplete: true,
-        };
-    }
-
-    // Add response message
-    await addMessage(conversation.id, {
-        role: 'assistant',
-        content: question,
-        metadata: { chips },
-    });
-
-    return {
-        conversationId: conversation.id,
-        message: question,
-        state: nextState,
-        chips,
-        isComplete: false,
+    const conversation = {
+        userId,
+        context,
+        state: 'idle',
+        messages: [],
+        extractedData: {},
+        invalidAttempts: 0,
+        turnCount: 0,
+        createdAt: now,
+        expiresAt,
     };
+
+    const docRef = await collections.conversations.add(conversation);
+    return { id: docRef.id, ...conversation } as Conversation;
 }
 
 /**
- * Handle "Report Found Item" flow
+ * Update conversation state
  */
-async function handleReportFound(
-    conversation: Conversation,
-    message: string,
-    imageData?: string,
-    location?: { lat: number; lng: number },
-    userId?: string
-): Promise<ChatResponse> {
-    // Extract data from message AND image if provided
-    const { extracted } = await extractItemData(message, conversation.extractedData, 'report_found', imageData);
+async function updateConversation(
+    conversationId: string,
+    updates: Partial<Pick<Conversation, 'state' | 'extractedData' | 'invalidAttempts' | 'turnCount'>>
+): Promise<void> {
+    // Sanitize extractedData to remove invalid values that Firestore can't handle
+    if (updates.extractedData) {
+        const sanitized = { ...updates.extractedData };
 
-    const updatedData: Partial<ItemInput> = {
-        ...conversation.extractedData,
-        ...extracted,
-    };
-
-    if (location) {
-        updatedData.coordinates = location;
-        if (!updatedData.location) {
-            updatedData.location = `Near (${location.lat.toFixed(4)}, ${location.lng.toFixed(4)})`;
-        }
-    }
-
-    if (!updatedData.date) {
-        updatedData.date = new Date();
-    }
-
-    // Handle image
-    if (imageData) {
-        try {
-            const result = await uploadImage(imageData);
-            (updatedData as any).cloudinaryUrls = [result.url];
-        } catch (error) {
-            console.error('Image upload failed:', error);
-        }
-    }
-
-    const { question, nextState, chips } = getNextQuestion(
-        conversation.state,
-        updatedData,
-        'report_found'
-    );
-
-    await updateConversation(conversation.id, {
-        state: nextState,
-        extractedData: updatedData,
-    });
-
-    // Save found item when confirmed
-    if (nextState === 'search_matches') {
-        // Ensure date is a proper Date object
-        let itemDate: Date;
-        if (updatedData.date instanceof Date) {
-            itemDate = updatedData.date;
-        } else if (updatedData.date) {
-            itemDate = new Date(updatedData.date as any);
-        } else {
-            itemDate = new Date();
+        // Handle invalid dates
+        if (sanitized.date) {
+            const dateValue = sanitized.date instanceof Date ? sanitized.date : new Date(sanitized.date as any);
+            if (isNaN(dateValue.getTime())) {
+                delete sanitized.date; // Remove invalid date
+            } else {
+                sanitized.date = dateValue;
+            }
         }
 
-        // Build item data, excluding undefined values
-        const itemData: Record<string, any> = {
-            name: updatedData.name || 'Unknown Item',
-            description: updatedData.description || '',
-            type: 'Found',
-            status: 'Pending',
-            location: updatedData.location || 'Unknown',
-            date: Timestamp.fromDate(itemDate),
-            tags: updatedData.tags || [],
-            reportedBy: conversation.userId,
-            createdAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-        };
-
-        // Only add coordinates if defined
-        if (updatedData.coordinates) {
-            itemData.coordinates = updatedData.coordinates;
+        // Remove "None" or empty location values
+        if (sanitized.location === 'None' || sanitized.location === 'none' || sanitized.location === '') {
+            delete sanitized.location;
         }
 
-        // Only add cloudinaryUrls if defined
-        if ((updatedData as any).cloudinaryUrls) {
-            itemData.cloudinaryUrls = (updatedData as any).cloudinaryUrls;
-        }
-
-        // Save to database
-        const itemRef = await collections.items.add(itemData);
-
-        // Award credits
-        if (userId) {
-            await awardFoundItemCredits(userId, itemRef.id);
-        }
-
-        // Search for potential owners
-        const matches = await findMatchesForFoundItem({
-            name: updatedData.name || 'Unknown Item',
-            description: updatedData.description || '',
-            tags: updatedData.tags,
-            coordinates: updatedData.coordinates,
-            date: updatedData.date || new Date(),
-            imageBase64: imageData,
+        // Remove undefined values (Firestore doesn't accept undefined)
+        Object.keys(sanitized).forEach(key => {
+            if ((sanitized as any)[key] === undefined) {
+                delete (sanitized as any)[key];
+            }
         });
 
-        await updateConversation(conversation.id, { state: 'complete' });
-
-        const successMessage = `✅ Thank you! The found item has been logged.\n\n🏆 **+${20} credits earned!**` +
-            (matches.length > 0
-                ? `\n\n📋 I found ${matches.length} potential owner${matches.length > 1 ? 's' : ''} - they'll be notified.`
-                : '\n\n📋 No matching lost items yet. We\'ll notify potential owners if they report it.');
-
-        await addMessage(conversation.id, {
-            role: 'assistant',
-            content: successMessage,
-            metadata: { chips: getGreetingMessage('idle').chips },
-        });
-
-        return {
-            conversationId: conversation.id,
-            message: successMessage,
-            state: 'complete',
-            matches: matches.slice(0, 3),
-            chips: getGreetingMessage('idle').chips,
-            isComplete: true,
-        };
+        updates = { ...updates, extractedData: sanitized };
     }
 
-    await addMessage(conversation.id, {
-        role: 'assistant',
-        content: question,
-        metadata: { chips },
-    });
-
-    return {
-        conversationId: conversation.id,
-        message: question,
-        state: nextState,
-        chips,
-        isComplete: false,
-    };
+    await collections.conversations.doc(conversationId).update(updates);
 }
 
 /**
- * Handle "Check Matches" flow
+ * Add message to conversation
  */
-async function handleCheckMatches(
-    conversation: Conversation,
-    userId: string
-): Promise<ChatResponse> {
-    // Get user's lost items
-    const snapshot = await collections.items
-        .where('reportedBy', '==', userId)
-        .where('type', '==', 'Lost')
-        .where('status', '==', 'Pending')
-        .get();
-
-    if (snapshot.empty) {
-        const message = "You don't have any pending lost item reports. Would you like to report a lost item?";
-
-        await addMessage(conversation.id, {
-            role: 'assistant',
-            content: message,
-            metadata: { chips: [{ label: 'Report lost item', icon: '🔍' }] },
-        });
-
-        return {
-            conversationId: conversation.id,
-            message,
-            state: 'complete',
-            chips: [{ label: 'Report lost item', icon: '🔍' }],
-            isComplete: true,
-        };
-    }
-
-    // Check matches for each lost item
-    const allMatches = [];
-    for (const doc of snapshot.docs) {
-        const item = doc.data();
-        const matches = await findMatchesForLostItem({
-            name: item.name,
-            description: item.description,
-            tags: item.tags,
-            coordinates: item.coordinates,
-            date: item.date.toDate(),
-        });
-
-        allMatches.push(...matches.map(m => ({ ...m, lostItemName: item.name })));
-    }
-
-    await updateConversation(conversation.id, { state: 'complete' });
-
-    const message = allMatches.length > 0
-        ? `🔍 I found ${allMatches.length} potential match${allMatches.length > 1 ? 'es' : ''} for your lost items:\n\n` +
-        allMatches.slice(0, 5).map((m, i) =>
-            `${i + 1}. **${m.item.name}** matches your "${(m as any).lostItemName}" - ${m.score}% match`
-        ).join('\n')
-        : "No matches found yet. I'll notify you when we find something!";
-
-    await addMessage(conversation.id, {
-        role: 'assistant',
-        content: message,
-        metadata: { chips: getGreetingMessage('idle').chips },
-    });
-
-    return {
-        conversationId: conversation.id,
-        message,
-        state: 'complete',
-        matches: allMatches.slice(0, 5),
-        chips: getGreetingMessage('idle').chips,
-        isComplete: true,
+async function addMessage(
+    conversationId: string,
+    message: Omit<Message, 'id' | 'timestamp'>
+): Promise<void> {
+    const fullMessage = {
+        id: `msg_${Date.now()}`,
+        role: message.role,
+        content: message.content,
+        timestamp: new Date(),
+        ...(message.metadata && Object.keys(message.metadata).length > 0 ? { metadata: message.metadata } : {}),
     };
-}
 
-/**
- * Handle "Find Collection Point" flow
- */
-async function handleFindCollection(
-    conversation: Conversation,
-    message: string,
-    location?: { lat: number; lng: number }
-): Promise<ChatResponse> {
-    // Get collection points from database
-    const snapshot = await collections.collectionPoints.get();
-
-    if (snapshot.empty) {
-        const response = "No collection points have been configured yet. Please contact the administrator.";
-
-        await addMessage(conversation.id, {
-            role: 'assistant',
-            content: response,
-        });
-
-        return {
-            conversationId: conversation.id,
-            message: response,
-            state: 'complete',
-            chips: getGreetingMessage('idle').chips,
-            isComplete: true,
-        };
-    }
-
-    // For now, list all collection points
-    const points = snapshot.docs.map(doc => doc.data());
-    const response = `📍 Here are the available collection points:\n\n` +
-        points.map((p, i) =>
-            `${i + 1}. **${p.name}**\n   📌 ${p.address}\n   🕐 ${p.hours || 'Contact for hours'}`
-        ).join('\n\n');
-
-    await updateConversation(conversation.id, { state: 'complete' });
-
-    await addMessage(conversation.id, {
-        role: 'assistant',
-        content: response,
-        metadata: { chips: getGreetingMessage('idle').chips },
+    await collections.conversations.doc(conversationId).update({
+        messages: FieldValue.arrayUnion(fullMessage),
     });
-
-    return {
-        conversationId: conversation.id,
-        message: response,
-        state: 'complete',
-        chips: getGreetingMessage('idle').chips,
-        isComplete: true,
-    };
-}
-
-/**
- * Handle generic conversation
- */
-async function handleGenericQuery(
-    conversation: Conversation,
-    message: string
-): Promise<ChatResponse> {
-    const response = await generateAIResponse(
-        conversation.messages,
-        conversation.context,
-        conversation.state
-    );
-
-    await addMessage(conversation.id, {
-        role: 'assistant',
-        content: response,
-        metadata: { chips: getGreetingMessage('idle').chips },
-    });
-
-    return {
-        conversationId: conversation.id,
-        message: response,
-        state: conversation.state,
-        chips: getGreetingMessage('idle').chips,
-        isComplete: false,
-    };
 }
 
 /**
@@ -594,4 +268,56 @@ async function terminateConversation(conversationId: string, reason: string): Pr
         role: 'system',
         content: reason,
     });
+}
+
+/**
+ * Map graph node to conversation state
+ */
+function mapNodeToState(node: string): ConversationState {
+    const nodeStateMap: Record<string, ConversationState> = {
+        greet: 'idle',
+        collectDescription: 'ask_description',
+        collectLocation: 'ask_location',
+        collectDateTime: 'ask_datetime',
+        confirmDetails: 'confirm_details',
+        saveItem: 'search_matches',
+        searchMatches: 'search_matches',
+        showResults: 'complete',
+        checkMatches: 'complete',
+        findCollection: 'complete',
+        handleError: 'terminated',
+        complete: 'complete',
+    };
+
+    return nodeStateMap[node] || 'idle' as ConversationState;
+}
+
+/**
+ * Get node from conversation state
+ */
+function getNodeFromState(state: string): any {
+    const stateNodeMap: Record<string, string> = {
+        idle: 'greet',
+        ask_description: 'collectDescription',
+        ask_location: 'collectLocation',
+        ask_datetime: 'collectDateTime',
+        confirm_details: 'confirmDetails',
+        search_matches: 'searchMatches',
+        complete: 'complete',
+        terminated: 'handleError',
+    };
+
+    return stateNodeMap[state] || 'greet';
+}
+
+/**
+ * Get default idle chips
+ */
+function getIdleChips() {
+    return [
+        { label: 'Report lost item', icon: '🔍' },
+        { label: 'Report found item', icon: '📦' },
+        { label: 'Check matches', icon: '🔔' },
+        { label: 'Find collection point', icon: '📍' },
+    ];
 }
