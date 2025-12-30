@@ -7,6 +7,7 @@ import matchesRoutes from './routes/matches.js';
 import notificationsRoutes from './routes/notifications.js';
 import settingsRoutes from './routes/settings.js';
 import verificationRoutes from './routes/verification.js';
+import creditsRoutes from './routes/credits.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +31,7 @@ app.use('/api/matches', matchesRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/verification', verificationRoutes);
+app.use('/api/credits', creditsRoutes);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

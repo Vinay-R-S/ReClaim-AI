@@ -18,16 +18,6 @@ export function HomePage() {
   return (
     <UserLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="text-center py-8">
-          <h1 className="text-3xl font-bold text-text-primary mb-2">
-            ReClaim AI
-          </h1>
-          <p className="text-text-secondary">
-            Report lost items or help others find theirs
-          </p>
-        </div>
-
         {/* Action Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Report Lost */}

@@ -16,12 +16,13 @@ import {
     SAFETY_LIMITS,
 } from './types.js';
 import {
-    extractItemDataTool,
-    uploadImageTool,
     saveItemTool,
     searchMatchesTool,
     getCollectionPointsTool,
     getUserLostItemsTool,
+    deleteMatchedItemsTool,
+    extractItemDataTool,
+    uploadImageTool,
 } from './tools.js';
 import { invokeLLMWithFallback, SYSTEM_PROMPT } from './langchainConfig.js';
 
@@ -62,8 +63,12 @@ async function dispatchNode(state: ReportFlowState): Promise<Partial<ReportFlowS
             return handleConfirmDetails(state);
         case 'saveItem':
             return handleSaveAndSearch(state);
+        case 'handleConfirmation':
+            // Maps to the old preSearchResults but handling confirmation now
+            return handleConfirmMatch(state);
         case 'preSearchResults':
-            return handlePreSearchResults(state);
+            // Keeping for backward compatibility or routing
+            return handleConfirmMatch(state);
         default:
             // Default to description collection
             return handleCollectDescription(state);
@@ -198,34 +203,142 @@ async function handleCollectDescription(state: ReportFlowState): Promise<Partial
         const matches = matchResult.matches || [];
 
         if (matches.length > 0) {
-            // Found potential matches! Show them in table format
-            const matchTable = [
-                '--- POTENTIAL MATCHES FOUND ---',
-                '',
-                '| # | Item Name | Match Score | Location | Date Found |',
-                '|---|-----------|-------------|----------|------------|',
-                ...matches.slice(0, 5).map((m, i) => {
-                    const itemDate = m.item.date ? formatDate(m.item.date) : 'Unknown';
-                    return `| ${i + 1} | ${m.item.name} | ${m.score}% | ${m.item.location || 'Unknown'} | ${itemDate} |`;
-                }),
-                '',
-                'Is your item one of these? Reply with the number (1, 2, etc.) or say "none" to continue reporting.',
-            ].join('\n');
+            // Found potential matches!
+            // Get the best match
+            const bestMatch = matches[0]; // Assumes sorted by score from search tool
 
-            return {
-                itemData: updatedItemData,
-                matches,
-                responseMessage: matchTable,
-                responseChips: [
-                    { label: '1', icon: '' },
-                    { label: '2', icon: '' },
-                    { label: 'None of these', icon: '' },
-                ],
-                currentNode: 'preSearchResults' as any,
-                turnCount: state.turnCount + 1,
-                imageBase64: undefined,
-                isComplete: false,
-            };
+            if (bestMatch.score > 60) {
+                // High confidence match
+                const matchResponse = [
+                    'We found a potential match for your reported lost item.',
+                    '',
+                    `An item reported as **found** matches your description. The found item is a *${bestMatch.item.name}*, and it closely aligns with the details of your *${updatedItemData.name}*.`,
+                    '',
+                    `Based on visual and descriptive analysis, the system has calculated a **match confidence of ${bestMatch.score}%**, indicating a strong likelihood that both items refer to the same object.`,
+                ].join('\n');
+
+                return {
+                    itemData: updatedItemData,
+                    matches,
+                    pendingMatch: bestMatch, // Start tracking this match
+                    pendingLostItemId: undefined, // ID not created yet, will be handled in save flow if needed, but here we are in description flow... wait, IF we haven't saved the lost item yet, we can't delete it easily later unless we save it now. 
+                    // Actually, for "report_lost" flow, we haven't saved the item yet.
+                    // If the user confirms a match HERE, we should probably SKIP saving the lost item report entirely?
+                    // Or save it and then delete it? 
+                    // Let's assume we proceed to *confirmation* first. 
+                    // If user confirms, we show details. We don't need to save the lost item record if they found it immediately. 
+                    // But we DO need to delete the FOUND item record.
+
+                    responseMessage: matchResponse,
+                    responseChips: [
+                        { label: 'Confirm', icon: '' },
+                    ],
+                    currentNode: 'handleConfirmation' as any,
+                    turnCount: state.turnCount + 1,
+                    imageBase64: undefined,
+                    isComplete: false,
+                };
+            } else {
+                // Low confidence match
+                const noMatchResponse = [
+                    'At this time, no strong match was found for your lost item. We recommend checking back later, as new found items may be added to the system.',
+                ].join('\n');
+
+                return {
+                    itemData: updatedItemData,
+                    matches: [], // Don't expose weak matches
+                    responseMessage: noMatchResponse,
+                    responseChips: [], // "Do NOT show any buttons" - assuming navigation is handled elsewhere or user can type.
+                    // If we show NO chips, user is stuck? 
+                    // The prompt says "Do NOT show any buttons".
+                    // I will strictly follow this for *action* buttons.
+                    // Maybe we should route them to 'saveItem' anyway so their report is filed?
+                    // "We recommend checking back later" implies the report IS filed?
+                    // The current flow was: check matches -> if none -> continue to collect details?
+                    // Only "search for matches IMMEDIATELY" was for lost items.
+                    // If we don't find a high confidence match, we should probably continue the report flow?
+                    // "Response with... no strong match found... recommend checking back later".
+                    // This implies the report should be saved so they CAN check back later.
+                    // But we are in `collectDescription`. 
+                    // I will continue normally to `collectLocation` if we didn't find a strong match, 
+                    // OR if we already have location, we might just continue.
+                    // Actually, if we are searching immediately, it's essentially a check.
+                    // Let's just output the message. The user logic says "Do NOT show any buttons".
+                    // If I return `collectLocation` as next node, it will ask for location.
+                    // If I return `saveItem`, it will save.
+                    // Let's assume we continue the flow to ensure we have all details to SAVE the report.
+                };
+
+                // Wait, if match <= 60%, we just say "no strong match".
+                // But we still want to save the item?
+                // The prompt doesn't explicitly say "Stop reporting".
+                // It says "Respond with...".
+                // I will return the message, but what is the NEXT state?
+                // If I set nextState to `collectLocation` (or whatever is next), the system will output the Next Question immediately after?
+                // LangGraph outputs ONE response.
+                // If I want to output this message AND continue, I might need to append the next question?
+                // Or just stop here and let the user type something?
+
+                // Let's look at the original code:
+                // It showed a table and asked "Is your item one of these?".
+                // Now, if <= 60%, we say "No match".
+                // We should probably proceed to collecting the rest of the info so we can SAVE the lost item.
+                // So, treat it as "no match found, continue reporting".
+                // I will NOT show the "No strong match" message if I'm just going to ask for location immediately, unless I chain them.
+                // But the prompt seems to want this specific message.
+                // I will allow the flow to fall through to standard collection if no high confidence match.
+                // BUT the prompt is strict about the response format.
+
+                // STRATEGY: 
+                // If <= 60%, I will NOT trigger the "match found" logic block.
+                // I will let it fall through to the standard "Success/Continue" flow at the bottom of the function.
+                // BUT the bottom of the function asks for location/etc.
+                // The explicit requirement "Respond with: At this time..." seems to apply when we ARE showing matches.
+
+                // Let's modify the block:
+                // If > 60% -> Show Confirmation.
+                // If <= 60% -> Do NOTHING special here (no table), just continue to standard collection.
+                // Wait, if I do nothing, it will just ask for location. The user won't know we checked.
+                // Maybe I should prepend the "No match" message to the next question?
+                // "At this time... \n\nBoundaries: Missing Information..."
+
+                // actually, the prompt is for "Chat Assistant - Match Result Display Prompt".
+                // It implies this is THE response when a match check happens.
+                // If I am in `collectDescription` and I auto-check...
+                // Maybe I should only auto-check if we have enough info?
+
+                // Let's look at `handleCollectDescription` again.
+                // It says `// FOR LOST ITEMS: Search for matches IMMEDIATELY when we have enough info`.
+                // If I change this to:
+                // 1. Search.
+                // 2. If > 60%, return the Confirm flow.
+                // 3. If <= 60%, just continue standard flow (don't interrupt with "No match found" text unless it's the FINAL check?).
+                // Actually, if the user *just* typed the description, getting immediate feedback "No match found, let's get your location" is good.
+                // I will prepend the message to the next step's response if <= 60%.
+
+                // However, detailed prompt says: "If match confidence <= 60% ... Respond with > At this time, no strong match was found... Do NOT show any buttons."
+                // This sounds like a TERMINAL state for that turn.
+                // If I terminate, the user has to type again.
+                // If I continue, I must show navigation buttons (e.g. "Share location").
+                // PROMPT SAYS "Do NOT show any buttons".
+
+                // This implies the match result IS the response.
+                // So if <= 60%, I show that message and maybe sit in a state where the user provides more info?
+                // Or maybe I just save what I have? 
+                // Let's assume if <= 60%, we just output that text and wait for user input (which presumably continues the report).
+                // I'll set `currentNode` to `collectLocation` (or whatever is next) but suppress the automated question prompt from that node? 
+                // No, I can just return the response here and set the next node.
+
+                return {
+                    itemData: updatedItemData,
+                    matches: [],
+                    responseMessage: noMatchResponse,
+                    responseChips: [],
+                    currentNode: 'collectLocation' as any, // implicitly move to next step, but user has to type
+                    turnCount: state.turnCount + 1,
+                    isComplete: false,
+                }
+            }
         }
     }
 
@@ -505,31 +618,46 @@ async function handleSaveAndSearch(state: ReportFlowState): Promise<Partial<Repo
 
     if (isLost) {
         if (matches.length > 0) {
-            responseMessage = [
-                '--- LOST ITEM RECORDED ---',
-                '',
-                `Your item "${state.itemData.name}" has been saved.`,
-                '',
-                '--- POTENTIAL MATCHES ---',
-                '',
-                '| # | Found Item | Match Score | Location |',
-                '|---|------------|-------------|----------|',
-                ...matches.slice(0, 3).map((m, i) =>
-                    `| ${i + 1} | ${m.item.name} | ${m.score}% | ${m.item.location || 'Unknown'} |`
-                ),
-                '',
-                'Check "My Reports" to see details and claim your item.',
-            ].join('\n');
-        } else {
-            responseMessage = [
-                '--- LOST ITEM RECORDED ---',
-                '',
-                `Your item "${state.itemData.name}" has been saved.`,
-                '',
-                'No matches found yet. You will be notified when someone reports finding a similar item.',
-            ].join('\n');
+            const bestMatch = matches[0];
+            if (bestMatch.score > 60) {
+                // High confidence match found AFTER saving
+                responseMessage = [
+                    '--- LOST ITEM RECORDED ---',
+                    '',
+                    `Your item "${state.itemData.name}" has been saved.`,
+                    '',
+                    'We also found a potential match for your reported lost item.',
+                    '',
+                    `An item reported as **found** matches your description. The found item is a *${bestMatch.item.name}*, and it closely aligns with the details of your *${state.itemData.name}*.`,
+                    '',
+                    `Based on visual and descriptive analysis, the system has calculated a **match confidence of ${bestMatch.score}%**, indicating a strong likelihood that both items refer to the same object.`,
+                ].join('\n');
+
+                return {
+                    savedItemId: saveResult.itemId,
+                    matches,
+                    pendingMatch: bestMatch,
+                    pendingLostItemId: saveResult.itemId, // We have the saved ID now
+                    responseMessage,
+                    responseChips: [
+                        { label: 'Confirm', icon: '' },
+                    ],
+                    currentNode: 'handleConfirmation' as any,
+                    isComplete: false,
+                };
+            }
         }
+
+        // No high confidence matches
+        responseMessage = [
+            '--- LOST ITEM RECORDED ---',
+            '',
+            `Your item "${state.itemData.name}" has been saved.`,
+            '',
+            'At this time, no strong match was found for your lost item. We recommend checking back later, as new found items may be added to the system.',
+        ].join('\n');
     } else {
+        // Found item flow (unchanged mostly, but formatted nicely)
         if (matches.length > 0) {
             responseMessage = [
                 '--- FOUND ITEM LOGGED ---',
@@ -589,7 +717,14 @@ async function handleCheckMatches(state: ReportFlowState): Promise<Partial<Repor
     }
 
     // Search matches for each lost item
-    const allMatches: any[] = [];
+    // We only want to present the BEST match across all items, or maybe iterate?
+    // The prompt implies a singular match presentation.
+    // Let's find the single best match with > 60% confidence.
+
+    let bestMatch: any = null;
+    let bestMatchLostItemId: string | null = null;
+    let bestMatchLostItemName: string | null = null;
+
     for (const item of lostItems) {
         const matchResult = await searchMatchesTool.invoke({
             itemData: {
@@ -601,77 +736,100 @@ async function handleCheckMatches(state: ReportFlowState): Promise<Partial<Repor
             },
             type: 'Lost',
         });
-        allMatches.push(...matchResult.matches.map(m => ({ ...m, lostItemName: item.name })));
+
+        if (matchResult.matches.length > 0) {
+            const itemBest = matchResult.matches[0];
+            if (itemBest.score > 60) {
+                if (!bestMatch || itemBest.score > bestMatch.score) {
+                    bestMatch = itemBest;
+                    bestMatchLostItemId = item.id;
+                    bestMatchLostItemName = item.name;
+                }
+            }
+        }
     }
 
-    let responseMessage: string;
-    if (allMatches.length > 0) {
-        responseMessage = [
-            '--- MATCH RESULTS ---',
+    if (bestMatch && bestMatchLostItemId) {
+        const responseMessage = [
+            'We found a potential match for your reported lost item.',
             '',
-            `Found ${allMatches.length} potential match(es) for your lost items:`,
+            `An item reported as **found** matches your description. The found item is a *${bestMatch.item.name}*, and it closely aligns with the details of your *${bestMatchLostItemName}*.`,
             '',
-            '| # | Found Item | Your Lost Item | Match Score |',
-            '|---|------------|----------------|-------------|',
-            ...allMatches.slice(0, 5).map((m: any, i) =>
-                `| ${i + 1} | ${m.item.name} | ${m.lostItemName} | ${m.score}% |`
-            ),
-            '',
-            'Check "My Reports" for details and to claim your items.',
+            `Based on visual and descriptive analysis, the system has calculated a **match confidence of ${bestMatch.score}%**, indicating a strong likelihood that both items refer to the same object.`,
         ].join('\n');
+
+        return {
+            matches: [bestMatch],
+            pendingMatch: bestMatch,
+            pendingLostItemId: bestMatchLostItemId,
+            responseMessage,
+            responseChips: [
+                { label: 'Confirm', icon: '' },
+            ],
+            isComplete: false,
+            currentNode: 'handleConfirmation' as any,
+        };
     } else {
-        responseMessage = [
-            '--- MATCH RESULTS ---',
+        const responseMessage = [
+            `Checked ${lostItems.length} of your lost items.`,
             '',
-            `No matches found yet for your ${lostItems.length} lost item(s).`,
-            '',
-            'You will be notified when we find something.',
+            'At this time, no strong match was found for your lost item. We recommend checking back later, as new found items may be added to the system.',
         ].join('\n');
-    }
 
-    return {
-        matches: allMatches,
-        responseMessage,
-        responseChips: [
-            { label: 'Report lost item', icon: '' },
-            { label: 'Report found item', icon: '' },
-        ],
-        isComplete: true,
-        currentNode: 'complete',
-    };
+        return {
+            matches: [],
+            responseMessage,
+            responseChips: [
+                { label: 'Report lost item', icon: '' },
+                { label: 'Report found item', icon: '' },
+            ],
+            isComplete: true,
+            currentNode: 'complete',
+        };
+    }
 }
 
 /**
- * Handle pre-search results - User response to match selection
+ * Handle match confirmation
  */
-async function handlePreSearchResults(state: ReportFlowState): Promise<Partial<ReportFlowState>> {
+async function handleConfirmMatch(state: ReportFlowState): Promise<Partial<ReportFlowState>> {
     const message = state.lastUserMessage.toLowerCase().trim();
-    console.log('[Graph:preSearchResults] User response:', message);
+    console.log('[Graph:handleConfirmMatch] User response:', message);
 
-    // Check if user selected a match number
-    const matchNumber = parseInt(message);
-    if (!isNaN(matchNumber) && matchNumber >= 1 && state.matches && matchNumber <= state.matches.length) {
-        const selectedMatch = state.matches[matchNumber - 1];
+    if (message.includes('confirm') || message.includes('yes') || message.includes('✅')) {
+        // User confirmed!
+        const foundItem = state.pendingMatch?.item;
 
-        // User selected a match - start verification process
-        const collectionPoint = selectedMatch.item.collectionPoint || 'Main Office';
+        if (!foundItem) {
+            return {
+                responseMessage: 'Sorry, the match session has expired. Please try searching again.',
+                responseChips: [{ label: 'Check matches', icon: '' }],
+                isComplete: true,
+                currentNode: 'complete',
+            };
+        }
+
+        // Delete records
+        if (state.pendingLostItemId && foundItem.id) {
+            console.log(`[Graph:handleConfirmMatch] Deleting items. Lost: ${state.pendingLostItemId}, Found: ${foundItem.id}`);
+            await deleteMatchedItemsTool.invoke({
+                lostItemId: state.pendingLostItemId,
+                foundItemId: foundItem.id,
+            });
+        }
+
+        const collectionLocation = foundItem.collectionPoint || foundItem.location || 'Main Office';
+        const contactEmail = foundItem.reportedByEmail || 'admin@reclaim.ai'; // Fallback logic
 
         const responseMessage = [
-            '--- MATCH SELECTED ---',
+            '**Match Confirmed**',
             '',
-            `Item: ${selectedMatch.item.name}`,
-            `Match Score: ${selectedMatch.score}%`,
-            `Location Found: ${selectedMatch.item.location || 'Unknown'}`,
+            `**Collection Location**: ${collectionLocation}`,
+            `**Contact Email**: ${contactEmail}`,
             '',
-            '--- COLLECTION DETAILS ---',
+            '> Please contact the above email to coordinate verification and collection of the item. Proper identity or ownership verification may be required before handover.',
             '',
-            `Collection Point: ${collectionPoint}`,
-            '',
-            'To claim this item, please visit the collection point with:',
-            '1. A valid government-issued ID',
-            '2. Proof of ownership (if available)',
-            '',
-            'The item has been marked as matched. Thank you for using ReClaim!',
+            'The item records have been removed from the system. Thank you for using ReClaim!',
         ].join('\n');
 
         return {
@@ -685,27 +843,15 @@ async function handlePreSearchResults(state: ReportFlowState): Promise<Partial<R
         };
     }
 
-    // User said "none" or similar - continue with Lost item report
-    if (message.includes('none') || message.includes('no') || message.includes('not')) {
-        return {
-            responseMessage: 'No problem. Let me continue collecting details for your lost item report.\n\nWhere did you last see this item? Please provide the location.',
-            responseChips: [{ label: 'Share location', icon: '' }],
-            currentNode: 'collectLocation',
-            turnCount: state.turnCount + 1,
-            isComplete: false,
-        };
-    }
-
-    // Unknown response - ask again
+    // User didn't confirm
     return {
-        responseMessage: 'Please reply with a number (1, 2, etc.) to select a match, or say "none" if your item is not listed.',
+        responseMessage: 'Match not confirmed. We will keep looking.',
         responseChips: [
-            { label: '1', icon: '' },
-            { label: 'None of these', icon: '' },
+            { label: 'Report lost item', icon: '' },
+            { label: 'Report found item', icon: '' },
         ],
-        currentNode: 'preSearchResults',
-        turnCount: state.turnCount + 1,
-        isComplete: false,
+        isComplete: true,
+        currentNode: 'complete',
     };
 }
 

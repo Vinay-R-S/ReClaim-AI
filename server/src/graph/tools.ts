@@ -388,3 +388,43 @@ export const getUserLostItemsTool = tool(
         }),
     }
 );
+
+/**
+ * Tool: Delete matched items
+ */
+export const deleteMatchedItemsTool = tool(
+    async (input: { lostItemId: string; foundItemId: string }): Promise<{ success: boolean; deletedCount: number }> => {
+        try {
+            const { lostItemId, foundItemId } = input;
+
+            // Delete both items
+            const batch = collections.items.firestore.batch();
+
+            if (lostItemId) {
+                const lostRef = collections.items.doc(lostItemId);
+                batch.delete(lostRef);
+            }
+
+            if (foundItemId) {
+                const foundRef = collections.items.doc(foundItemId);
+                batch.delete(foundRef);
+            }
+
+            await batch.commit();
+
+            console.log(`[DeleteMatchedItemsTool] Deleted lost: ${lostItemId}, found: ${foundItemId}`);
+            return { success: true, deletedCount: 2 };
+        } catch (error) {
+            console.error('[DeleteMatchedItemsTool] Error:', error);
+            return { success: false, deletedCount: 0 };
+        }
+    },
+    {
+        name: 'delete_matched_items',
+        description: 'Delete matched lost and found items from database',
+        schema: z.object({
+            lostItemId: z.string().describe('Lost item ID to delete'),
+            foundItemId: z.string().describe('Found item ID to delete'),
+        }),
+    }
+);

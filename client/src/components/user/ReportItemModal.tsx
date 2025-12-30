@@ -12,6 +12,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import {
   analyzeItemImage,
+  enhanceTextDescription,
   getAvailableProviders,
   type AIProvider,
 } from "../../services/aiService";
@@ -44,10 +45,14 @@ export function ReportItemModal({
     name: "",
     description: "",
     location: "",
+    collectionLocation: "", // For Found items only
     date: new Date().toISOString().split("T")[0],
     time: new Date().toTimeString().slice(0, 5),
     tags: [] as string[],
   });
+
+  // Reporter email from auth
+  const reporterEmail = user?.email || "";
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -70,13 +75,56 @@ export function ReportItemModal({
   };
 
   const handleAnalyze = async () => {
-    if (imageFiles.length === 0) {
-      alert("Please upload an image first");
+    // For Found: image is mandatory
+    if (type === "Found" && imageFiles.length === 0) {
+      alert("Image is required for Found items");
       return;
     }
 
     if (!formData.location) {
       alert("Please enter a location");
+      return;
+    }
+
+    // For Found: collection location is mandatory
+    if (type === "Found" && !formData.collectionLocation) {
+      alert("Please enter a collection location for the found item");
+      return;
+    }
+
+    // For Lost without image: use AI to enhance description and generate tags
+    if (type === "Lost" && imageFiles.length === 0) {
+      if (!formData.name || !formData.description) {
+        alert("Without an image, please provide item name and description");
+        return;
+      }
+
+      try {
+        setStep("analyzing");
+        setLoading(true);
+
+        // Use AI to enhance description and generate tags
+        const enhanced = await enhanceTextDescription(
+          formData.name,
+          formData.description,
+          aiProvider
+        );
+
+        setFormData((prev) => ({
+          ...prev,
+          name: enhanced.name,
+          description: enhanced.description,
+          tags: enhanced.tags,
+        }));
+
+        setStep("review");
+      } catch (err) {
+        console.error("Text enhancement failed:", err);
+        // Continue with original data if enhancement fails
+        setStep("review");
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
@@ -115,6 +163,12 @@ export function ReportItemModal({
       return;
     }
 
+    // For Found: collection location is mandatory
+    if (type === "Found" && !formData.collectionLocation) {
+      alert("Please enter a collection location");
+      return;
+    }
+
     if (!user?.uid) {
       alert("You must be logged in to report an item");
       return;
@@ -133,26 +187,36 @@ export function ReportItemModal({
       // Create date from form inputs
       const dateTime = new Date(`${formData.date}T${formData.time}:00`);
 
+      // Build item data
+      const itemData: Record<string, unknown> = {
+        name: formData.name,
+        description: formData.description,
+        type: type,
+        location: formData.location,
+        date: dateTime.toISOString(),
+        tags: formData.tags,
+        reporterEmail: reporterEmail,
+      };
+
+      // Add collection location for Found items
+      if (type === "Found" && formData.collectionLocation) {
+        itemData.collectionLocation = formData.collectionLocation;
+      }
+
       // Submit to API
       const response = await fetch(`${API_URL}/api/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.uid,
-          item: {
-            name: formData.name,
-            description: formData.description,
-            type: type,
-            location: formData.location,
-            date: dateTime.toISOString(),
-            tags: formData.tags,
-          },
+          item: itemData,
           images: base64Images,
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create item");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to create item");
       }
 
       onSuccess();
@@ -233,11 +297,17 @@ export function ReportItemModal({
               {/* Image Upload */}
               <div className="mb-6">
                 <label className="text-sm text-text-secondary mb-2 block font-medium">
-                  Item Image <span className="text-red-500">*</span>
+                  Item Image{" "}
+                  {type === "Found" && <span className="text-red-500">*</span>}
+                  {type === "Lost" && (
+                    <span className="text-gray-400 text-xs ml-1">
+                      (optional)
+                    </span>
+                  )}
                 </label>
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full h-48 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-blue-50 transition-all overflow-hidden relative"
+                  className="w-full h-40 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-blue-50 transition-all overflow-hidden relative"
                 >
                   {imagePreviews.length > 0 ? (
                     <img
@@ -247,9 +317,11 @@ export function ReportItemModal({
                     />
                   ) : (
                     <>
-                      <ImageIcon className="w-12 h-12 text-text-secondary mb-2" />
+                      <ImageIcon className="w-10 h-10 text-text-secondary mb-2" />
                       <p className="text-sm text-text-secondary">
-                        Click to upload image
+                        {type === "Found"
+                          ? "Click to upload image (required)"
+                          : "Click to upload image (optional)"}
                       </p>
                     </>
                   )}
@@ -263,20 +335,84 @@ export function ReportItemModal({
                 />
               </div>
 
+              {/* Manual fields for Lost without image */}
+              {type === "Lost" && imageFiles.length === 0 && (
+                <>
+                  <div className="mb-4">
+                    <label className="text-sm text-text-secondary mb-1 block font-medium">
+                      Item Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                      placeholder="e.g., Blue Backpack, iPhone 15, etc."
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="text-sm text-text-secondary mb-1 block font-medium">
+                      Description <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          description: e.target.value,
+                        })
+                      }
+                      placeholder="Describe the item in detail (color, brand, distinguishing features...)"
+                      rows={3}
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                    />
+                  </div>
+                </>
+              )}
+
               {/* Location */}
               <div className="mb-4">
                 <label className="text-sm text-text-secondary mb-1 block font-medium">
                   <MapPin className="w-4 h-4 inline mr-1" />
-                  Location <span className="text-red-500">*</span>
+                  {type === "Lost"
+                    ? "Last Seen Location"
+                    : "Found Location"}{" "}
+                  <span className="text-red-500">*</span>
                 </label>
                 <LocationPicker
                   value={formData.location}
                   onChange={(location) =>
                     setFormData({ ...formData, location })
                   }
-                  placeholder="Where did you lose/find this item?"
+                  placeholder={
+                    type === "Lost"
+                      ? "Where did you last see this item?"
+                      : "Where did you find this item?"
+                  }
                 />
               </div>
+
+              {/* Collection Location - Only for Found */}
+              {type === "Found" && (
+                <div className="mb-4">
+                  <label className="text-sm text-text-secondary mb-1 block font-medium">
+                    <MapPin className="w-4 h-4 inline mr-1" />
+                    Collection Location <span className="text-red-500">*</span>
+                  </label>
+                  <LocationPicker
+                    value={formData.collectionLocation}
+                    onChange={(location) =>
+                      setFormData({ ...formData, collectionLocation: location })
+                    }
+                    placeholder="Where can the owner collect this item?"
+                  />
+                  <p className="text-xs text-text-secondary mt-1">
+                    This will only be shared with the verified owner.
+                  </p>
+                </div>
+              )}
 
               {/* Date & Time */}
               <div className="grid grid-cols-2 gap-4 mb-4">
@@ -347,10 +483,18 @@ export function ReportItemModal({
                 </div>
               )}
 
-              {/* Generate Button */}
+              {/* Submit/Analyze Button */}
               <button
                 onClick={handleAnalyze}
-                disabled={imageFiles.length === 0 || !formData.location}
+                disabled={
+                  !formData.location ||
+                  (type === "Found" &&
+                    (imageFiles.length === 0 ||
+                      !formData.collectionLocation)) ||
+                  (type === "Lost" &&
+                    imageFiles.length === 0 &&
+                    (!formData.name || !formData.description))
+                }
                 className={`w-full mt-4 py-4 text-white rounded-xl font-semibold text-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg ${
                   type === "Lost"
                     ? "bg-red-500 hover:bg-red-600"
@@ -358,7 +502,9 @@ export function ReportItemModal({
                 }`}
               >
                 <Sparkles className="w-5 h-5" />
-                Analyze & Generate Details
+                {type === "Lost" && imageFiles.length === 0
+                  ? "Continue"
+                  : "Analyze & Generate Details"}
               </button>
             </>
           )}

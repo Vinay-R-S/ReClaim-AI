@@ -137,6 +137,16 @@ router.post('/', async (req: Request, res: Response) => {
             updatedAt: FieldValue.serverTimestamp(),
         };
 
+        // Add reporter email if provided
+        if (item.reporterEmail) {
+            newItem.reporterEmail = item.reporterEmail;
+        }
+
+        // Add collection location for Found items
+        if (item.collectionLocation) {
+            newItem.collectionLocation = item.collectionLocation;
+        }
+
         // Only add coordinates if defined
         if (item.coordinates) {
             newItem.coordinates = item.coordinates;

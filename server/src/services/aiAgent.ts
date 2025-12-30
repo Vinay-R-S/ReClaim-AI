@@ -47,6 +47,8 @@ export async function processChat(
         userId,
         context: conversation.context as ConversationContext,
         itemData: conversation.extractedData || {},
+        pendingMatch: conversation.pendingMatch,
+        pendingLostItemId: conversation.pendingLostItemId,
         currentNode: conversation.state === 'idle' || conversation.turnCount === 0 ? 'greet' : getNodeFromState(conversation.state),
         turnCount: conversation.turnCount,
         invalidAttempts: conversation.invalidAttempts,
@@ -76,6 +78,8 @@ export async function processChat(
             await updateConversation(conversation.id, {
                 state: mapNodeToState(result.currentNode),
                 extractedData: result.itemData,
+                pendingMatch: result.pendingMatch,
+                pendingLostItemId: result.pendingLostItemId,
                 turnCount: result.turnCount,
             });
 
@@ -113,6 +117,8 @@ export async function processChat(
         await updateConversation(conversation.id, {
             state: mapNodeToState(result.currentNode),
             extractedData: result.itemData,
+            pendingMatch: result.pendingMatch,
+            pendingLostItemId: result.pendingLostItemId,
             turnCount: result.turnCount,
             invalidAttempts: result.invalidAttempts,
         });
@@ -174,8 +180,14 @@ async function getOrCreateConversation(
             const data = doc.data()!;
             if (data.userId === userId && data.state !== 'terminated' && data.state !== 'complete') {
                 return { id: doc.id, ...data } as Conversation;
+            } else {
+                console.log(`[getOrCreateConversation] Found doc ${doc.id} but mismatch. User: ${data.userId} vs ${userId}, State: ${data.state}`);
             }
+        } else {
+            console.log(`[getOrCreateConversation] Doc ${conversationId} does not exist`);
         }
+    } else {
+        console.log(`[getOrCreateConversation] No conversationId provided, creating new`);
     }
 
     // Create new conversation
@@ -205,7 +217,7 @@ async function getOrCreateConversation(
  */
 async function updateConversation(
     conversationId: string,
-    updates: Partial<Pick<Conversation, 'state' | 'extractedData' | 'invalidAttempts' | 'turnCount'>>
+    updates: Partial<Pick<Conversation, 'state' | 'extractedData' | 'invalidAttempts' | 'turnCount' | 'pendingMatch' | 'pendingLostItemId'>>
 ): Promise<void> {
     // Sanitize extractedData to remove invalid values that Firestore can't handle
     if (updates.extractedData) {
@@ -280,6 +292,7 @@ function mapNodeToState(node: string): ConversationState {
         collectLocation: 'ask_location',
         collectDateTime: 'ask_datetime',
         confirmDetails: 'confirm_details',
+        handleConfirmation: 'match_confirmation',
         saveItem: 'search_matches',
         searchMatches: 'search_matches',
         showResults: 'complete',
@@ -302,6 +315,7 @@ function getNodeFromState(state: string): any {
         ask_location: 'collectLocation',
         ask_datetime: 'collectDateTime',
         confirm_details: 'confirmDetails',
+        match_confirmation: 'handleConfirmation',
         search_matches: 'searchMatches',
         complete: 'complete',
         terminated: 'handleError',

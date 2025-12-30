@@ -189,3 +189,85 @@ export function getAvailableProviders(): AIProvider[] {
 
     return providers;
 }
+
+// Enhance text description and generate tags (for Lost items without image)
+export async function enhanceTextDescription(
+    name: string,
+    description: string,
+    provider: AIProvider = "groq"
+): Promise<AnalysisResult> {
+    const prompt = `You are helping a lost and found system. A user has reported a lost item with the following details:
+
+Name: ${name}
+Description: ${description}
+
+Please:
+1. Enhance the item name to be more descriptive if needed
+2. Improve the description with more detail based on the information given
+3. Generate relevant tags/keywords for better matching
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "name": "Enhanced Item Name",
+  "description": "Enhanced detailed description here.",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+}`;
+
+    const apiKey = provider === "groq"
+        ? import.meta.env.VITE_GROQ_API_KEY
+        : import.meta.env.VITE_GEMINI_API_KEY;
+
+    if (!apiKey) {
+        // Return original if no API key
+        return { name, description, tags: [] };
+    }
+
+    try {
+        let content: string;
+
+        if (provider === "groq") {
+            const response = await fetch(GROQ_API_URL, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    model: "llama-3.3-70b-versatile",
+                    messages: [{ role: "user", content: prompt }],
+                    temperature: 0.3,
+                    max_tokens: 512,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Groq API error`);
+            }
+
+            const data = await response.json();
+            content = data.choices[0]?.message?.content || "";
+        } else {
+            const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.3, maxOutputTokens: 512 },
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Gemini API error`);
+            }
+
+            const data = await response.json();
+            content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        }
+
+        return parseAnalysisResponse(content);
+    } catch (err) {
+        console.error("Text enhancement failed:", err);
+        // Return original values on error
+        return { name, description, tags: [] };
+    }
+}

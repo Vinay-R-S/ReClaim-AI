@@ -60,6 +60,8 @@ export interface ItemInput {
     category?: string;
     images?: File[] | string[]; // Files or base64/urls
     reportedBy: string;
+    reporterEmail?: string;       // Email of reporter
+    collectionLocation?: string;  // For Found items - where to collect
 }
 
 // ============ Conversation Types ============
@@ -78,7 +80,9 @@ export type ConversationState =
     | 'ask_image'
     | 'confirm_details'
     | 'search_matches'
+    | 'match_confirmation'
     | 'show_results'
+    | 'complete'
     | 'complete'
     | 'terminated';
 
@@ -101,6 +105,8 @@ export interface Conversation {
     state: ConversationState;
     messages: Message[];
     extractedData: Partial<ItemInput>;
+    pendingMatch?: MatchResult;
+    pendingLostItemId?: string;
     invalidAttempts: number;
     turnCount: number;
     createdAt: Timestamp;

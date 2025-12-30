@@ -4,8 +4,18 @@ import { Bell, HelpCircle, LogOut, User, Settings } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 interface UserLayoutProps {
   children: React.ReactNode;
+}
+
+interface RecentItem {
+  id: string;
+  name: string;
+  type: "Lost" | "Found";
+  createdAt: { seconds: number } | Date | string;
+  status: string;
 }
 
 const navTabs = [
@@ -20,6 +30,8 @@ export function UserLayout({ children }: UserLayoutProps) {
   const navigate = useNavigate();
   const { user, role, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [credits, setCredits] = useState(0);
+  const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside
@@ -32,6 +44,29 @@ export function UserLayout({ children }: UserLayoutProps) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Fetch credits and recent items
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    // Fetch credits
+    fetch(`${API_URL}/api/credits/${user.uid}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setCredits(data.credits || 0);
+      })
+      .catch((err) => console.error("Failed to fetch credits:", err));
+
+    // Fetch user's recent items
+    fetch(`${API_URL}/api/items?userId=${user.uid}&limit=3`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setRecentItems(data.slice(0, 3));
+        }
+      })
+      .catch((err) => console.error("Failed to fetch recent items:", err));
+  }, [user?.uid]);
 
   const handleSignOut = async () => {
     try {
@@ -56,6 +91,30 @@ export function UserLayout({ children }: UserLayoutProps) {
       return user.email[0].toUpperCase();
     }
     return "U";
+  };
+
+  // Format relative time
+  const formatRelativeTime = (date: { seconds: number } | Date | string) => {
+    let d: Date;
+    if (typeof date === "object" && "seconds" in date) {
+      d = new Date(date.seconds * 1000);
+    } else if (date instanceof Date) {
+      d = date;
+    } else {
+      d = new Date(date);
+    }
+
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins} minutes ago`;
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    if (diffDays === 1) return "Yesterday";
+    return `${diffDays} days ago`;
   };
 
   return (
@@ -198,29 +257,33 @@ export function UserLayout({ children }: UserLayoutProps) {
                 <h3 className="font-medium text-text-primary">
                   Recent Activity
                 </h3>
-                <button className="text-sm text-primary font-medium hover:underline">
+                <Link
+                  to="/app/reports"
+                  className="text-sm text-primary font-medium hover:underline"
+                >
                   View all
-                </button>
+                </Link>
               </div>
               <div className="space-y-3">
-                <ActivityItem
-                  icon="✓"
-                  iconBg="bg-google-green"
-                  title="Match found: Black keys"
-                  time="2 hours ago"
-                />
-                <ActivityItem
-                  icon="📦"
-                  iconBg="bg-google-yellow"
-                  title="Lost item reported: Wallet"
-                  time="Yesterday"
-                />
-                <ActivityItem
-                  icon="💰"
-                  iconBg="bg-google-blue"
-                  title="+50 credits earned"
-                  time="3 days ago"
-                />
+                {recentItems.length > 0 ? (
+                  recentItems.map((item) => (
+                    <ActivityItem
+                      key={item.id}
+                      icon={item.type === "Lost" ? "🔍" : "📦"}
+                      iconBg={
+                        item.type === "Lost"
+                          ? "bg-google-red"
+                          : "bg-google-green"
+                      }
+                      title={`${item.type} item: ${item.name}`}
+                      time={formatRelativeTime(item.createdAt)}
+                    />
+                  ))
+                ) : (
+                  <p className="text-sm text-text-secondary text-center py-4">
+                    No recent activity
+                  </p>
+                )}
               </div>
             </div>
 
@@ -231,7 +294,9 @@ export function UserLayout({ children }: UserLayoutProps) {
                   <span className="text-2xl">🪙</span>
                 </div>
                 <div>
-                  <p className="text-3xl font-medium text-text-primary">250</p>
+                  <p className="text-3xl font-medium text-text-primary">
+                    {credits}
+                  </p>
                   <p className="text-sm text-text-secondary">
                     Total credits earned
                   </p>

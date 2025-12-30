@@ -132,6 +132,14 @@ export const ReportFlowAnnotation = Annotation.Root({
         reducer: (_, next) => next,
         default: () => [],
     }),
+    pendingMatch: Annotation<MatchResult | undefined>({
+        reducer: (_, next) => next,
+        default: () => undefined,
+    }),
+    pendingLostItemId: Annotation<string | undefined>({
+        reducer: (_, next) => next,
+        default: () => undefined,
+    }),
     savedItemId: Annotation<string | undefined>({
         reducer: (_, next) => next,
         default: () => undefined,
