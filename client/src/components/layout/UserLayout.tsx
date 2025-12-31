@@ -219,10 +219,14 @@ export function UserLayout({ children }: UserLayoutProps) {
                         <span>Admin Dashboard</span>
                       </Link>
                     )}
-                    <button className="w-full flex items-center gap-3 px-4 py-2 text-text-primary hover:bg-gray-50 transition-colors">
+                    <Link
+                      to="/app/profile"
+                      onClick={() => setShowUserMenu(false)}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-text-primary hover:bg-gray-50 transition-colors"
+                    >
                       <User className="w-5 h-5 text-text-secondary" />
                       <span>Profile</span>
-                    </button>
+                    </Link>
                     <button className="w-full flex items-center gap-3 px-4 py-2 text-text-primary hover:bg-gray-50 transition-colors">
                       <Settings className="w-5 h-5 text-text-secondary" />
                       <span>Settings</span>

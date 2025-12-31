@@ -6,6 +6,7 @@ import { LandingPage } from "./pages/LandingPage";
 import { AuthPage } from "./pages/AuthPage";
 import { HomePage } from "./pages/user/HomePage";
 import { MyReportsPage } from "./pages/user/MyReportsPage";
+import { ProfilePage } from "./pages/user/ProfilePage";
 import { AdminPage } from "./pages/admin/AdminPage";
 import { UnderConstruction } from "./pages/UnderConstruction";
 import "./index.css";
@@ -54,6 +55,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <HomePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/app/profile"
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
               </ProtectedRoute>
             }
           />
