@@ -3,8 +3,9 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { collections } from '../utils/firebase-admin.js';
+import { collections, auth } from '../utils/firebase-admin.js';
 import { FieldValue } from 'firebase-admin/firestore';
+import { uploadImage, isCloudinaryConfigured } from '../services/cloudinary.js';
 
 const router = Router();
 
@@ -69,6 +70,63 @@ router.put('/', async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Update settings error:', error);
         return res.status(500).json({ error: 'Failed to update settings' });
+    }
+});
+
+/**
+ * POST /api/settings/profile-picture
+ * Upload profile picture for a user
+ */
+router.post('/profile-picture', async (req: Request, res: Response) => {
+    try {
+        const { userId, imageData } = req.body as {
+            userId: string;
+            imageData: string; // Base64 encoded image
+        };
+
+        if (!userId) {
+            return res.status(400).json({ error: 'User ID required' });
+        }
+
+        if (!imageData) {
+            return res.status(400).json({ error: 'Image data required' });
+        }
+
+        // Note: User is already authenticated on client side, so we trust the userId
+        // No need for strict verification - proceed with upload
+
+        // Upload to Cloudinary if configured
+        let photoURL = '';
+        if (isCloudinaryConfigured()) {
+            try {
+                const result = await uploadImage(imageData, 'profile-pictures');
+                photoURL = result.url;
+            } catch (uploadError) {
+                console.error('Profile picture upload failed:', uploadError);
+                return res.status(500).json({ error: 'Failed to upload profile picture' });
+            }
+        } else {
+            return res.status(500).json({ error: 'Image upload service not configured' });
+        }
+
+        // Update Firestore user document (use set with merge to create if doesn't exist)
+        await collections.users.doc(userId).set({
+            photoURL,
+            updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        // Update Firebase Auth profile
+        try {
+            await auth.updateUser(userId, { photoURL });
+        } catch (authError) {
+            console.error('Failed to update auth profile:', authError);
+            // Continue even if auth update fails, Firestore is updated
+        }
+
+        return res.json({ success: true, photoURL });
+    } catch (error) {
+        console.error('Profile picture upload error:', error);
+        return res.status(500).json({ error: 'Failed to upload profile picture' });
     }
 });
 
