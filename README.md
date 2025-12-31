@@ -238,6 +238,6 @@ This project is licensed under the MIT License.
 
 ## 🙏 Acknowledgments
 
-- Built for GDG Hackathon 2025
+- GDG Open Innovation Hackathon 2025-26 
 - Uses Groq's fast inference for AI features
 - Maps powered by Geoapify & Leaflet
