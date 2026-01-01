@@ -25,11 +25,9 @@ export function UserDetailModal({
         setLoading(true);
         const allItems = await getItems();
         
-        // Filter items by user email or userId if available
+        // Filter items by reportedBy field
         const filtered = allItems.filter(
-          (item) =>
-            (item as any).userId === user.uid ||
-            (item as any).userEmail === user.email
+          (item) => item.reportedBy === user.uid
         );
         
         setUserItems(filtered);
@@ -183,7 +181,7 @@ export function UserDetailModal({
           {/* User's Items List */}
           <div>
             <label className="text-sm text-text-secondary mb-3 block">
-              Submitted Items ({userItems.length})
+              Submitted Items ({itemsCount})
             </label>
             {loading ? (
               <div className="text-center py-4">
