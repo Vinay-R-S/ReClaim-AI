@@ -7,6 +7,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { collections } from '../utils/firebase-admin.js';
 import { uploadImage, uploadMultipleImages, deleteImage, isCloudinaryConfigured } from '../services/cloudinary.js';
 import { Item, ItemInput } from '../types/index.js';
+import { updateUserItemCounts } from '../services/userStats.js';
 
 const router = Router();
 
@@ -154,6 +155,14 @@ router.post('/', async (req: Request, res: Response) => {
 
         const docRef = await collections.items.add(newItem);
 
+        // Update user item counts
+        try {
+            await updateUserItemCounts(userId, item.type, 'increment');
+        } catch (countError) {
+            console.error('Failed to update user item counts:', countError);
+            // Don't fail the request, just log the error
+        }
+
         return res.status(201).json({
             id: docRef.id,
             item: { id: docRef.id, ...newItem },
@@ -275,6 +284,14 @@ router.delete('/:id', async (req: Request, res: Response) => {
         }
 
         await collections.items.doc(id).delete();
+
+        // Update user item counts
+        try {
+            await updateUserItemCounts(item.reportedBy, item.type, 'decrement');
+        } catch (countError) {
+            console.error('Failed to update user item counts after deletion:', countError);
+            // Don't fail the request, just log the error
+        }
 
         return res.json({ success: true });
     } catch (error) {

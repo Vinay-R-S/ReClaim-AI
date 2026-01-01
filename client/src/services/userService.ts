@@ -21,6 +21,10 @@ export interface User {
   status?: "active" | "blocked";
   createdAt?: Timestamp;
   lastLoginAt?: Timestamp;
+  // Item submission counts
+  lostItemsCount?: number;
+  foundItemsCount?: number;
+  totalItemsCount?: number;
 }
 
 const USERS_COLLECTION = "users";
@@ -39,6 +43,9 @@ export async function getUsers(): Promise<User[]> {
       uid: doc.id,
       ...data,
       status: data.status || "active", // Default to active if not set
+      lostItemsCount: data.lostItemsCount || 0,
+      foundItemsCount: data.foundItemsCount || 0,
+      totalItemsCount: data.totalItemsCount || 0,
     } as User;
   });
 
@@ -64,6 +71,9 @@ export async function getUserById(uid: string): Promise<User | null> {
     uid: docSnap.id,
     ...data,
     status: data.status || "active", // Default to active if not set
+    lostItemsCount: data.lostItemsCount || 0,
+    foundItemsCount: data.foundItemsCount || 0,
+    totalItemsCount: data.totalItemsCount || 0,
   } as User;
 }
 

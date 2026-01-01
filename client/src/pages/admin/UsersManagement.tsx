@@ -41,46 +41,25 @@ export function UsersManagement() {
   const [customDateTo, setCustomDateTo] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
 
-  // Get Lost/Found counts for a user
-  const getUserItemTypeCounts = async (userEmail: string, userId?: string): Promise<{ lost: number; found: number }> => {
-    try {
-      const allItems = await getItems();
-      const userItems = allItems.filter(
-        (item: Item) => 
-          (item as any).userId === userId || 
-          (item as any).userEmail === userEmail
-      );
-      
-      const lostCount = userItems.filter((item: Item) => item.type === "Lost").length;
-      const foundCount = userItems.filter((item: Item) => item.type === "Found").length;
-      
-      return { lost: lostCount, found: foundCount };
-    } catch (error) {
-      console.error("Error counting user item types:", error);
-      return { lost: 0, found: 0 };
-    }
-  };
-
   // Fetch users and their item counts
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const fetchedUsers = await getUsers();
 
-      // Fetch Lost/Found counts for each user (itemsCount is calculated from lost + found)
-      const usersWithCounts = await Promise.all(
-        fetchedUsers.map(async (user) => {
-          const { lost, found } = await getUserItemTypeCounts(user.email, user.uid);
-          // Items Submitted = Lost + Found (total of both types)
-          const itemsCount = lost + found;
-          return { 
-            ...user, 
-            itemsCount,
-            lostCount: lost,
-            foundCount: found
-          };
-        })
-      );
+      // Use stored counts from user data instead of calculating
+      const usersWithCounts = fetchedUsers.map((user) => {
+        const lostCount = user.lostItemsCount || 0;
+        const foundCount = user.foundItemsCount || 0;
+        const itemsCount = user.totalItemsCount || 0;
+        
+        return { 
+          ...user, 
+          itemsCount,
+          lostCount,
+          foundCount
+        };
+      });
 
       setUsers(usersWithCounts);
     } catch (error) {

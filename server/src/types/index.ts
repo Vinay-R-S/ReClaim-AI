@@ -11,6 +11,10 @@ export interface User {
     credits: number;
     createdAt?: Timestamp;
     lastLoginAt?: Timestamp;
+    // Item submission counts
+    lostItemsCount?: number;
+    foundItemsCount?: number;
+    totalItemsCount?: number;
 }
 
 // ============ Item Types ============
