@@ -25,11 +25,11 @@ export function UserDetailModal({
         setLoading(true);
         const allItems = await getItems();
         
-        // Filter items by user email or userId if available
+        // Filter items by user ID or email
         const filtered = allItems.filter(
           (item) =>
-            (item as any).userId === user.uid ||
-            (item as any).userEmail === user.email
+            item.reportedBy === user.uid ||
+            item.reportedByEmail === user.email
         );
         
         setUserItems(filtered);

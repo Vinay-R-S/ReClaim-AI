@@ -5,12 +5,11 @@ import {
   type User,
   getUsers,
   updateUserStatus,
-  getUserItemsCount,
 } from "../../services/userService";
 import { UserDetailModal } from "../../components/admin/UserDetailModal";
 import { Timestamp } from "firebase/firestore";
 import * as XLSX from "xlsx";
-import { getItems, type Item } from "../../services/itemService";
+import { getItems } from "../../services/itemService";
 
 type SortOrder = "asc" | "desc" | null;
 type StatusFilter = "all" | "active" | "blocked";
@@ -46,18 +45,25 @@ export function UsersManagement() {
     try {
       setLoading(true);
       const fetchedUsers = await getUsers();
+      const allItems = await getItems();
 
-      // Use stored counts from user data instead of calculating
       const usersWithCounts = fetchedUsers.map((user) => {
-        const lostCount = user.lostItemsCount || 0;
-        const foundCount = user.foundItemsCount || 0;
-        const itemsCount = user.totalItemsCount || 0;
+        const userLostItems = allItems.filter(
+          (item) => item.reportedBy === user.uid && item.type === "Lost"
+        );
+        const userFoundItems = allItems.filter(
+          (item) => item.reportedBy === user.uid && item.type === "Found"
+        );
+
+        const lostCount = userLostItems.length;
+        const foundCount = userFoundItems.length;
+        const itemsCount = lostCount + foundCount;
         
-        return { 
-          ...user, 
+        return {
+          ...user,
           itemsCount,
           lostCount,
-          foundCount
+          foundCount,
         };
       });
 
