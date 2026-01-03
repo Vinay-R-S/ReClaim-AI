@@ -1,8 +1,8 @@
-# 🔍 ReClaim AI - Lost & Found Management System
+# ReClaim AI - Lost & Found Management System
 
 An AI-powered lost and found management platform that uses computer vision and natural language processing to help reunite people with their lost items.
 
-## ✨ Features
+## Features
 
 - **AI-Powered Item Recognition** - Upload images and let AI identify and describe items
 - **Smart Matching** - Automatic matching between lost and found items
@@ -11,7 +11,7 @@ An AI-powered lost and found management platform that uses computer vision and n
 - **Credits System** - Reward users for reporting found items
 - **Location Picker** - Search and select locations with interactive map
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 ReClaim-AI/
@@ -33,7 +33,7 @@ ReClaim-AI/
 └── README.md
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -89,7 +89,7 @@ npm run dev
 
 ---
 
-## 🔐 Environment Variables
+## Environment Variables
 
 ### Client Variables (prefix: `VITE_`)
 
@@ -125,7 +125,7 @@ npm run dev
 
 ---
 
-## 🔧 Detailed Setup Guides
+## Detailed Setup Guides
 
 ### Firebase Setup
 
@@ -185,7 +185,7 @@ npm run dev
 
 ---
 
-## 📝 Firestore Indexes
+## Firestore Indexes
 
 If you see Firestore index errors, create these composite indexes:
 
@@ -198,7 +198,7 @@ If you see Firestore index errors, create these composite indexes:
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Frontend
 
@@ -220,7 +220,7 @@ If you see Firestore index errors, create these composite indexes:
 
 ---
 
-## 👥 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
@@ -230,14 +230,14 @@ If you see Firestore index errors, create these composite indexes:
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-- GDG Open Innovation Hackathon 2025-26 
+- GDG Open Innovation Hackathon 2025-26
 - Uses Groq's fast inference for AI features
 - Maps powered by Geoapify & Leaflet
