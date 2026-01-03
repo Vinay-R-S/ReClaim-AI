@@ -34,9 +34,14 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     const client = getResendClient();
 
     if (!client) {
-      console.warn('Resend API key not configured, skipping email');
+      console.warn('⚠️ Resend API key not configured, skipping email');
       return false;
     }
+
+    console.log('📤 Sending email via Resend:', {
+      to: options.to,
+      subject: options.subject,
+    });
 
     const { data, error } = await client.emails.send({
       from: FROM_EMAIL,
@@ -47,14 +52,14 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     });
 
     if (error) {
-      console.error('Resend email error:', error);
+      console.error('❌ Resend email error:', error);
       return false;
     }
 
-    console.log('Email sent successfully:', data?.id);
+    console.log('✅ Email sent successfully via Resend:', data?.id);
     return true;
   } catch (error) {
-    console.error('Email send failed:', error);
+    console.error('💥 Email send failed:', error);
     return false;
   }
 }
@@ -282,6 +287,90 @@ export async function sendVerificationSuccessEmail(
     subject: `🎉 Verification Complete: Collect Your ${itemName}`,
     html,
     text: `Your ownership of "${itemName}" has been verified with ${confidenceScore}% confidence. Please visit ${collectionPoint} with a valid ID to collect your item.${collectionInstructions ? ` Note: ${collectionInstructions}` : ''}`,
+  });
+}
+
+/**
+ * Send login notification email
+ */
+export async function sendLoginNotification(
+  userEmail: string,
+  userName: string,
+  loginTime: string
+): Promise<boolean> {
+  const html = `
+<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background-color:#f6f7f9; font-family: Arial, Helvetica, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px;">
+      <tr>
+        <td align="center">
+          <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:6px; padding:32px;">
+
+        <!-- Header -->
+        <tr>
+          <td style="font-size:20px; font-weight:600; color:#111827; padding-bottom:16px;">
+            ReClaim AI Login Confirmation
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="font-size:14px; line-height:1.6; color:#374151;">
+            <p style="margin:0 0 16px 0;">
+              Dear ${userName},
+            </p>
+
+            <p style="margin:0 0 16px 0;">
+              This email is to confirm that a successful login to your ReClaim AI account has occurred.
+            </p>
+
+            <p style="margin:24px 0 8px 0; font-weight:600; color:#111827;">
+              Login Information
+            </p>
+
+            <table cellpadding="0" cellspacing="0" style="font-size:14px; color:#374151;">
+              <tr>
+                <td style="padding:4px 8px 4px 0;">Date and Time:</td>
+                <td style="padding:4px 0;">${loginTime}</td>
+              </tr>
+              <tr>
+                <td style="padding:4px 8px 4px 0;">Account Email:</td>
+                <td style="padding:4px 0;">${userEmail}</td>
+              </tr>
+            </table>
+
+            <p style="margin:24px 0 16px 0;">
+              If you do not recognize this activity, please contact ReClaim AI support immediately.
+            </p>
+
+            <p style="margin:0;">
+              Sincerely,<br />
+              <strong>ReClaim AI Team</strong>
+            </p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="padding-top:32px; font-size:12px; color:#6b7280; border-top:1px solid #e5e7eb;">
+            This is an automated message. Please do not reply to this email.
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+  </body>
+</html>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject: `ReClaim AI Login`,
+    html,
+    text: `Dear ${userName},\n\nThis email is to confirm that a successful login to your ReClaim AI account has occurred.\n\nLogin Information:\nDate and Time: ${loginTime}\nAccount Email: ${userEmail}\n\nIf you do not recognize this activity, please contact ReClaim AI support immediately.\n\nSincerely,\nReClaim AI Team\n\nThis is an automated message. Please do not reply to this email.`,
   });
 }
 

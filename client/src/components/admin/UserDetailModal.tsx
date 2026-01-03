@@ -25,9 +25,11 @@ export function UserDetailModal({
         setLoading(true);
         const allItems = await getItems();
         
-        // Filter items by reportedBy field
+        // Filter items by user ID or email
         const filtered = allItems.filter(
-          (item) => item.reportedBy === user.uid
+          (item) =>
+            item.reportedBy === user.uid ||
+            item.reportedByEmail === user.email
         );
         
         setUserItems(filtered);
