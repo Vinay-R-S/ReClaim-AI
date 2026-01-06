@@ -6,77 +6,13 @@ import { collections } from '../utils/firebase-admin.js';
 import { callLLM, parseJSONFromLLM } from '../utils/llm.js';
 import { Item, MatchResult, SAFETY_LIMITS, Coordinates } from '../types/index.js';
 
-// Weights for different matching criteria
+// Weights for matching criteria (simplified to 50/50)
 const MATCH_WEIGHTS = {
-    text: 0.40,      // 40% - name, description, tags
-    location: 0.30,  // 30% - proximity within radius
-    time: 0.15,      // 15% - date closeness
-    image: 0.15,     // 15% - AI vision comparison
+    text: 0.50,      // 50% - name, description, tags
+    image: 0.50,     // 50% - AI vision comparison
 };
 
-/**
- * Calculate distance between two coordinates using Haversine formula
- * @returns Distance in kilometers
- */
-function calculateDistance(coord1: Coordinates, coord2: Coordinates): number {
-    const R = 6371; // Earth's radius in km
-    const dLat = toRad(coord2.lat - coord1.lat);
-    const dLon = toRad(coord2.lng - coord1.lng);
-
-    const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(toRad(coord1.lat)) * Math.cos(toRad(coord2.lat)) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-}
-
-function toRad(deg: number): number {
-    return deg * (Math.PI / 180);
-}
-
-/**
- * Calculate location score based on distance
- */
-function calculateLocationScore(
-    itemCoords?: Coordinates,
-    searchCoords?: Coordinates
-): number {
-    if (!itemCoords || !searchCoords) {
-        return 0.5; // Neutral score if coordinates missing
-    }
-
-    const distance = calculateDistance(itemCoords, searchCoords);
-    const maxRadius = SAFETY_LIMITS.LOCATION_RADIUS_KM;
-
-    if (distance <= maxRadius) {
-        // Linear decay from 1.0 at 0km to 0.7 at max radius
-        return 1 - (distance / maxRadius) * 0.3;
-    } else if (distance <= maxRadius * 2) {
-        // Extended range: 0.7 at max radius to 0.3 at 2x radius
-        return 0.7 - ((distance - maxRadius) / maxRadius) * 0.4;
-    }
-
-    return 0.1; // Minimal score for far items
-}
-
-/**
- * Calculate time proximity score
- */
-function calculateTimeScore(itemDate: Date, searchDate: Date): number {
-    const diffDays = Math.abs(
-        (itemDate.getTime() - searchDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    if (diffDays <= 1) return 1.0;      // Same day or next day
-    if (diffDays <= 3) return 0.9;      // Within 3 days
-    if (diffDays <= 7) return 0.7;      // Within a week
-    if (diffDays <= 14) return 0.5;     // Within 2 weeks
-    if (diffDays <= 30) return 0.3;     // Within a month
-
-    return 0.1; // Older items
-}
+// Location and time scoring removed per user requirements
 
 /**
  * Calculate text similarity using keywords
@@ -196,7 +132,7 @@ export async function findMatchesForLostItem(
             ? item.date
             : item.date.toDate();
 
-        // Calculate individual scores
+        // Calculate text score (50%)
         const textScore = calculateTextScore(
             item.name,
             item.description,
@@ -206,22 +142,13 @@ export async function findMatchesForLostItem(
             lostItem.tags || []
         );
 
-        const locationScore = calculateLocationScore(
-            item.coordinates,
-            lostItem.coordinates
-        );
-
-        const timeScore = calculateTimeScore(itemDate, lostItem.date);
-
-        // Image score is async
+        // Calculate image score (50%) - async
         const imageUrl = item.cloudinaryUrls?.[0] || item.imageUrl;
         const imageScore = await calculateImageScore(imageUrl, lostItem.imageBase64);
 
-        // Calculate weighted total
+        // Calculate weighted total (50% text + 50% image)
         const totalScore =
             textScore * MATCH_WEIGHTS.text +
-            locationScore * MATCH_WEIGHTS.location +
-            timeScore * MATCH_WEIGHTS.time +
             imageScore * MATCH_WEIGHTS.image;
 
         return {
@@ -230,8 +157,6 @@ export async function findMatchesForLostItem(
             score: Math.round(totalScore * 100),
             breakdown: {
                 textScore: Math.round(textScore * 100),
-                locationScore: Math.round(locationScore * 100),
-                timeScore: Math.round(timeScore * 100),
                 imageScore: Math.round(imageScore * 100),
             },
         };
@@ -279,6 +204,7 @@ export async function findMatchesForFoundItem(
             ? item.date
             : item.date.toDate();
 
+        // Calculate text score (50%)
         const textScore = calculateTextScore(
             item.name,
             item.description,
@@ -288,20 +214,13 @@ export async function findMatchesForFoundItem(
             foundItem.tags || []
         );
 
-        const locationScore = calculateLocationScore(
-            item.coordinates,
-            foundItem.coordinates
-        );
-
-        const timeScore = calculateTimeScore(itemDate, foundItem.date);
-
+        // Calculate image score (50%)
         const imageUrl = item.cloudinaryUrls?.[0] || item.imageUrl;
         const imageScore = await calculateImageScore(imageUrl, foundItem.imageBase64);
 
+        // Calculate weighted total (50% text + 50% image)
         const totalScore =
             textScore * MATCH_WEIGHTS.text +
-            locationScore * MATCH_WEIGHTS.location +
-            timeScore * MATCH_WEIGHTS.time +
             imageScore * MATCH_WEIGHTS.image;
 
         return {
@@ -310,8 +229,6 @@ export async function findMatchesForFoundItem(
             score: Math.round(totalScore * 100),
             breakdown: {
                 textScore: Math.round(textScore * 100),
-                locationScore: Math.round(locationScore * 100),
-                timeScore: Math.round(timeScore * 100),
                 imageScore: Math.round(imageScore * 100),
             },
         };

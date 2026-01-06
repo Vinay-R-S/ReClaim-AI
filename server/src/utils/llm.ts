@@ -3,7 +3,7 @@
  * Handles model calls with automatic failover between providers
  */
 
-export type LLMProvider = 'groq' | 'gemini';
+export type LLMProvider = 'groq' | 'gemini' | 'grok';
 
 export interface LLMMessage {
     role: 'system' | 'user' | 'assistant';
@@ -26,6 +26,7 @@ interface LLMResponse {
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
+const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 
 /**
  * Call Groq API
@@ -78,6 +79,63 @@ async function callGroq(
     if (!response.ok) {
         const error = await response.text();
         throw new Error(`Groq API error: ${error}`);
+    }
+
+    const data = await response.json() as { choices?: { message?: { content?: string } }[] };
+    return data.choices?.[0]?.message?.content || '';
+}
+
+/**
+ * Call Grok API (xAI)
+ */
+async function callGrok(
+    messages: LLMMessage[],
+    options: LLMOptions = {}
+): Promise<string> {
+    const apiKey = process.env.GROK_API_KEY || process.env.VITE_GROK_API_KEY;
+
+    if (!apiKey) {
+        throw new Error('Grok API key not configured');
+    }
+
+    const { temperature = 0.3, maxTokens = 2048, imageBase64, imageMimeType } = options;
+
+    // Build messages with optional image (OpenAI-compatible format)
+    const formattedMessages = messages.map(msg => {
+        if (msg.role === 'user' && imageBase64) {
+            return {
+                role: msg.role,
+                content: [
+                    { type: 'text', text: msg.content },
+                    {
+                        type: 'image_url',
+                        image_url: {
+                            url: `data:${imageMimeType || 'image/jpeg'};base64,${imageBase64}`,
+                        },
+                    },
+                ],
+            };
+        }
+        return { role: msg.role, content: msg.content };
+    });
+
+    const response = await fetch(GROK_API_URL, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            model: 'grok-2-vision-1212', // Latest Grok vision model
+            messages: formattedMessages,
+            temperature,
+            max_tokens: maxTokens,
+        }),
+    });
+
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Grok API error: ${error}`);
     }
 
     const data = await response.json() as { choices?: { message?: { content?: string } }[] };
@@ -149,7 +207,7 @@ async function callGemini(
 
 import { collections } from './firebase-admin.js';
 
-type AIProviderSetting = 'groq_only' | 'gemini_only' | 'groq_with_fallback' | 'gemini_with_fallback';
+type AIProviderSetting = 'groq_only' | 'gemini_only' | 'grok_only' | 'groq_with_fallback' | 'gemini_with_fallback' | 'grok_with_fallback';
 
 // Cache settings to avoid fetching on every call
 let cachedAIProvider: AIProviderSetting | null = null;
@@ -190,14 +248,33 @@ export async function callLLM(
 
     // Determine primary and fallback providers based on setting
     const useFallback = providerSetting.includes('fallback');
-    const primaryProvider = providerSetting.startsWith('groq') ? 'groq' : 'gemini';
-    const fallbackProvider = primaryProvider === 'groq' ? 'gemini' : 'groq';
+    let primaryProvider: LLMProvider = 'groq';
+    if (providerSetting.startsWith('gemini')) primaryProvider = 'gemini';
+    if (providerSetting.startsWith('grok')) primaryProvider = 'grok';
+
+    let fallbackProvider: LLMProvider;
+    switch (primaryProvider) {
+        case 'groq':
+            fallbackProvider = 'gemini';
+            break;
+        case 'gemini':
+            fallbackProvider = 'grok';
+            break;
+        case 'grok':
+            fallbackProvider = 'groq';
+            break;
+        default:
+            fallbackProvider = 'gemini';
+    }
 
     // Try primary provider
     try {
         if (primaryProvider === 'groq') {
             const content = await callGroq(messages, options);
             return { content, provider: 'groq' };
+        } else if (primaryProvider === 'grok') {
+            const content = await callGrok(messages, options);
+            return { content, provider: 'grok' };
         } else {
             const content = await callGemini(messages, options);
             return { content, provider: 'gemini' };
@@ -217,6 +294,9 @@ export async function callLLM(
             if (fallbackProvider === 'groq') {
                 const content = await callGroq(messages, options);
                 return { content, provider: 'groq' };
+            } else if (fallbackProvider === 'grok') {
+                const content = await callGrok(messages, options);
+                return { content, provider: 'grok' };
             } else {
                 const content = await callGemini(messages, options);
                 return { content, provider: 'gemini' };
@@ -259,6 +339,9 @@ export function getAvailableProviders(): LLMProvider[] {
     }
     if (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY) {
         providers.push('gemini');
+    }
+    if (process.env.GROK_API_KEY || process.env.VITE_GROK_API_KEY) {
+        providers.push('grok');
     }
 
     return providers;

@@ -123,10 +123,8 @@ export interface MatchResult {
     item: Item;
     score: number;
     breakdown: {
-        textScore: number;
-        locationScore: number;
-        timeScore: number;
-        imageScore: number;
+        textScore: number;      // 50% weight
+        imageScore: number;     // 50% weight
     };
 }
 
