@@ -51,6 +51,7 @@ export const collections = {
     collectionPoints: db.collection('collectionPoints'),
     verifications: db.collection('verifications'),
     settings: db.collection('settings'),
+    matches: db.collection('matches'),  // Automatic image matching records
 } as const;
 
 export default app;

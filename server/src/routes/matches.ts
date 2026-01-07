@@ -171,6 +171,58 @@ router.post('/verify', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/matches
+ * Get all match records from matches collection
+ */
+router.get('/', async (req: Request, res: Response) => {
+    try {
+        const snapshot = await collections.matches
+            .orderBy('createdAt', 'desc')
+            .get();
+
+        const matches = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+        }));
+
+        return res.json({ matches });
+    } catch (error) {
+        console.error('Get matches error:', error);
+        return res.status(500).json({ error: 'Failed to get matches' });
+    }
+});
+
+/**
+ * GET /api/matches/item/:itemId
+ * Get all match records for a specific item
+ */
+router.get('/item/:itemId', async (req: Request, res: Response) => {
+    try {
+        const { itemId } = req.params;
+
+        // Query for matches where this item is either the lost or found item
+        const lostMatches = await collections.matches
+            .where('lostItemId', '==', itemId)
+            .get();
+
+        const foundMatches = await collections.matches
+            .where('foundItemId', '==', itemId)
+            .get();
+
+        const matches = [
+            ...lostMatches.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+            ...foundMatches.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        ];
+
+        return res.json({ matches });
+    } catch (error) {
+        console.error('Get item matches error:', error);
+        return res.status(500).json({ error: 'Failed to get item matches' });
+    }
+});
+
+
+/**
  * GET /api/matches/user/:userId
  * Get all matches for a user's items
  */

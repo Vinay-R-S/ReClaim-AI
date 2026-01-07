@@ -5,7 +5,6 @@ import {
   startConversation,
   sendMessage,
   fileToBase64,
-  getUserCredits,
 } from "../../services/chatService";
 import type { ConversationContext } from "../../services/chatService";
 import { LocationModal } from "./LocationModal";
@@ -46,7 +45,6 @@ export function ChatInterface() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [currentContext, setCurrentContext] =
     useState<ConversationContext | null>(null);
-  const [credits, setCredits] = useState<number>(0);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showDateTimeModal, setShowDateTimeModal] = useState(false);
   const [toast, setToast] = useState<{
@@ -55,15 +53,6 @@ export function ChatInterface() {
   } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Load user credits
-  useEffect(() => {
-    if (user?.uid) {
-      getUserCredits(user.uid)
-        .then((data) => setCredits(data.credits))
-        .catch(console.error);
-    }
-  }, [user]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -241,10 +230,7 @@ export function ChatInterface() {
       if (response.isComplete) {
         setConversationId(null);
         setCurrentContext(null);
-        // Refresh credits if they might have changed
-        getUserCredits(user.uid)
-          .then((data) => setCredits(data.credits))
-          .catch(console.error);
+        // Credits refresh logic removed
       }
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -480,11 +466,10 @@ export function ChatInterface() {
       {/* Toast Notification */}
       {toast && (
         <div
-          className={`absolute top-2 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in ${
-            toast.type === "success"
-              ? "bg-google-green text-white"
-              : "bg-google-red text-white"
-          }`}
+          className={`absolute top-2 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in ${toast.type === "success"
+            ? "bg-google-green text-white"
+            : "bg-google-red text-white"
+            }`}
         >
           <span>{toast.type === "success" ? "✓" : "✕"}</span>
           <span className="text-sm font-medium">{toast.message}</span>

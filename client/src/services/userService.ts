@@ -6,7 +6,6 @@ import {
   updateDoc,
   query,
   orderBy,
-  where,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -33,9 +32,9 @@ const USERS_COLLECTION = "users";
 export async function getUsers(): Promise<User[]> {
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
   const usersRef = collection(db, USERS_COLLECTION);
-  
+
   let q = query(usersRef, orderBy("createdAt", "desc"));
-  
+
   const snapshot = await getDocs(q);
   const users = snapshot.docs.map((doc) => {
     const data = doc.data();
@@ -92,7 +91,7 @@ export async function updateUserStatus(
 export async function getUserItemsCount(userEmail: string, userId?: string): Promise<number> {
   try {
     const items = await getItems();
-    
+
     // Try to match by userId first, then by email if userId field exists
     if (userId) {
       const count = items.filter(
@@ -100,12 +99,12 @@ export async function getUserItemsCount(userEmail: string, userId?: string): Pro
       ).length;
       return count;
     }
-    
+
     // Fallback: match by email if userId field exists in items
     const count = items.filter(
       (item) => (item as any).userEmail === userEmail
     ).length;
-    
+
     return count;
   } catch (error) {
     console.error("Error counting user items:", error);

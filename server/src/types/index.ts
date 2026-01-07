@@ -36,6 +36,7 @@ export interface Item {
     coordinates?: Coordinates;
     date: Timestamp | Date;
     tags?: string[];
+    color?: string; // Color of the item for matching
     category?: string; // Electronics, Documents, Accessories, etc.
     imageUrl?: string;
     cloudinaryUrls?: string[];
@@ -61,6 +62,7 @@ export interface ItemInput {
     coordinates?: Coordinates;
     date: Date;
     tags?: string[];
+    color?: string;
     category?: string;
     images?: File[] | string[]; // Files or base64/urls
     reportedBy: string;
@@ -126,6 +128,19 @@ export interface MatchResult {
         textScore: number;      // 50% weight
         imageScore: number;     // 50% weight
     };
+}
+
+export interface Match {
+    id: string;
+    lostItemId: string;
+    foundItemId: string;
+    tagScore: number;      // 0-30 points from tag matching
+    colorScore: number;    // 0-20 points from color matching
+    imageScore: number;    // 0-50 points from Groq image analysis
+    matchScore: number;    // Total: tagScore + colorScore + imageScore
+    status: 'matched';
+    createdAt: Timestamp;
+    updatedAt?: Timestamp;
 }
 
 // ============ Credit Types ============

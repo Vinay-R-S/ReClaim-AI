@@ -1,7 +1,6 @@
 import { useState, useRef } from "react";
 import { X, Upload, Image as ImageIcon, Loader2, Sparkles } from "lucide-react";
 import {
-  addItem,
   uploadItemImage,
   type ItemInput,
 } from "../../services/itemService";
@@ -87,8 +86,7 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
     } catch (err) {
       console.error("Error analyzing image:", err);
       alert(
-        `Analysis failed: ${
-          err instanceof Error ? err.message : "Unknown error"
+        `Analysis failed: ${err instanceof Error ? err.message : "Unknown error"
         }`
       );
       setStep("upload");
@@ -108,25 +106,50 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
 
       let uploadedImages: string[] = [];
       if (imageFiles.length > 0) {
-        // Upload all images
+        // Convert images to base64
         uploadedImages = await Promise.all(
           imageFiles.map((file) => uploadItemImage(file))
         );
       }
 
-      await addItem({
-        ...formData,
-        imageUrl: uploadedImages[0], // Keep primary image for backward compatibility
-        images: uploadedImages, // Store all images
+      // Call backend API to trigger automatic matching
+      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+      const userId = 'admin'; // TODO: Get actual admin user ID
+
+      console.log('[ADMIN-MODAL] Creating item via API with', uploadedImages.length, 'images');
+
+      const response = await fetch(`${API_URL}/api/items`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
+          item: {
+            name: formData.name,
+            description: formData.description,
+            type: formData.type,
+            location: formData.location,
+            date: formData.date,
+            tags: formData.tags,
+          },
+          images: uploadedImages,
+        }),
       });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create item');
+      }
+
+      console.log('[ADMIN-MODAL] Item created successfully');
 
       onSuccess();
       onClose();
     } catch (err) {
       console.error("Error adding item:", err);
       alert(
-        `Failed to publish item: ${
-          err instanceof Error ? err.message : "Unknown error"
+        `Failed to publish item: ${err instanceof Error ? err.message : "Unknown error"
         }`
       );
     } finally {
@@ -290,11 +313,10 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
                       <button
                         type="button"
                         onClick={() => setAiProvider("gemini")}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === "gemini"
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:bg-gray-50"
-                        }`}
+                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${aiProvider === "gemini"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:bg-gray-50"
+                          }`}
                       >
                         🌟 Gemini
                       </button>
@@ -303,11 +325,10 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
                       <button
                         type="button"
                         onClick={() => setAiProvider("groq")}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === "groq"
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:bg-gray-50"
-                        }`}
+                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${aiProvider === "groq"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:bg-gray-50"
+                          }`}
                       >
                         ⚡ Groq
                       </button>

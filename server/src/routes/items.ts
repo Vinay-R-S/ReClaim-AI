@@ -6,8 +6,9 @@ import { Router, Request, Response } from 'express';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { collections } from '../utils/firebase-admin.js';
 import { uploadImage, uploadMultipleImages, deleteImage, isCloudinaryConfigured } from '../services/cloudinary.js';
-import { Item, ItemInput } from '../types/index.js';
+import { Item, ItemInput, ItemType } from '../types/index.js';
 import { updateUserItemCounts } from '../services/userStats.js';
+import { triggerAutoMatching } from '../services/autoMatch.service.js';
 
 const router = Router();
 
@@ -132,6 +133,7 @@ router.post('/', async (req: Request, res: Response) => {
             location: item.location,
             date: Timestamp.fromDate(new Date(item.date)),
             tags: item.tags || [],
+            color: item.color || '', // Add color for matching
             cloudinaryUrls,
             reportedBy: userId,
             createdAt: FieldValue.serverTimestamp(),
@@ -154,6 +156,9 @@ router.post('/', async (req: Request, res: Response) => {
         }
 
         const docRef = await collections.items.add(newItem);
+        const itemId = docRef.id;
+
+        console.log(`[ITEM-CREATE] Item created: ${itemId}, type: ${item.type}`);
 
         // Update user item counts
         try {
@@ -162,6 +167,23 @@ router.post('/', async (req: Request, res: Response) => {
             console.error('Failed to update user item counts:', countError);
             // Don't fail the request, just log the error
         }
+
+        // Trigger automatic matching (non-blocking) with new staged approach
+        const imageUrl = cloudinaryUrls[0];
+        console.log(`[ITEM-CREATE] Triggering auto-match for item ${itemId}`);
+        console.log(`[ITEM-CREATE] - Tags: ${JSON.stringify(item.tags || [])}`);
+        console.log(`[ITEM-CREATE] - Color: ${item.color || 'NONE'}`);
+        console.log(`[ITEM-CREATE] - Image: ${imageUrl ? 'present' : 'MISSING'}`);
+
+        triggerAutoMatching(itemId, item.type, {
+            name: item.name,
+            description: item.description,
+            tags: item.tags || [],
+            color: item.color,
+            imageUrl: imageUrl,
+        }).catch(error => {
+            console.error('[AUTO-MATCH] Error in automatic matching:', error);
+        });
 
         return res.status(201).json({
             id: docRef.id,
@@ -172,6 +194,7 @@ router.post('/', async (req: Request, res: Response) => {
         return res.status(500).json({ error: 'Failed to create item' });
     }
 });
+
 
 /**
  * PUT /api/items/:id
@@ -301,3 +324,4 @@ router.delete('/:id', async (req: Request, res: Response) => {
 });
 
 export default router;
+

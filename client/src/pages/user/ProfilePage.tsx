@@ -21,16 +21,16 @@ interface UserStats {
 // Extract name from email (e.g., "john.doe@example.com" -> "John Doe")
 function getNameFromEmail(email: string | null | undefined): string {
   if (!email) return "User";
-  
+
   // If email has a display name format, extract it
   const localPart = email.split("@")[0];
-  
+
   // Convert "john.doe" to "John Doe" or "johndoe" to "Johndoe"
   const nameParts = localPart
     .split(/[._-]/)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
     .join(" ");
-  
+
   return nameParts || email;
 }
 
@@ -271,7 +271,7 @@ export function ProfilePage() {
 
       // Clear preview after successful upload
       setPhotoPreview(null);
-      
+
       // Show success message
       alert("Profile picture updated successfully!");
     } catch (error: any) {
@@ -317,7 +317,7 @@ export function ProfilePage() {
               <div className="w-32 h-32 rounded-full bg-gradient-to-br from-primary to-primary-hover flex items-center justify-center overflow-hidden shadow-lg">
                 {photoPreview || user?.photoURL ? (
                   <img
-                    src={photoPreview || user.photoURL || ""}
+                    src={photoPreview || user?.photoURL || ""}
                     alt={displayName}
                     className="w-full h-full object-cover"
                   />
