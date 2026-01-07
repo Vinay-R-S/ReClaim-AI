@@ -16,63 +16,58 @@ import {
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
+import { getItems } from "../../services/itemService";
+import { getAllMatches } from "../../services/matchService";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
-const sidebarSections = [
-  {
-    title: "OVERVIEW",
-    items: [
-      { name: "Dashboard", path: "/admin", icon: LayoutDashboard, badge: null },
-      { name: "All Items", path: "/admin/items", icon: Package, badge: 24 },
-      { name: "Matches", path: "/admin/matches", icon: Link2, badge: 8 },
-    ],
-  },
-  {
-    title: "MANAGEMENT",
-    items: [
-      {
-        name: "Collection Offices",
-        path: "/admin/offices",
-        icon: MapPin,
-        badge: null,
-      },
-      {
-        name: "Handovers",
-        path: "/admin/handovers",
-        icon: ArrowLeftRight,
-        badge: null,
-      },
-      { name: "Users", path: "/admin/users", icon: Users, badge: null },
-    ],
-  },
-  {
-    title: "ADMIN",
-    items: [
-      {
-        name: "Pending Approvals",
-        path: "/admin/approvals",
-        icon: UserCheck,
-        badge: 2,
-      },
-      {
-        name: "Settings",
-        path: "/admin/settings",
-        icon: Settings,
-        badge: null,
-      },
-    ],
-  },
-];
+interface SidebarCounts {
+  allItems: number;
+  matches: number;
+  pendingItems: number;
+}
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [counts, setCounts] = useState<SidebarCounts>({
+    allItems: 0,
+    matches: 0,
+    pendingItems: 0,
+  });
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Fetch real-time counts from API
+  useEffect(() => {
+    const fetchCounts = async () => {
+      try {
+        const [items, matches] = await Promise.all([
+          getItems(),
+          getAllMatches(),
+        ]);
+
+        const pendingItems = items.filter(item => item.status === "Pending").length;
+
+        setCounts({
+          allItems: items.length, // Total items (Lost + Found)
+          matches: matches.length,
+          pendingItems: pendingItems,
+        });
+      } catch (error) {
+        console.error("Failed to fetch sidebar counts:", error);
+      }
+    };
+
+    fetchCounts();
+
+    // Refresh counts every 30 seconds
+    const interval = setInterval(fetchCounts, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -109,6 +104,53 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     }
     return "AD";
   };
+
+  // Build sidebar sections with dynamic counts
+  const sidebarSections = [
+    {
+      title: "OVERVIEW",
+      items: [
+        { name: "Dashboard", path: "/admin", icon: LayoutDashboard, badge: null },
+        { name: "All Items", path: "/admin/items", icon: Package, badge: counts.allItems || null },
+        { name: "Matches", path: "/admin/matches", icon: Link2, badge: counts.matches || null },
+      ],
+    },
+    {
+      title: "MANAGEMENT",
+      items: [
+        {
+          name: "Collection Offices",
+          path: "/admin/offices",
+          icon: MapPin,
+          badge: null,
+        },
+        {
+          name: "Handovers",
+          path: "/admin/handovers",
+          icon: ArrowLeftRight,
+          badge: null,
+        },
+        { name: "Users", path: "/admin/users", icon: Users, badge: null },
+      ],
+    },
+    {
+      title: "ADMIN",
+      items: [
+        {
+          name: "Pending Approvals",
+          path: "/admin/approvals",
+          icon: UserCheck,
+          badge: counts.pendingItems || null,
+        },
+        {
+          name: "Settings",
+          path: "/admin/settings",
+          icon: Settings,
+          badge: null,
+        },
+      ],
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -150,7 +192,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     >
                       <item.icon className="w-5 h-5" />
                       <span className="flex-1">{item.name}</span>
-                      {item.badge && (
+                      {item.badge !== null && item.badge > 0 && (
                         <span
                           className={cn(
                             "px-2 py-0.5 rounded-full text-xs font-medium",
