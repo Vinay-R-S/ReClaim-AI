@@ -32,7 +32,8 @@ export function ReportItemModal({
   onSuccess,
 }: ReportItemModalProps) {
   const { user } = useAuth();
-  const [step, setStep] = useState<"upload" | "analyzing" | "review">("upload");
+  const [step, setStep] = useState<"upload" | "analyzing" | "review" | "success">("upload");
+  const [matchResult, setMatchResult] = useState<{ highestScore: number; bestMatchId?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -49,6 +50,10 @@ export function ReportItemModal({
     date: new Date().toISOString().split("T")[0],
     time: new Date().toTimeString().slice(0, 5),
     tags: [] as string[],
+    color: "",
+    category: "",
+    coordinates: undefined as { lat: number; lng: number } | undefined,
+    collectionCoordinates: undefined as { lat: number; lng: number } | undefined,
   });
 
   // Reporter email from auth
@@ -115,6 +120,7 @@ export function ReportItemModal({
           name: enhanced.name,
           description: enhanced.description,
           tags: enhanced.tags,
+          color: enhanced.color || "",
         }));
 
         setStep("review");
@@ -141,14 +147,15 @@ export function ReportItemModal({
         name: analysis.name,
         description: analysis.description,
         tags: analysis.tags,
+        color: analysis.color || "",
+        category: analysis.category || "",
       }));
 
       setStep("review");
     } catch (err) {
       console.error("Error analyzing image:", err);
       alert(
-        `Analysis failed: ${
-          err instanceof Error ? err.message : "Unknown error"
+        `Analysis failed: ${err instanceof Error ? err.message : "Unknown error"
         }`
       );
       setStep("upload");
@@ -195,12 +202,18 @@ export function ReportItemModal({
         location: formData.location,
         date: dateTime.toISOString(),
         tags: formData.tags,
+        color: formData.color,
+        category: formData.category,
         reporterEmail: reporterEmail,
+        coordinates: formData.coordinates,
       };
 
       // Add collection location for Found items
       if (type === "Found" && formData.collectionLocation) {
         itemData.collectionLocation = formData.collectionLocation;
+        if (formData.collectionCoordinates) {
+          itemData.collectionCoordinates = formData.collectionCoordinates;
+        }
       }
 
       // Submit to API
@@ -219,13 +232,14 @@ export function ReportItemModal({
         throw new Error(errorData.error || "Failed to create item");
       }
 
+      const data = await response.json();
+      setMatchResult(data.matchResult);
+      setStep("success");
       onSuccess();
-      onClose();
     } catch (err) {
       console.error("Error submitting item:", err);
       alert(
-        `Failed to submit: ${
-          err instanceof Error ? err.message : "Unknown error"
+        `Failed to submit: ${err instanceof Error ? err.message : "Unknown error"
         }`
       );
     } finally {
@@ -269,14 +283,12 @@ export function ReportItemModal({
       <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
         {/* Header */}
         <div
-          className={`flex items-center justify-between p-4 border-b border-border flex-shrink-0 ${
-            type === "Lost" ? "bg-red-50" : "bg-green-50"
-          }`}
+          className={`flex items-center justify-between p-4 border-b border-border flex-shrink-0 ${type === "Lost" ? "bg-red-50" : "bg-green-50"
+            }`}
         >
           <h2
-            className={`text-lg font-semibold ${
-              type === "Lost" ? "text-red-700" : "text-green-700"
-            }`}
+            className={`text-lg font-semibold ${type === "Lost" ? "text-red-700" : "text-green-700"
+              }`}
           >
             Report {type} Item
           </h2>
@@ -386,6 +398,9 @@ export function ReportItemModal({
                   onChange={(location) =>
                     setFormData({ ...formData, location })
                   }
+                  onLocationSelect={(location, coordinates) =>
+                    setFormData(prev => ({ ...prev, location, coordinates }))
+                  }
                   placeholder={
                     type === "Lost"
                       ? "Where did you last see this item?"
@@ -405,6 +420,9 @@ export function ReportItemModal({
                     value={formData.collectionLocation}
                     onChange={(location) =>
                       setFormData({ ...formData, collectionLocation: location })
+                    }
+                    onLocationSelect={(location, collectionCoordinates) =>
+                      setFormData(prev => ({ ...prev, collectionLocation: location, collectionCoordinates }))
                     }
                     placeholder="Where can the owner collect this item?"
                   />
@@ -457,11 +475,10 @@ export function ReportItemModal({
                       <button
                         type="button"
                         onClick={() => setAiProvider("gemini")}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === "gemini"
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:bg-gray-50"
-                        }`}
+                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${aiProvider === "gemini"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:bg-gray-50"
+                          }`}
                       >
                         Gemini
                       </button>
@@ -470,11 +487,10 @@ export function ReportItemModal({
                       <button
                         type="button"
                         onClick={() => setAiProvider("groq")}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === "groq"
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:bg-gray-50"
-                        }`}
+                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${aiProvider === "groq"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:bg-gray-50"
+                          }`}
                       >
                         Groq
                       </button>
@@ -495,11 +511,10 @@ export function ReportItemModal({
                     imageFiles.length === 0 &&
                     (!formData.name || !formData.description))
                 }
-                className={`w-full mt-4 py-4 text-white rounded-xl font-semibold text-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg ${
-                  type === "Lost"
-                    ? "bg-red-500 hover:bg-red-600"
-                    : "bg-green-500 hover:bg-green-600"
-                }`}
+                className={`w-full mt-4 py-4 text-white rounded-xl font-semibold text-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg ${type === "Lost"
+                  ? "bg-red-500 hover:bg-red-600"
+                  : "bg-green-500 hover:bg-green-600"
+                  }`}
               >
                 <Sparkles className="w-5 h-5" />
                 {type === "Lost" && imageFiles.length === 0
@@ -566,6 +581,37 @@ export function ReportItemModal({
                 />
               </div>
 
+
+              {/* Color */}
+              <div className="mb-4">
+                <label className="text-sm text-text-secondary mb-1 block font-medium">
+                  Primary Color (AI Generated)
+                </label>
+                <input
+                  type="text"
+                  value={formData.color}
+                  onChange={(e) =>
+                    setFormData({ ...formData, color: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              {/* Category */}
+              <div className="mb-4">
+                <label className="text-sm text-text-secondary mb-1 block font-medium">
+                  Category (AI Generated)
+                </label>
+                <input
+                  type="text"
+                  value={formData.category}
+                  onChange={(e) =>
+                    setFormData({ ...formData, category: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
               {/* Tags */}
               <div className="mb-4">
                 <label className="text-sm text-text-secondary mb-2 block font-medium">
@@ -601,9 +647,8 @@ export function ReportItemModal({
                   <div>
                     <p className="text-text-secondary">Type</p>
                     <p
-                      className={`font-medium ${
-                        type === "Lost" ? "text-red-600" : "text-green-600"
-                      }`}
+                      className={`font-medium ${type === "Lost" ? "text-red-600" : "text-green-600"
+                        }`}
                     >
                       {type}
                     </p>
@@ -640,11 +685,10 @@ export function ReportItemModal({
                 <button
                   onClick={handleSubmit}
                   disabled={loading}
-                  className={`flex-1 py-3 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
-                    type === "Lost"
-                      ? "bg-red-500 hover:bg-red-600"
-                      : "bg-green-500 hover:bg-green-600"
-                  }`}
+                  className={`flex-1 py-3 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${type === "Lost"
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-green-500 hover:bg-green-600"
+                    }`}
                 >
                   {loading ? (
                     <>
@@ -660,6 +704,39 @@ export function ReportItemModal({
                 </button>
               </div>
             </>
+          )}
+          {/* Step 4: Success */}
+          {step === "success" && (
+            <div className="py-8 text-center">
+              <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Sparkles className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl font-bold text-text-primary mb-2">Report Submitted!</h3>
+              <p className="text-text-secondary mb-6">Your {type.toLowerCase()} item report has been successfully recorded.</p>
+
+              {matchResult && matchResult.highestScore > 0 && (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-6">
+                  <div className="flex items-center justify-center gap-2 text-blue-700 mb-2">
+                    <Sparkles className="w-5 h-5" />
+                    <span className="font-semibold text-lg">AI Match Found!</span>
+                  </div>
+                  <div className="text-4xl font-bold text-blue-600 mb-2">{matchResult.highestScore}%</div>
+                  <p className="text-sm text-blue-600">Match confidence score based on your description, location, and details.</p>
+                  {matchResult.highestScore >= 75 && (
+                    <div className="mt-4 p-2 bg-white/50 rounded-lg text-xs text-blue-800 font-medium">
+                      High confidence match detected! You can review details in the matches section.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={onClose}
+                className="w-full py-3 bg-primary text-white rounded-xl font-semibold hover:bg-primary-hover transition-colors shadow-md"
+              >
+                Got it
+              </button>
+            </div>
           )}
         </div>
       </div>

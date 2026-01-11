@@ -157,18 +157,8 @@ export function MatchesPage() {
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td className="py-3 px-4">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                        <div
-                                                            className={`h-full rounded-full ${match.matchScore >= 80 ? 'bg-green-500' : 'bg-blue-500'}`}
-                                                            style={{ width: `${match.matchScore}%` }}
-                                                        />
-                                                    </div>
-                                                    <span className={`font-bold text-sm ${match.matchScore >= 80 ? 'text-green-600' : 'text-blue-600'}`}>
-                                                        {match.matchScore}%
-                                                    </span>
-                                                </div>
+                                            <td className={`py-3 px-4 text-sm font-bold ${match.matchScore >= 60 ? 'text-green-600' : 'text-blue-600'}`}>
+                                                {match.matchScore}%
                                             </td>
                                             <td className="py-3 px-4">
                                                 <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium capitalize">

@@ -6,6 +6,7 @@ import "leaflet/dist/leaflet.css";
 interface LocationPickerProps {
   value: string;
   onChange: (location: string) => void;
+  onLocationSelect?: (location: string, coordinates: { lat: number; lng: number }) => void;
   placeholder?: string;
 }
 
@@ -30,6 +31,7 @@ const defaultIcon = L.icon({
 export function LocationPicker({
   value,
   onChange,
+  onLocationSelect,
   placeholder = "Search for a location...",
 }: LocationPickerProps) {
   const [query, setQuery] = useState(value);
@@ -95,6 +97,9 @@ export function LocationPicker({
             const address = data.features[0].properties.formatted;
             setQuery(address);
             onChangeRef.current(address);
+            if (onLocationSelect) {
+              onLocationSelect(address, { lat, lng });
+            }
           }
         } catch (err) {
           console.error("Reverse geocoding failed:", err);
@@ -201,6 +206,9 @@ export function LocationPicker({
     setQuery(result.formatted);
     onChange(result.formatted);
     setSelectedLocation({ lat: result.lat, lon: result.lon });
+    if (onLocationSelect) {
+      onLocationSelect(result.formatted, { lat: result.lat, lng: result.lon });
+    }
     setShowSuggestions(false);
   };
 

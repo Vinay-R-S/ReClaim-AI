@@ -9,6 +9,7 @@ import { uploadImage, uploadMultipleImages, deleteImage, isCloudinaryConfigured 
 import { Item, ItemInput, ItemType } from '../types/index.js';
 import { updateUserItemCounts } from '../services/userStats.js';
 import { triggerAutoMatching } from '../services/autoMatch.service.js';
+import { generateEmbedding, createItemEmbeddingString } from '../utils/embeddings.js';
 
 const router = Router();
 
@@ -134,6 +135,7 @@ router.post('/', async (req: Request, res: Response) => {
             date: Timestamp.fromDate(new Date(item.date)),
             tags: item.tags || [],
             color: item.color || '', // Add color for matching
+            category: item.category || 'Other', // Add category for matching
             cloudinaryUrls,
             reportedBy: userId,
             createdAt: FieldValue.serverTimestamp(),
@@ -155,6 +157,24 @@ router.post('/', async (req: Request, res: Response) => {
             newItem.coordinates = item.coordinates;
         }
 
+        // Generate semantic embedding
+        let itemEmbedding: number[] = [];
+        try {
+            const embeddingText = createItemEmbeddingString({
+                name: item.name,
+                description: item.description,
+                tags: item.tags,
+                color: item.color
+            });
+            console.log(`[ITEM-CREATE] Generating embedding for: "${embeddingText}"`);
+            itemEmbedding = await generateEmbedding(embeddingText);
+            if (itemEmbedding.length > 0) {
+                newItem.embedding = itemEmbedding;
+            }
+        } catch (embedError) {
+            console.error('Failed to generate item embedding:', embedError);
+        }
+
         const docRef = await collections.items.add(newItem);
         const itemId = docRef.id;
 
@@ -168,26 +188,32 @@ router.post('/', async (req: Request, res: Response) => {
             // Don't fail the request, just log the error
         }
 
-        // Trigger automatic matching (non-blocking) with new staged approach
+        // Trigger automatic matching (non-blocking) with comprehensive scoring
         const imageUrl = cloudinaryUrls[0];
         console.log(`[ITEM-CREATE] Triggering auto-match for item ${itemId}`);
         console.log(`[ITEM-CREATE] - Tags: ${JSON.stringify(item.tags || [])}`);
         console.log(`[ITEM-CREATE] - Color: ${item.color || 'NONE'}`);
+        console.log(`[ITEM-CREATE] - Coordinates: ${item.coordinates ? 'present' : 'MISSING'}`);
+        console.log(`[ITEM-CREATE] - Date: ${item.date || 'MISSING'}`);
         console.log(`[ITEM-CREATE] - Image: ${imageUrl ? 'present' : 'MISSING'}`);
 
-        triggerAutoMatching(itemId, item.type, {
+        const matchResult = await triggerAutoMatching(itemId, item.type, {
             name: item.name,
             description: item.description,
             tags: item.tags || [],
             color: item.color,
             imageUrl: imageUrl,
-        }).catch(error => {
-            console.error('[AUTO-MATCH] Error in automatic matching:', error);
+            coordinates: item.coordinates,  // Pass coordinates for location matching
+            location: item.location,        // Pass location string for fallback
+            date: new Date(item.date),      // Pass date for time matching
+            embedding: itemEmbedding,       // Pass pre-generated embedding
+            category: item.category,        // Pass category for matching
         });
 
         return res.status(201).json({
             id: docRef.id,
             item: { id: docRef.id, ...newItem },
+            matchResult
         });
     } catch (error) {
         console.error('Create item error:', error);

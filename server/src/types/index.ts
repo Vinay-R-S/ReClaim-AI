@@ -40,6 +40,7 @@ export interface Item {
     category?: string; // Electronics, Documents, Accessories, etc.
     imageUrl?: string;
     cloudinaryUrls?: string[];
+    embedding?: number[];
     matchScore?: number;
     reportedBy: string; // User ID
     reportedByEmail?: string; // For notifications
@@ -125,8 +126,12 @@ export interface MatchResult {
     item: Item;
     score: number;
     breakdown: {
-        textScore: number;      // 50% weight
-        imageScore: number;     // 50% weight
+        tagScore: number;
+        descriptionScore: number;
+        colorScore: number;
+        locationScore: number;
+        timeScore: number;
+        imageScore: number;
     };
 }
 
@@ -134,10 +139,14 @@ export interface Match {
     id: string;
     lostItemId: string;
     foundItemId: string;
-    tagScore: number;      // 0-30 points from tag matching
-    colorScore: number;    // 0-20 points from color matching
-    imageScore: number;    // 0-50 points from Groq image analysis
-    matchScore: number;    // Total: tagScore + colorScore + imageScore
+    // Comprehensive scoring breakdown (100 points total)
+    tagScore: number;          // 0-30 points from tag matching
+    descriptionScore: number;  // 0-20 points from description similarity
+    colorScore: number;        // 0-15 points from color matching
+    locationScore: number;     // 0-20 points from location proximity
+    timeScore: number;         // 0-10 points from time window
+    imageScore: number;        // 0-5 points from image analysis (optional)
+    matchScore: number;        // Total: sum of all scores
     status: 'matched';
     createdAt: Timestamp;
     updatedAt?: Timestamp;
@@ -197,8 +206,9 @@ export const SAFETY_LIMITS = {
     MAX_TURNS_PER_CONVERSATION: 15,
     SESSION_TIMEOUT_MINUTES: 5,
     CHAT_HISTORY_TTL_DAYS: 7,
-    MATCH_THRESHOLD_PERCENT: 60,
-    LOCATION_RADIUS_KM: 2,
+    MATCH_THRESHOLD_PERCENT: 75,  // Restored to 75%
+    LOCATION_RADIUS_KM: 10,        // Maximum distance for matching (km)
+    TIME_WINDOW_HOURS: 72,         // Maximum time difference (hours)
 } as const;
 
 // ============ Credit Constants ============

@@ -7,6 +7,7 @@ import {
   XCircle,
   CheckCircle,
   AlertCircle,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import {
@@ -14,6 +15,7 @@ import {
   type ItemInput,
   updateItemViaApi,
   deleteItemViaApi,
+  getItemById,
 } from "../../services/itemService";
 import { Timestamp } from "firebase/firestore";
 
@@ -32,6 +34,7 @@ export function ItemDetailModal({
 }: ItemDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [matchedItem, setMatchedItem] = useState<Item | null>(null);
   const [toast, setToast] = useState<{
     type: "success" | "error";
     message: string;
@@ -59,6 +62,23 @@ export function ItemDetailModal({
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, [onClose]);
+
+  // Fetch matched item details
+  useEffect(() => {
+    async function fetchMatchedItem() {
+      if (item.matchedItemId) {
+        try {
+          const matched = await getItemById(item.matchedItemId);
+          setMatchedItem(matched);
+        } catch (err) {
+          console.error("Error fetching matched item:", err);
+        }
+      } else {
+        setMatchedItem(null);
+      }
+    }
+    fetchMatchedItem();
+  }, [item.matchedItemId]);
 
   const handleSave = async () => {
     try {
@@ -443,7 +463,7 @@ export function ItemDetailModal({
             )}
 
             {/* Match Score */}
-            {(item.matchScore || isEditing) && (
+            {(item.matchScore !== undefined || isEditing) && (
               <div className="col-span-2">
                 <label className="text-sm text-text-secondary mb-1 block">
                   Match Score
@@ -483,6 +503,55 @@ export function ItemDetailModal({
                     </span>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Matched Item Info */}
+            {matchedItem && !isEditing && (
+              <div className="col-span-2 mt-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                <div className="flex items-center gap-2 text-blue-700 mb-3">
+                  <CheckCircle className="w-5 h-5" />
+                  <span className="font-semibold">Matched With</span>
+                </div>
+                <div className="flex items-center gap-4 bg-white p-3 rounded-lg border border-blue-50">
+                  {matchedItem.imageUrl || matchedItem.cloudinaryUrls?.[0] ? (
+                    <img
+                      src={matchedItem.imageUrl || matchedItem.cloudinaryUrls?.[0]}
+                      alt={matchedItem.name}
+                      className="w-16 h-16 rounded-lg object-cover border border-gray-100"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center text-2xl">
+                      📦
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-text-primary truncate">
+                      {matchedItem.name}
+                    </p>
+                    <p className="text-xs text-text-secondary truncate mt-0.5">
+                      {matchedItem.location}
+                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className={cn(
+                        "text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded",
+                        matchedItem.type === "Lost" ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"
+                      )}>
+                        {matchedItem.type}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      // Logic to switch view to matched item could go here
+                      // For now we just show the info
+                    }}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                    title="View Matched Item"
+                  >
+                    <ExternalLink className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             )}
           </div>

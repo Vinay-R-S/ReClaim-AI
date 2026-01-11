@@ -7,22 +7,28 @@ export interface AnalysisResult {
     name: string;
     description: string;
     tags: string[];
+    color: string;
+    category: string;
 }
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 // Switching to stable v1 endpoint to avoid 404s and use standard gemini-1.5-flash
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent";
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent";
 
 const ANALYSIS_PROMPT = `Analyze this image of a lost/found item and provide:
-1. A proper, descriptive name for the item (e.g., "Black Dell Laptop Bag" instead of just "bag")
-2. A detailed description (2-3 sentences about the item's appearance)
-3. Tags/attributes as an array (color, brand, size, material, condition, any distinctive features)
+1. A proper, descriptive name for the item
+2. A detailed description (2-3 sentences)
+3. Tags/attributes as an array
+4. The primary color of the item (a single word like "Black", "Silver", "Red")
+5. The most appropriate category (e.g., "Electronics", "Personal Accessories", "Documents", "Clothing", "Bags", "Keys", "Pets", "Other")
 
 Respond ONLY with valid JSON in this exact format:
 {
   "name": "Item Name",
   "description": "Detailed description here.",
-  "tags": ["tag1", "tag2", "tag3"]
+  "tags": ["tag1", "tag2"],
+  "color": "ColorName",
+  "category": "CategoryName"
 }`;
 
 // Convert File to base64
@@ -150,6 +156,8 @@ function parseAnalysisResponse(content: string): AnalysisResult {
             name: parsed.name || "Unknown Item",
             description: parsed.description || "No description available",
             tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+            color: parsed.color || "",
+            category: parsed.category || "Other",
         };
     } catch (err) {
         console.error("Failed to parse AI response:", err, content);
@@ -157,6 +165,8 @@ function parseAnalysisResponse(content: string): AnalysisResult {
             name: "Unknown Item",
             description: "AI analysis failed. Please add details manually.",
             tags: [],
+            color: "",
+            category: "Other",
         };
     }
 }
@@ -202,15 +212,19 @@ Name: ${name}
 Description: ${description}
 
 Please:
-1. Enhance the item name to be more descriptive if needed
-2. Improve the description with more detail based on the information given
-3. Generate relevant tags/keywords for better matching
+1. Enhance the item name
+2. Improve the description
+3. Generate relevant tags
+4. Identify the primary color
+5. Identify the best category
 
 Respond ONLY with valid JSON in this exact format:
 {
   "name": "Enhanced Item Name",
   "description": "Enhanced detailed description here.",
-  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+  "tags": ["tag1", "tag2"],
+  "color": "ColorName",
+  "category": "CategoryName"
 }`;
 
     const apiKey = provider === "groq"
@@ -219,7 +233,7 @@ Respond ONLY with valid JSON in this exact format:
 
     if (!apiKey) {
         // Return original if no API key
-        return { name, description, tags: [] };
+        return { name, description, tags: [], color: "", category: "Other" };
     }
 
     try {
@@ -268,6 +282,6 @@ Respond ONLY with valid JSON in this exact format:
     } catch (err) {
         console.error("Text enhancement failed:", err);
         // Return original values on error
-        return { name, description, tags: [] };
+        return { name, description, tags: [], color: "", category: "Other" };
     }
 }

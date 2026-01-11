@@ -17,7 +17,8 @@ interface AddItemModalProps {
 }
 
 export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
-  const [step, setStep] = useState<"upload" | "analyzing" | "review">("upload");
+  const [step, setStep] = useState<"upload" | "analyzing" | "review" | "success">("upload");
+  const [matchResult, setMatchResult] = useState<{ highestScore: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -34,6 +35,9 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
     date: new Date(),
     status: "Pending",
     tags: [],
+    color: "",
+    category: "",
+    coordinates: undefined as { lat: number; lng: number } | undefined,
   });
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,6 +84,8 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
         name: analysis.name,
         description: analysis.description,
         tags: analysis.tags,
+        color: analysis.color || "",
+        category: analysis.category || "",
       }));
 
       setStep("review");
@@ -132,6 +138,9 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
             location: formData.location,
             date: formData.date,
             tags: formData.tags,
+            color: formData.color,
+            category: formData.category,
+            coordinates: formData.coordinates,
           },
           images: uploadedImages,
         }),
@@ -143,9 +152,10 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
       }
 
       console.log('[ADMIN-MODAL] Item created successfully');
-
+      const result = await response.json();
+      setMatchResult(result.matchResult);
+      setStep("success");
       onSuccess();
-      onClose();
     } catch (err) {
       console.error("Error adding item:", err);
       alert(
@@ -188,6 +198,7 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
             {step === "upload" && "Add New Item"}
             {step === "analyzing" && "Analyzing Image..."}
             {step === "review" && "Review Item Details"}
+            {step === "success" && "Success!"}
           </h2>
           <button
             onClick={onClose}
@@ -297,6 +308,9 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
                   value={formData.location}
                   onChange={(location) =>
                     setFormData({ ...formData, location })
+                  }
+                  onLocationSelect={(location, coordinates) =>
+                    setFormData(prev => ({ ...prev, location, coordinates }))
                   }
                   placeholder="Search for a location..."
                 />
@@ -442,6 +456,36 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
                 />
               </div>
 
+              {/* Color */}
+              <div className="mb-4">
+                <label className="text-sm text-text-secondary mb-1 block font-medium">
+                  Color (AI Generated)
+                </label>
+                <input
+                  type="text"
+                  value={formData.color}
+                  onChange={(e) =>
+                    setFormData({ ...formData, color: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              {/* Category */}
+              <div className="mb-4">
+                <label className="text-sm text-text-secondary mb-1 block">
+                  Category (AI Generated)
+                </label>
+                <input
+                  type="text"
+                  value={formData.category}
+                  onChange={(e) =>
+                    setFormData({ ...formData, category: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
               {/* Type & Status */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
@@ -534,8 +578,47 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
               </div>
             </>
           )}
+
+          {/* Step 4: Success */}
+          {step === "success" && (
+            <div className="py-8 text-center px-4">
+              <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Sparkles className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl font-bold text-text-primary mb-2">Item Published!</h3>
+              <p className="text-text-secondary mb-6 text-sm">
+                The {formData.type.toLowerCase()} item has been added to the database.
+              </p>
+
+              {matchResult && matchResult.highestScore > 0 ? (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 mb-6">
+                  <div className="flex items-center justify-center gap-2 text-blue-700 mb-2">
+                    <Sparkles className="w-4 h-4" />
+                    <span className="font-semibold">AI Match Score</span>
+                  </div>
+                  <div className="text-4xl font-bold text-blue-600 mb-1">{matchResult.highestScore}%</div>
+                  <p className="text-xs text-blue-500">
+                    Highest similarity found with existing items.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-100 rounded-xl p-5 mb-6">
+                  <p className="text-sm text-text-secondary">
+                    No immediate matches found with existing items.
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={onClose}
+                className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-md"
+              >
+                Done
+              </button>
+            </div>
+          )}
         </div>
       </div>
-    </div>
+    </div >
   );
 }

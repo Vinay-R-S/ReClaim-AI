@@ -28,6 +28,7 @@ export interface CollectedItemData {
     coordinates?: Coordinates;
     date?: Date;
     tags?: string[];
+    color?: string;
     imageUrls?: string[];
     cloudinaryUrls?: string[];
 }

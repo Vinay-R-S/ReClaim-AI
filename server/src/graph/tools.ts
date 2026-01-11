@@ -132,6 +132,9 @@ Only include fields that have actual values from the message. Don't invent or as
             if (result.name) {
                 extracted.name = result.name;
             }
+            if (result.color) {
+                extracted.color = result.color;
+            }
 
             // Build comprehensive description
             const descParts = [
@@ -244,6 +247,7 @@ export const saveItemTool = tool(
                 location: itemData.location || 'Unknown',
                 date: Timestamp.fromDate(itemDate),
                 tags: itemData.tags || [],
+                color: itemData.color || '',
                 reportedBy: userId,
                 createdAt: FieldValue.serverTimestamp(),
                 updatedAt: FieldValue.serverTimestamp(),
@@ -300,6 +304,7 @@ export const searchMatchesTool = tool(
                 name: itemData.name || 'Unknown Item',
                 description: itemData.description || '',
                 tags: itemData.tags,
+                color: itemData.color,
                 coordinates: itemData.coordinates,
                 date: itemData.date instanceof Date ? itemData.date : new Date(itemData.date as any || Date.now()),
                 imageBase64,

@@ -162,7 +162,7 @@ export function AdminDashboard() {
                     Status
                   </th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">
-                    Match Score
+                    Match %
                   </th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">
                     Action
@@ -217,27 +217,8 @@ export function AdminDashboard() {
                         {item.status}
                       </span>
                     </td>
-                    <td className="py-3 px-4">
-                      {item.matchScore ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div
-                              className={cn(
-                                "h-full rounded-full",
-                                item.matchScore >= 90
-                                  ? "bg-google-green"
-                                  : "bg-google-blue"
-                              )}
-                              style={{ width: `${item.matchScore}%` }}
-                            />
-                          </div>
-                          <span className="text-sm text-text-primary">
-                            {item.matchScore}%
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-text-secondary">-</span>
-                      )}
+                    <td className="py-3 px-4 text-sm font-bold text-text-primary">
+                      {item.matchScore !== undefined ? `${item.matchScore}%` : "-"}
                     </td>
                     <td className="py-3 px-4">
                       <button

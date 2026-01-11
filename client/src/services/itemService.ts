@@ -59,6 +59,7 @@ export interface ItemInput {
     status: "Pending" | "Matched" | "Claimed" | "Resolved";
     matchScore?: number;
     tags?: string[];
+    color?: string;
     category?: string;
     images?: string[]; // Array of base64 strings for multiple images
 }

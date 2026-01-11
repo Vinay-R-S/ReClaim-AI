@@ -126,6 +126,7 @@ export function PendingApprovalsPage() {
                                     <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Location</th>
                                     <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Reported On</th>
                                     <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Status</th>
+                                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Match %</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -158,8 +159,8 @@ export function PendingApprovalsPage() {
                                             </td>
                                             <td className="py-3 px-4">
                                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.type === "Lost"
-                                                        ? "bg-red-100 text-red-700"
-                                                        : "bg-green-100 text-green-700"
+                                                    ? "bg-red-100 text-red-700"
+                                                    : "bg-green-100 text-green-700"
                                                     }`}>
                                                     {item.type}
                                                 </span>
@@ -174,6 +175,9 @@ export function PendingApprovalsPage() {
                                                 <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
                                                     Pending
                                                 </span>
+                                            </td>
+                                            <td className="py-3 px-4 text-xs font-bold text-text-primary">
+                                                {item.matchScore ? `${item.matchScore}%` : "-"}
                                             </td>
                                         </tr>
                                     ))

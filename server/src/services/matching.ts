@@ -1,61 +1,20 @@
 /**
  * Matching Service - Find potential matches between lost and found items
+ * Uses shared scoring logic from utils/scoring.ts
  */
 
 import { collections } from '../utils/firebase-admin.js';
-import { callLLM, parseJSONFromLLM } from '../utils/llm.js';
-import { Item, MatchResult, SAFETY_LIMITS, Coordinates } from '../types/index.js';
-
-// Weights for matching criteria (simplified to 50/50)
-const MATCH_WEIGHTS = {
-    text: 0.50,      // 50% - name, description, tags
-    image: 0.50,     // 50% - AI vision comparison
-};
-
-// Location and time scoring removed per user requirements
-
-/**
- * Calculate text similarity using keywords
- */
-function calculateTextScore(
-    itemName: string,
-    itemDesc: string,
-    itemTags: string[],
-    searchName: string,
-    searchDesc: string,
-    searchTags: string[]
-): number {
-    // Combine all text for comparison
-    const itemText = `${itemName} ${itemDesc} ${itemTags.join(' ')}`.toLowerCase();
-    const searchText = `${searchName} ${searchDesc} ${searchTags.join(' ')}`.toLowerCase();
-
-    // Extract keywords (remove common words)
-    const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'and', 'or', 'my', 'i', 'it']);
-
-    const itemWords = new Set(
-        itemText.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w))
-    );
-    const searchWords = new Set(
-        searchText.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w))
-    );
-
-    if (itemWords.size === 0 || searchWords.size === 0) {
-        return 0.5;
-    }
-
-    // Calculate Jaccard similarity
-    const intersection = [...itemWords].filter(w => searchWords.has(w)).length;
-    const union = new Set([...itemWords, ...searchWords]).size;
-
-    const jaccard = intersection / union;
-
-    // Boost score for exact name match
-    const nameBoost = itemName.toLowerCase().includes(searchName.toLowerCase()) ||
-        searchName.toLowerCase().includes(itemName.toLowerCase())
-        ? 0.2 : 0;
-
-    return Math.min(1, jaccard + nameBoost);
-}
+import { Item, MatchResult, Coordinates } from '../types/index.js';
+import {
+    MATCH_CONFIG,
+    calculateTagScore,
+    calculateDescriptionScore,
+    calculateColorScore,
+    calculateLocationScore,
+    calculateTimeScore,
+    haversineDistance,
+    calculateTimeDifference
+} from '../utils/scoring.js';
 
 /**
  * Calculate image similarity using AI vision
@@ -64,37 +23,19 @@ async function calculateImageScore(
     itemImageUrl?: string,
     searchImageBase64?: string
 ): Promise<number> {
-    if (!itemImageUrl || !searchImageBase64) {
-        return 0.5; // Neutral if one image missing
-    }
+    // Image matching disabled per user request (unreliable)
+    // Can be re-enabled later with Clarifai or other service
+    return 0;
+}
 
-    try {
-        const prompt = `Compare these two images and determine if they show the same or similar item.
-Consider: color, shape, brand logos, size, distinctive features.
-
-Rate similarity from 0 to 100 where:
-- 90-100: Almost certainly the same item
-- 70-89: Very similar, likely the same
-- 50-69: Some similarities but notable differences
-- 30-49: Different items with minor similarities
-- 0-29: Completely different items
-
-Respond ONLY with JSON: {"score": <number>, "reason": "<brief explanation>"}`;
-
-        const response = await callLLM([
-            { role: 'system', content: 'You are an image comparison expert for a lost and found system.' },
-            { role: 'user', content: prompt },
-        ], {
-            imageBase64: searchImageBase64,
-            temperature: 0.2,
-        });
-
-        const result = parseJSONFromLLM<{ score: number; reason: string }>(response.content);
-        return result ? result.score / 100 : 0.5;
-    } catch (error) {
-        console.error('Image comparison failed:', error);
-        return 0.5;
-    }
+/**
+ * Helper to convert item date
+ */
+function toDate(dateVal: any): Date {
+    if (dateVal instanceof Date) return dateVal;
+    if (dateVal?.toDate) return dateVal.toDate();
+    if (dateVal?.seconds) return new Date(dateVal.seconds * 1000);
+    return new Date(dateVal || Date.now());
 }
 
 /**
@@ -108,6 +49,7 @@ export async function findMatchesForLostItem(
         location?: string;
         coordinates?: Coordinates;
         date: Date;
+        color?: string;
         imageBase64?: string;
     }
 ): Promise<MatchResult[]> {
@@ -126,48 +68,82 @@ export async function findMatchesForLostItem(
         return [];
     }
 
-    // Calculate match scores for each found item
+    // Process all candidates
     const matchPromises = foundItems.map(async (item) => {
-        const itemDate = item.date instanceof Date
-            ? item.date
-            : item.date.toDate();
+        const itemDate = toDate(item.date);
+        const searchDate = toDate(lostItem.date);
 
-        // Calculate text score (50%)
-        const textScore = calculateTextScore(
-            item.name,
-            item.description,
-            item.tags || [],
-            lostItem.name,
-            lostItem.description,
-            lostItem.tags || []
+        // Pre-filter: Check distance
+        if (lostItem.coordinates && item.coordinates) {
+            const dist = haversineDistance(
+                lostItem.coordinates.lat, lostItem.coordinates.lng,
+                item.coordinates.lat, item.coordinates.lng
+            );
+            if (dist > MATCH_CONFIG.REQUIREMENTS.maxDistance) {
+                return null;
+            }
+        }
+
+        // Pre-filter: Check time
+        const timeDiff = calculateTimeDifference(itemDate, searchDate);
+        if (timeDiff > MATCH_CONFIG.REQUIREMENTS.maxTimeDiff) {
+            return null;
+        }
+
+        // Calculate scores
+        const tagScore = calculateTagScore(lostItem.tags || [], item.tags || []);
+
+        // Pre-filter: Tags
+        // Note: autoMatch enforces minCommonTags=1. We should probably do same here,
+        // but for manual search we might want to be more lenient?
+        // Let's stick to the config for consistency.
+        // Check overlap
+        const commonTags = (lostItem.tags || []).filter(t =>
+            (item.tags || []).map(it => it.toLowerCase()).includes(t.toLowerCase())
         );
+        if (commonTags.length < MATCH_CONFIG.REQUIREMENTS.minCommonTags) {
+            // Exception: if valid name match or description match, maybe include?
+            // But config says requirement.
+            return null;
+        }
 
-        // Calculate image score (50%) - async
+        const descriptionScore = calculateDescriptionScore(lostItem.description || '', item.description || '');
+        const colorScore = calculateColorScore(lostItem.color || '', item.color || ''); // item.color is not in Item type yet? It is in Firestore.
+        // Wait, Item interface has color? Yes, I added it in autoMatch but let's check definition.
+
+        const locationScore = calculateLocationScore(lostItem.coordinates, item.coordinates);
+        const timeScore = calculateTimeScore(searchDate, itemDate);
+
+        // Image score
         const imageUrl = item.cloudinaryUrls?.[0] || item.imageUrl;
         const imageScore = await calculateImageScore(imageUrl, lostItem.imageBase64);
 
-        // Calculate weighted total (50% text + 50% image)
-        const totalScore =
-            textScore * MATCH_WEIGHTS.text +
-            imageScore * MATCH_WEIGHTS.image;
+        const totalScore = Math.round(
+            tagScore + descriptionScore + colorScore + locationScore + timeScore + imageScore
+        );
+
+        if (totalScore < MATCH_CONFIG.THRESHOLD) {
+            return null;
+        }
 
         return {
             itemId: item.id,
             item,
-            score: Math.round(totalScore * 100),
+            score: totalScore,
             breakdown: {
-                textScore: Math.round(textScore * 100),
-                imageScore: Math.round(imageScore * 100),
+                tagScore,
+                descriptionScore,
+                colorScore,
+                locationScore,
+                timeScore,
+                imageScore
             },
         };
     });
 
-    const matches = await Promise.all(matchPromises);
+    const matches = (await Promise.all(matchPromises)).filter(m => m !== null) as MatchResult[];
 
-    // Filter by threshold and sort by score
-    return matches
-        .filter(m => m.score >= SAFETY_LIMITS.MATCH_THRESHOLD_PERCENT)
-        .sort((a, b) => b.score - a.score);
+    return matches.sort((a, b) => b.score - a.score);
 }
 
 /**
@@ -180,6 +156,7 @@ export async function findMatchesForFoundItem(
         tags?: string[];
         coordinates?: Coordinates;
         date: Date;
+        color?: string;
         imageBase64?: string;
     }
 ): Promise<MatchResult[]> {
@@ -198,45 +175,71 @@ export async function findMatchesForFoundItem(
         return [];
     }
 
-    // Similar logic as findMatchesForLostItem
+    // Process all candidates
     const matchPromises = lostItems.map(async (item) => {
-        const itemDate = item.date instanceof Date
-            ? item.date
-            : item.date.toDate();
+        const itemDate = toDate(item.date);
+        const searchDate = toDate(foundItem.date);
 
-        // Calculate text score (50%)
-        const textScore = calculateTextScore(
-            item.name,
-            item.description,
-            item.tags || [],
-            foundItem.name,
-            foundItem.description,
-            foundItem.tags || []
+        // Pre-filter: Check distance
+        if (foundItem.coordinates && item.coordinates) {
+            const dist = haversineDistance(
+                foundItem.coordinates.lat, foundItem.coordinates.lng,
+                item.coordinates.lat, item.coordinates.lng
+            );
+            if (dist > MATCH_CONFIG.REQUIREMENTS.maxDistance) {
+                return null;
+            }
+        }
+
+        // Pre-filter: Check time
+        const timeDiff = calculateTimeDifference(itemDate, searchDate);
+        if (timeDiff > MATCH_CONFIG.REQUIREMENTS.maxTimeDiff) {
+            return null;
+        }
+
+        // Calculate scores
+        const tagScore = calculateTagScore(foundItem.tags || [], item.tags || []);
+
+        const commonTags = (foundItem.tags || []).filter(t =>
+            (item.tags || []).map(it => it.toLowerCase()).includes(t.toLowerCase())
         );
+        if (commonTags.length < MATCH_CONFIG.REQUIREMENTS.minCommonTags) {
+            return null;
+        }
 
-        // Calculate image score (50%)
+        const descriptionScore = calculateDescriptionScore(foundItem.description || '', item.description || '');
+        const colorScore = calculateColorScore(foundItem.color || '', item.color || '');
+
+        const locationScore = calculateLocationScore(foundItem.coordinates, item.coordinates);
+        const timeScore = calculateTimeScore(searchDate, itemDate);
+
         const imageUrl = item.cloudinaryUrls?.[0] || item.imageUrl;
         const imageScore = await calculateImageScore(imageUrl, foundItem.imageBase64);
 
-        // Calculate weighted total (50% text + 50% image)
-        const totalScore =
-            textScore * MATCH_WEIGHTS.text +
-            imageScore * MATCH_WEIGHTS.image;
+        const totalScore = Math.round(
+            tagScore + descriptionScore + colorScore + locationScore + timeScore + imageScore
+        );
+
+        if (totalScore < MATCH_CONFIG.THRESHOLD) {
+            return null;
+        }
 
         return {
             itemId: item.id,
             item,
-            score: Math.round(totalScore * 100),
+            score: totalScore,
             breakdown: {
-                textScore: Math.round(textScore * 100),
-                imageScore: Math.round(imageScore * 100),
+                tagScore,
+                descriptionScore,
+                colorScore,
+                locationScore,
+                timeScore,
+                imageScore
             },
         };
     });
 
-    const matches = await Promise.all(matchPromises);
+    const matches = (await Promise.all(matchPromises)).filter(m => m !== null) as MatchResult[];
 
-    return matches
-        .filter(m => m.score >= SAFETY_LIMITS.MATCH_THRESHOLD_PERCENT)
-        .sort((a, b) => b.score - a.score);
+    return matches.sort((a, b) => b.score - a.score);
 }

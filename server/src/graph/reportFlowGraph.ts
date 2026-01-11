@@ -25,6 +25,7 @@ import {
     uploadImageTool,
 } from './tools.js';
 import { invokeLLMWithFallback, SYSTEM_PROMPT } from './langchainConfig.js';
+import { MATCH_CONFIG } from '../utils/scoring.js';
 
 // ============ Main Dispatch Node ============
 
@@ -619,7 +620,7 @@ async function handleSaveAndSearch(state: ReportFlowState): Promise<Partial<Repo
     if (isLost) {
         if (matches.length > 0) {
             const bestMatch = matches[0];
-            if (bestMatch.score > 60) {
+            if (bestMatch.score >= MATCH_CONFIG.THRESHOLD) {
                 // High confidence match found AFTER saving
                 responseMessage = [
                     '--- LOST ITEM RECORDED ---',
@@ -739,7 +740,7 @@ async function handleCheckMatches(state: ReportFlowState): Promise<Partial<Repor
 
         if (matchResult.matches.length > 0) {
             const itemBest = matchResult.matches[0];
-            if (itemBest.score > 60) {
+            if (itemBest.score >= MATCH_CONFIG.THRESHOLD) {
                 if (!bestMatch || itemBest.score > bestMatch.score) {
                     bestMatch = itemBest;
                     bestMatchLostItemId = item.id;
