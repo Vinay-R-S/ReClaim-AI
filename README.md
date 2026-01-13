@@ -163,6 +163,26 @@ npm run dev
    - API Key → `CLOUDINARY_API_KEY`
    - API Secret → `CLOUDINARY_API_SECRET`
 
+### Clarifai Setup (Required for Image Matching)
+
+1. Go to [https://clarifai.com](https://clarifai.com)
+2. Sign up or log in
+3. Navigate to Settings → Security
+4. Create a new Personal Access Token (PAT)
+5. Copy the token and add it to `.env`:
+
+   ```bash
+   # Clarifai API Configuration
+   CLARIFAI_PAT=your_clarifai_personal_access_token_here
+
+   # Optional: Custom Clarifai settings (defaults shown)
+   # CLARIFAI_USER_ID=clarifai
+   # CLARIFAI_APP_ID=main
+   # CLARIFAI_MODEL_ID=general-image-recognition
+   ```
+
+   _Note: Image matching functionality relies on this service._
+
 ### Groq API Setup
 
 1. Go to [Groq Console](https://console.groq.com/)
@@ -219,35 +239,44 @@ If you see Firestore index errors, create these composite indexes:
 - Resend (Email)
 
 ---
+
 ## Demo
 
 ### Home Page
+
 <img width="1782" height="852" alt="image" src="https://github.com/user-attachments/assets/67edbff7-db66-4b5b-9799-bb55cbb66bfd" />
 
 ### Why ReClaim AI
+
 <img width="1900" height="860" alt="image" src="https://github.com/user-attachments/assets/9502261d-c818-4c69-8d25-5e9c9f385939" />
 
 ### Admin Dashboard
+
 <img width="1916" height="860" alt="image" src="https://github.com/user-attachments/assets/77c6d31d-7bac-4ea4-b59b-2ea65ad4c2ca" />
 
 ### Users Management
+
 <img width="1919" height="866" alt="image" src="https://github.com/user-attachments/assets/36a6a28a-3631-4aaf-8d79-357f719c88ba" />
 
 ### Admin Settings
+
 <img width="1916" height="856" alt="image" src="https://github.com/user-attachments/assets/25cc0715-d41a-46f3-adfb-20f90cc09298" />
 
 ### Users Home Page
+
 <img width="1807" height="771" alt="image" src="https://github.com/user-attachments/assets/819fe0ef-684f-469a-93a1-4c2ee835679b" />
 
 ### User Profile Page
+
 <img width="1562" height="808" alt="image" src="https://github.com/user-attachments/assets/fb936e43-6b26-4e94-a4af-119c839d71ac" />
 
 ### Report Lost Item
+
 <img width="1492" height="850" alt="image" src="https://github.com/user-attachments/assets/a9dbbbc9-ae14-4242-ab7b-a10b18925e0f" />
 
 ### Report Found Item
-<img width="1466" height="854" alt="image" src="https://github.com/user-attachments/assets/da7acb50-cc0d-4e5c-95fa-d97425cb4fa9" />
 
+<img width="1466" height="854" alt="image" src="https://github.com/user-attachments/assets/da7acb50-cc0d-4e5c-95fa-d97425cb4fa9" />
 
 ---
 
