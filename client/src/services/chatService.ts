@@ -87,7 +87,7 @@ export async function sendMessage(
     options?: {
         conversationId?: string;
         context?: ConversationContext;
-        imageData?: string;
+        imageData?: string | string[];  // Support single or multiple images
         location?: Coordinates;
     }
 ): Promise<ChatResponse> {

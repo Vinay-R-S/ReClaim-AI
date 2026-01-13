@@ -24,6 +24,7 @@ router.post('/', async (req: Request, res: Response) => {
             conversationId: req.body.conversationId,
             message: req.body.message || '',
             context: req.body.context,
+            // Support both single image (string) and multiple images (string[])
             imageData: req.body.imageData,
             location: req.body.location,
         };

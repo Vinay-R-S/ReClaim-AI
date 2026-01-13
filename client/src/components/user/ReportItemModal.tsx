@@ -12,6 +12,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import {
   analyzeItemImage,
+  analyzeMultipleImages,
   enhanceTextDescription,
   getAvailableProviders,
   type AIProvider,
@@ -32,8 +33,13 @@ export function ReportItemModal({
   onSuccess,
 }: ReportItemModalProps) {
   const { user } = useAuth();
-  const [step, setStep] = useState<"upload" | "analyzing" | "review" | "success">("upload");
-  const [matchResult, setMatchResult] = useState<{ highestScore: number; bestMatchId?: string } | null>(null);
+  const [step, setStep] = useState<
+    "upload" | "analyzing" | "review" | "success"
+  >("upload");
+  const [matchResult, setMatchResult] = useState<{
+    highestScore: number;
+    bestMatchId?: string;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -53,7 +59,9 @@ export function ReportItemModal({
     color: "",
     category: "",
     coordinates: undefined as { lat: number; lng: number } | undefined,
-    collectionCoordinates: undefined as { lat: number; lng: number } | undefined,
+    collectionCoordinates: undefined as
+      | { lat: number; lng: number }
+      | undefined,
   });
 
   // Reporter email from auth
@@ -61,21 +69,28 @@ export function ReportItemModal({
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const files = Array.from(e.target.files);
-      setImageFiles(files);
+      const newFiles = Array.from(e.target.files);
 
-      // Generate previews
-      const newPreviews: string[] = [];
-      files.forEach((file) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          newPreviews.push(reader.result as string);
-          if (newPreviews.length === files.length) {
-            setImagePreviews([...newPreviews]);
-          }
-        };
-        reader.readAsDataURL(file);
+      // Combine with existing files, limit to 5 total
+      const combinedFiles = [...imageFiles, ...newFiles].slice(0, 5);
+      setImageFiles(combinedFiles);
+
+      // Generate previews for ALL files (rebuild to ensure correct order)
+      const previewPromises = combinedFiles.map(
+        (file) =>
+          new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          })
+      );
+
+      Promise.all(previewPromises).then((previews) => {
+        setImagePreviews(previews);
       });
+
+      // Reset input so same file can be re-selected
+      e.target.value = "";
     }
   };
 
@@ -138,8 +153,11 @@ export function ReportItemModal({
       setStep("analyzing");
       setLoading(true);
 
-      // Analyze image with AI
-      const analysis = await analyzeItemImage(imageFiles[0], aiProvider);
+      // Analyze image(s) with AI - use multi-image if more than one
+      const analysis =
+        imageFiles.length > 1
+          ? await analyzeMultipleImages(imageFiles, "groq")
+          : await analyzeItemImage(imageFiles[0], aiProvider);
 
       // Update form with AI results
       setFormData((prev) => ({
@@ -155,7 +173,8 @@ export function ReportItemModal({
     } catch (err) {
       console.error("Error analyzing image:", err);
       alert(
-        `Analysis failed: ${err instanceof Error ? err.message : "Unknown error"
+        `Analysis failed: ${
+          err instanceof Error ? err.message : "Unknown error"
         }`
       );
       setStep("upload");
@@ -239,7 +258,8 @@ export function ReportItemModal({
     } catch (err) {
       console.error("Error submitting item:", err);
       alert(
-        `Failed to submit: ${err instanceof Error ? err.message : "Unknown error"
+        `Failed to submit: ${
+          err instanceof Error ? err.message : "Unknown error"
         }`
       );
     } finally {
@@ -283,12 +303,14 @@ export function ReportItemModal({
       <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
         {/* Header */}
         <div
-          className={`flex items-center justify-between p-4 border-b border-border flex-shrink-0 ${type === "Lost" ? "bg-red-50" : "bg-green-50"
-            }`}
+          className={`flex items-center justify-between p-4 border-b border-border flex-shrink-0 ${
+            type === "Lost" ? "bg-red-50" : "bg-green-50"
+          }`}
         >
           <h2
-            className={`text-lg font-semibold ${type === "Lost" ? "text-red-700" : "text-green-700"
-              }`}
+            className={`text-lg font-semibold ${
+              type === "Lost" ? "text-red-700" : "text-green-700"
+            }`}
           >
             Report {type} Item
           </h2>
@@ -309,31 +331,78 @@ export function ReportItemModal({
               {/* Image Upload */}
               <div className="mb-6">
                 <label className="text-sm text-text-secondary mb-2 block font-medium">
-                  Item Image{" "}
+                  Item Image{imageFiles.length > 1 ? "s" : ""}{" "}
                   {type === "Found" && <span className="text-red-500">*</span>}
                   {type === "Lost" && (
                     <span className="text-gray-400 text-xs ml-1">
                       (optional)
                     </span>
                   )}
+                  <span className="text-gray-400 text-xs ml-2">
+                    (Upload up to 5 images for better analysis)
+                  </span>
                 </label>
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full h-40 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-blue-50 transition-all overflow-hidden relative"
+                  className="w-full min-h-[160px] border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-blue-50 transition-all overflow-hidden relative p-4"
                 >
                   {imagePreviews.length > 0 ? (
-                    <img
-                      src={imagePreviews[0]}
-                      alt="Preview"
-                      className="w-full h-full object-contain"
-                    />
+                    <div className="w-full">
+                      {/* Image grid */}
+                      <div className="grid grid-cols-3 gap-2">
+                        {imagePreviews.map((preview, index) => (
+                          <div key={index} className="relative aspect-square">
+                            <img
+                              src={preview}
+                              alt={`Preview ${index + 1}`}
+                              className="w-full h-full object-cover rounded-lg"
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Remove this image
+                                const newFiles = [...imageFiles];
+                                const newPreviews = [...imagePreviews];
+                                newFiles.splice(index, 1);
+                                newPreviews.splice(index, 1);
+                                setImageFiles(newFiles);
+                                setImagePreviews(newPreviews);
+                              }}
+                              className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                              title="Remove image"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        {/* Add more images slot */}
+                        {imagePreviews.length < 5 && (
+                          <div className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50 hover:bg-gray-100">
+                            <div className="text-center">
+                              <Upload className="w-6 h-6 text-gray-400 mx-auto mb-1" />
+                              <span className="text-xs text-gray-500">
+                                Add more
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 text-center mt-2">
+                        {imagePreviews.length} image
+                        {imagePreviews.length > 1 ? "s" : ""} selected
+                      </p>
+                    </div>
                   ) : (
                     <>
                       <ImageIcon className="w-10 h-10 text-text-secondary mb-2" />
                       <p className="text-sm text-text-secondary">
                         {type === "Found"
-                          ? "Click to upload image (required)"
-                          : "Click to upload image (optional)"}
+                          ? "Click to upload image(s) (required)"
+                          : "Click to upload image(s) (optional)"}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Multiple images help AI analyze better
                       </p>
                     </>
                   )}
@@ -342,6 +411,7 @@ export function ReportItemModal({
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={handleImageChange}
                   className="hidden"
                 />
@@ -399,7 +469,7 @@ export function ReportItemModal({
                     setFormData({ ...formData, location })
                   }
                   onLocationSelect={(location, coordinates) =>
-                    setFormData(prev => ({ ...prev, location, coordinates }))
+                    setFormData((prev) => ({ ...prev, location, coordinates }))
                   }
                   placeholder={
                     type === "Lost"
@@ -422,7 +492,11 @@ export function ReportItemModal({
                       setFormData({ ...formData, collectionLocation: location })
                     }
                     onLocationSelect={(location, collectionCoordinates) =>
-                      setFormData(prev => ({ ...prev, collectionLocation: location, collectionCoordinates }))
+                      setFormData((prev) => ({
+                        ...prev,
+                        collectionLocation: location,
+                        collectionCoordinates,
+                      }))
                     }
                     placeholder="Where can the owner collect this item?"
                   />
@@ -475,10 +549,11 @@ export function ReportItemModal({
                       <button
                         type="button"
                         onClick={() => setAiProvider("gemini")}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${aiProvider === "gemini"
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border hover:bg-gray-50"
-                          }`}
+                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                          aiProvider === "gemini"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:bg-gray-50"
+                        }`}
                       >
                         Gemini
                       </button>
@@ -487,10 +562,11 @@ export function ReportItemModal({
                       <button
                         type="button"
                         onClick={() => setAiProvider("groq")}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${aiProvider === "groq"
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border hover:bg-gray-50"
-                          }`}
+                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                          aiProvider === "groq"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:bg-gray-50"
+                        }`}
                       >
                         Groq
                       </button>
@@ -511,10 +587,11 @@ export function ReportItemModal({
                     imageFiles.length === 0 &&
                     (!formData.name || !formData.description))
                 }
-                className={`w-full mt-4 py-4 text-white rounded-xl font-semibold text-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg ${type === "Lost"
-                  ? "bg-red-500 hover:bg-red-600"
-                  : "bg-green-500 hover:bg-green-600"
-                  }`}
+                className={`w-full mt-4 py-4 text-white rounded-xl font-semibold text-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg ${
+                  type === "Lost"
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-green-500 hover:bg-green-600"
+                }`}
               >
                 <Sparkles className="w-5 h-5" />
                 {type === "Lost" && imageFiles.length === 0
@@ -581,7 +658,6 @@ export function ReportItemModal({
                 />
               </div>
 
-
               {/* Color */}
               <div className="mb-4">
                 <label className="text-sm text-text-secondary mb-1 block font-medium">
@@ -647,8 +723,9 @@ export function ReportItemModal({
                   <div>
                     <p className="text-text-secondary">Type</p>
                     <p
-                      className={`font-medium ${type === "Lost" ? "text-red-600" : "text-green-600"
-                        }`}
+                      className={`font-medium ${
+                        type === "Lost" ? "text-red-600" : "text-green-600"
+                      }`}
                     >
                       {type}
                     </p>
@@ -685,10 +762,11 @@ export function ReportItemModal({
                 <button
                   onClick={handleSubmit}
                   disabled={loading}
-                  className={`flex-1 py-3 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${type === "Lost"
-                    ? "bg-red-500 hover:bg-red-600"
-                    : "bg-green-500 hover:bg-green-600"
-                    }`}
+                  className={`flex-1 py-3 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
+                    type === "Lost"
+                      ? "bg-red-500 hover:bg-red-600"
+                      : "bg-green-500 hover:bg-green-600"
+                  }`}
                 >
                   {loading ? (
                     <>
@@ -711,20 +789,33 @@ export function ReportItemModal({
               <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Sparkles className="w-8 h-8" />
               </div>
-              <h3 className="text-2xl font-bold text-text-primary mb-2">Report Submitted!</h3>
-              <p className="text-text-secondary mb-6">Your {type.toLowerCase()} item report has been successfully recorded.</p>
+              <h3 className="text-2xl font-bold text-text-primary mb-2">
+                Report Submitted!
+              </h3>
+              <p className="text-text-secondary mb-6">
+                Your {type.toLowerCase()} item report has been successfully
+                recorded.
+              </p>
 
               {matchResult && matchResult.highestScore > 0 && (
                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-6">
                   <div className="flex items-center justify-center gap-2 text-blue-700 mb-2">
                     <Sparkles className="w-5 h-5" />
-                    <span className="font-semibold text-lg">AI Match Found!</span>
+                    <span className="font-semibold text-lg">
+                      AI Match Found!
+                    </span>
                   </div>
-                  <div className="text-4xl font-bold text-blue-600 mb-2">{matchResult.highestScore}%</div>
-                  <p className="text-sm text-blue-600">Match confidence score based on your description, location, and details.</p>
+                  <div className="text-4xl font-bold text-blue-600 mb-2">
+                    {matchResult.highestScore}%
+                  </div>
+                  <p className="text-sm text-blue-600">
+                    Match confidence score based on your description, location,
+                    and details.
+                  </p>
                   {matchResult.highestScore >= 75 && (
                     <div className="mt-4 p-2 bg-white/50 rounded-lg text-xs text-blue-800 font-medium">
-                      High confidence match detected! You can review details in the matches section.
+                      High confidence match detected! You can review details in
+                      the matches section.
                     </div>
                   )}
                 </div>

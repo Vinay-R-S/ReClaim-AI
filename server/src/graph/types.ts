@@ -113,7 +113,8 @@ export const ReportFlowAnnotation = Annotation.Root({
         reducer: (_, next) => next,
         default: () => '',
     }),
-    imageBase64: Annotation<string | undefined>({
+    // Support both single image (backward compat) and multiple images
+    imageBase64: Annotation<string | string[] | undefined>({
         reducer: (_, next) => next,
         default: () => undefined,
     }),

@@ -34,11 +34,11 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     const client = getResendClient();
 
     if (!client) {
-      console.warn('⚠️ Resend API key not configured, skipping email');
+      console.warn('Resend API key not configured, skipping email');
       return false;
     }
 
-    console.log('📤 Sending email via Resend:', {
+    console.log('Sending email via Resend:', {
       to: options.to,
       subject: options.subject,
     });
@@ -52,14 +52,14 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     });
 
     if (error) {
-      console.error('❌ Resend email error:', error);
+      console.error('Resend email error:', error);
       return false;
     }
 
-    console.log('✅ Email sent successfully via Resend:', data?.id);
+    console.log('Email sent successfully via Resend:', data?.id);
     return true;
   } catch (error) {
-    console.error('💥 Email send failed:', error);
+    console.error('Email send failed:', error);
     return false;
   }
 }

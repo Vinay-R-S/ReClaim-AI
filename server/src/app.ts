@@ -43,7 +43,7 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 
 // Start server
 app.listen(PORT, () => {
-    console.log(`🚀 ReClaim AI Server running on http://localhost:${PORT}`);
+    console.log(`ReClaim AI Server running on http://localhost:${PORT}`);
 });
 
 export default app;

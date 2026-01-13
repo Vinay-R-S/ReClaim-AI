@@ -15,17 +15,36 @@ import {
     haversineDistance,
     calculateTimeDifference
 } from '../utils/scoring.js';
+import { compareMultipleImages, isClarifaiConfigured } from './clarifaiMatch.service.js';
 
 /**
- * Calculate image similarity using AI vision
+ * Calculate image similarity using Clarifai
+ * Supports multiple images per item
  */
 async function calculateImageScore(
-    itemImageUrl?: string,
-    searchImageBase64?: string
+    itemImageUrls: string[],
+    searchImageUrls: string[]
 ): Promise<number> {
-    // Image matching disabled per user request (unreliable)
-    // Can be re-enabled later with Clarifai or other service
-    return 0;
+    // Check if Clarifai is configured
+    if (!isClarifaiConfigured()) {
+        // Image matching disabled - Clarifai not configured
+        return 0;
+    }
+
+    // If no images on either side, return 0
+    if (!itemImageUrls.length || !searchImageUrls.length) {
+        return 0;
+    }
+
+    try {
+        // Use multi-image comparison
+        const similarity = await compareMultipleImages(itemImageUrls, searchImageUrls);
+        // Convert 0-100 score to weighted match score (max 5 points)
+        return Math.round((similarity / 100) * 5);
+    } catch (error) {
+        console.error('[Matching] Image comparison failed:', error);
+        return 0;
+    }
 }
 
 /**
@@ -50,7 +69,8 @@ export async function findMatchesForLostItem(
         coordinates?: Coordinates;
         date: Date;
         color?: string;
-        imageBase64?: string;
+        imageBase64?: string;  // Legacy single image
+        cloudinaryUrls?: string[];  // Multiple uploaded images
     }
 ): Promise<MatchResult[]> {
     // Get all found items that are pending
@@ -114,9 +134,10 @@ export async function findMatchesForLostItem(
         const locationScore = calculateLocationScore(lostItem.coordinates, item.coordinates);
         const timeScore = calculateTimeScore(searchDate, itemDate);
 
-        // Image score
-        const imageUrl = item.cloudinaryUrls?.[0] || item.imageUrl;
-        const imageScore = await calculateImageScore(imageUrl, lostItem.imageBase64);
+        // Image score - compare all available images
+        const itemImageUrls = item.cloudinaryUrls || (item.imageUrl ? [item.imageUrl] : []);
+        const searchImageUrls = lostItem.cloudinaryUrls || [];
+        const imageScore = await calculateImageScore(itemImageUrls, searchImageUrls);
 
         const totalScore = Math.round(
             tagScore + descriptionScore + colorScore + locationScore + timeScore + imageScore
@@ -157,7 +178,8 @@ export async function findMatchesForFoundItem(
         coordinates?: Coordinates;
         date: Date;
         color?: string;
-        imageBase64?: string;
+        imageBase64?: string;  // Legacy single image
+        cloudinaryUrls?: string[];  // Multiple uploaded images
     }
 ): Promise<MatchResult[]> {
     // Get all lost items that are pending
@@ -213,8 +235,10 @@ export async function findMatchesForFoundItem(
         const locationScore = calculateLocationScore(foundItem.coordinates, item.coordinates);
         const timeScore = calculateTimeScore(searchDate, itemDate);
 
-        const imageUrl = item.cloudinaryUrls?.[0] || item.imageUrl;
-        const imageScore = await calculateImageScore(imageUrl, foundItem.imageBase64);
+        // Image score - compare all available images
+        const itemImageUrls = item.cloudinaryUrls || (item.imageUrl ? [item.imageUrl] : []);
+        const searchImageUrls = foundItem.cloudinaryUrls || [];
+        const imageScore = await calculateImageScore(itemImageUrls, searchImageUrls);
 
         const totalScore = Math.round(
             tagScore + descriptionScore + colorScore + locationScore + timeScore + imageScore

@@ -16,7 +16,7 @@ interface Message {
   content: string;
   chips?: { label: string; icon?: string }[];
   isLoading?: boolean;
-  imageUrl?: string; // URL of uploaded image to display
+  imageUrls?: string[]; // URLs of uploaded images to display (supports multiple)
 }
 
 const CONTEXT_MAP: Record<string, ConversationContext> = {
@@ -258,27 +258,35 @@ export function ChatInterface() {
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user?.uid) return;
+    const files = e.target.files;
+    if (!files || files.length === 0 || !user?.uid) return;
 
     setIsLoading(true);
 
     try {
-      const base64 = await fileToBase64(file);
+      // Convert all files to base64
+      const filesArray = Array.from(files).slice(0, 5); // Limit to 5 images
+      const base64Promises = filesArray.map((file) => fileToBase64(file));
+      const base64Images = await Promise.all(base64Promises);
 
-      // Create a local preview URL for the image
-      const previewUrl = URL.createObjectURL(file);
+      // Create preview URLs for all images
+      const previewUrls = filesArray.map((file) => URL.createObjectURL(file));
 
       // Show toast notification
-      setToast({ message: "Image uploaded! Analyzing...", type: "success" });
+      setToast({
+        message: `${filesArray.length} image${
+          filesArray.length > 1 ? "s" : ""
+        } uploaded! Analyzing...`,
+        type: "success",
+      });
       setTimeout(() => setToast(null), 3000);
 
-      // Add message with only the image (no text)
+      // Add message with images (no text)
       const userMessage: Message = {
         id: Date.now().toString(),
         type: "user",
-        content: "", // Empty content - just show image
-        imageUrl: previewUrl,
+        content: "", // Empty content - just show images
+        imageUrls: previewUrls,
       };
 
       const loadingMessage: Message = {
@@ -290,13 +298,16 @@ export function ChatInterface() {
 
       setMessages((prev) => [...prev, userMessage, loadingMessage]);
 
+      // Send all images to backend
       const response = await sendMessage(
         user.uid,
-        "I've uploaded an image of the item.",
+        filesArray.length > 1
+          ? `I've uploaded ${filesArray.length} images of the item.`
+          : "I've uploaded an image of the item.",
         {
           conversationId: conversationId ?? undefined,
           context: currentContext ?? undefined,
-          imageData: base64,
+          imageData: base64Images.length === 1 ? base64Images[0] : base64Images,
         }
       );
 
@@ -317,7 +328,7 @@ export function ChatInterface() {
         ];
       });
     } catch (error) {
-      console.error("Failed to upload image:", error);
+      console.error("Failed to upload image(s):", error);
       setMessages((prev) => {
         const filtered = prev.filter((m) => !m.isLoading);
         return [
@@ -325,12 +336,14 @@ export function ChatInterface() {
           {
             id: (Date.now() + 2).toString(),
             type: "assistant",
-            content: "Failed to process the image. Please try again.",
+            content: "Failed to process the image(s). Please try again.",
           },
         ];
       });
     } finally {
       setIsLoading(false);
+      // Reset file input
+      e.target.value = "";
     }
   };
 
@@ -466,10 +479,11 @@ export function ChatInterface() {
       {/* Toast Notification */}
       {toast && (
         <div
-          className={`absolute top-2 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in ${toast.type === "success"
-            ? "bg-google-green text-white"
-            : "bg-google-red text-white"
-            }`}
+          className={`absolute top-2 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in ${
+            toast.type === "success"
+              ? "bg-google-green text-white"
+              : "bg-google-red text-white"
+          }`}
         >
           <span>{toast.type === "success" ? "✓" : "✕"}</span>
           <span className="text-sm font-medium">{toast.message}</span>
@@ -540,12 +554,27 @@ export function ChatInterface() {
               <div className="flex justify-end">
                 <div className="flex items-end gap-2">
                   <div className="chat-bubble chat-bubble-user">
-                    {message.imageUrl && (
-                      <img
-                        src={message.imageUrl}
-                        alt="Uploaded"
-                        className="max-w-[200px] max-h-[200px] rounded-lg mb-2 object-cover"
-                      />
+                    {message.imageUrls && message.imageUrls.length > 0 && (
+                      <div
+                        className={`mb-2 ${
+                          message.imageUrls.length > 1
+                            ? "grid grid-cols-2 gap-1"
+                            : ""
+                        }`}
+                      >
+                        {message.imageUrls.map((url, idx) => (
+                          <img
+                            key={idx}
+                            src={url}
+                            alt={`Uploaded ${idx + 1}`}
+                            className={`rounded-lg object-cover ${
+                              message.imageUrls!.length === 1
+                                ? "max-w-[200px] max-h-[200px]"
+                                : "w-[100px] h-[100px]"
+                            }`}
+                          />
+                        ))}
+                      </div>
                     )}
                     {message.content && (
                       <p className="text-sm">{message.content}</p>
@@ -581,6 +610,7 @@ export function ChatInterface() {
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              multiple
               className="hidden"
               onChange={handleImageUpload}
             />
@@ -588,7 +618,7 @@ export function ChatInterface() {
               className="p-2 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading}
-              title="Attach file"
+              title="Attach images (up to 5)"
             >
               <Paperclip className="w-5 h-5 text-text-secondary" />
             </button>

@@ -20,13 +20,13 @@ import { auth, googleProvider, db } from "../lib/firebase";
 // Helper function to send login notification
 const sendLoginNotification = async (userId: string) => {
   try {
-    console.log('🔔 Attempting to send login notification for user:', userId);
+    console.log("Attempting to send login notification for user:", userId);
     const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
     const response = await fetch(`${API_URL}/api/auth/login-notification`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         userId,
@@ -35,15 +35,15 @@ const sendLoginNotification = async (userId: string) => {
     });
 
     const result = await response.json();
-    console.log('📧 Login notification response:', result);
+    console.log("Login notification response:", result);
 
     if (!response.ok) {
-      console.error('❌ Failed to send login notification:', result);
+      console.error("Failed to send login notification:", result);
     } else {
-      console.log('✅ Login notification sent successfully:', result);
+      console.log("Login notification sent successfully:", result);
     }
   } catch (error) {
-    console.error('❌ Error sending login notification:', error);
+    console.error("Error sending login notification:", error);
   }
 };
 
@@ -78,7 +78,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<"user" | "admin" | null>(null);
-  const [userStatus, setUserStatus] = useState<"active" | "blocked" | null>(null);
+  const [userStatus, setUserStatus] = useState<"active" | "blocked" | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [blockedError, setBlockedError] = useState<string | null>(null);
@@ -132,9 +134,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           { lastLoginAt: serverTimestamp() },
           { merge: true }
         );
-
-        // Send login notification email
-        await sendLoginNotification(uid);
       } else {
         // New user - handled by saveUserToFirestore
         await saveUserToFirestore(auth.currentUser!);
@@ -168,9 +167,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         };
         await setDoc(userRef, newUser);
         setRole("user");
-
-        // Send login notification email for new users
-        await sendLoginNotification(user.uid);
       } else {
         // Existing user - update last login
         await setDoc(
@@ -192,7 +188,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setError(null);
       setLoading(true);
-      await signInWithPopup(auth, googleProvider);
+      await signInWithPopup(auth, googleProvider).then(async (result) => {
+        if (result.user) {
+          await sendLoginNotification(result.user.uid);
+        }
+      });
     } catch (err: any) {
       setError(err.message || "Failed to sign in with Google");
       throw err;
@@ -206,7 +206,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setError(null);
       setLoading(true);
-      await signInWithEmailAndPassword(auth, email, password);
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      if (result.user) {
+        await sendLoginNotification(result.user.uid);
+      }
     } catch (err: any) {
       const errorMessage = getAuthErrorMessage(err.code);
       setError(errorMessage);
@@ -231,9 +234,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         password
       );
 
-      // Update display name if provided
       if (displayName && result.user) {
         await updateProfile(result.user, { displayName });
+      }
+
+      if (result.user) {
+        await sendLoginNotification(result.user.uid);
       }
     } catch (err: any) {
       const errorMessage = getAuthErrorMessage(err.code);

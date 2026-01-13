@@ -247,6 +247,106 @@ export async function invokeLLMWithVision(
 }
 
 /**
+ * Invoke LLM with vision capability for MULTIPLE images
+ * Sends all images together for comprehensive analysis
+ */
+export async function invokeLLMWithMultipleImages(
+    prompt: string,
+    imagesBase64: string[],
+    options?: {
+        temperature?: number;
+        maxTokens?: number;
+    }
+): Promise<{ content: string; provider: 'groq' }> {
+    const apiKey = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
+
+    if (!apiKey) {
+        throw new Error('Groq API key not configured for vision');
+    }
+
+    // If only one image, use the single image function
+    if (imagesBase64.length === 1) {
+        return invokeLLMWithVision(prompt, imagesBase64[0], options);
+    }
+
+    // If no images, return empty
+    if (imagesBase64.length === 0) {
+        throw new Error('No images provided for analysis');
+    }
+
+    // Build content array with text prompt and all images
+    const contentParts: Array<{
+        type: 'text' | 'image_url';
+        text?: string;
+        image_url?: { url: string };
+    }> = [
+            {
+                type: 'text',
+                text: `${prompt}\n\nIMPORTANT: You are analyzing ${imagesBase64.length} images of the SAME item from different angles. Synthesize information from ALL images to provide a comprehensive description. Look for details visible in some images but not others.`,
+            },
+        ];
+
+    // Add all images
+    for (let i = 0; i < imagesBase64.length; i++) {
+        const imageData = imagesBase64[i].replace(/^data:image\/\w+;base64,/, '');
+        contentParts.push({
+            type: 'image_url',
+            image_url: {
+                url: `data:image/jpeg;base64,${imageData}`,
+            },
+        });
+    }
+
+    const url = 'https://api.groq.com/openai/v1/chat/completions';
+
+    const requestBody = {
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [
+            {
+                role: 'user',
+                content: contentParts,
+            },
+        ],
+        temperature: options?.temperature ?? 0.2,
+        max_tokens: options?.maxTokens ?? 2048,
+    };
+
+    try {
+        console.log(`[Vision] Sending ${imagesBase64.length} images to Groq for multi-image analysis...`);
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.text();
+            console.error('[Vision] Groq API Error:', response.status, errorData);
+            throw new Error(`Groq API error: ${response.status}`);
+        }
+
+        const data = await response.json() as {
+            choices?: Array<{
+                message?: {
+                    content?: string;
+                };
+            }>;
+        };
+        const content = data.choices?.[0]?.message?.content || '';
+
+        console.log('[Vision] Multi-image analysis complete');
+        return { content, provider: 'groq' };
+    } catch (error) {
+        console.error('[Vision] Failed to analyze multiple images:', error);
+        throw new Error('Failed to analyze images with vision model');
+    }
+}
+
+/**
  * System prompt for the ReClaim AI assistant
  */
 export const SYSTEM_PROMPT = `You are ReClaim AI Assistant, a helpful bot for a lost and found platform.

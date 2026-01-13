@@ -11,6 +11,8 @@ const CLARIFAI_USER_ID = process.env.CLARIFAI_USER_ID || 'clarifai';
 const CLARIFAI_APP_ID = process.env.CLARIFAI_APP_ID || 'main';
 const CLARIFAI_MODEL_ID = process.env.CLARIFAI_MODEL_ID || 'general-image-recognition';
 
+
+
 interface ClarifaiResponse {
     status: {
         code: number;
@@ -70,6 +72,61 @@ export async function compareImages(
     } catch (error) {
         console.error('[CLARIFAI] Error comparing images:', error);
         return 0; // Return 0 on error to prevent matching
+    }
+}
+
+/**
+ * Compare multiple images from two items and return the best match score
+ * Cross-compares all images from item1 with all images from item2
+ * @param imageUrls1 - Array of image URLs from first item
+ * @param imageUrls2 - Array of image URLs from second item
+ * @returns Best similarity score from 0-100 across all pairs
+ */
+export async function compareMultipleImages(
+    imageUrls1: string[],
+    imageUrls2: string[]
+): Promise<number> {
+    // Filter out empty/null URLs
+    const urls1 = imageUrls1.filter(url => url && url.trim());
+    const urls2 = imageUrls2.filter(url => url && url.trim());
+
+    // If either set is empty, return 0
+    if (urls1.length === 0 || urls2.length === 0) {
+        console.warn('[CLARIFAI] One or both image arrays are empty, returning 0 score');
+        return 0;
+    }
+
+    // If only one image each, use the simple comparison
+    if (urls1.length === 1 && urls2.length === 1) {
+        return compareImages(urls1[0], urls2[0]);
+    }
+
+    console.log(`[CLARIFAI] Cross-comparing ${urls1.length} images with ${urls2.length} images`);
+
+    try {
+        // Build all comparison pairs
+        const comparisonPairs: Array<{ url1: string; url2: string }> = [];
+        for (const url1 of urls1) {
+            for (const url2 of urls2) {
+                comparisonPairs.push({ url1, url2 });
+            }
+        }
+
+        // Run comparisons (limit to first 9 pairs to avoid API rate limits)
+        const pairsToCompare = comparisonPairs.slice(0, 9);
+        const comparisonPromises = pairsToCompare.map(pair =>
+            compareImages(pair.url1, pair.url2)
+        );
+
+        const scores = await Promise.all(comparisonPromises);
+        const maxScore = Math.max(...scores, 0);
+
+        console.log(`[CLARIFAI] Best match score across ${pairsToCompare.length} pairs: ${maxScore}%`);
+        return maxScore;
+
+    } catch (error) {
+        console.error('[CLARIFAI] Error in multi-image comparison:', error);
+        return 0;
     }
 }
 

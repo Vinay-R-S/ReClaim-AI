@@ -23,6 +23,7 @@ import {
     deleteMatchedItemsTool,
     extractItemDataTool,
     uploadImageTool,
+    uploadMultipleImagesTool,
 } from './tools.js';
 import { invokeLLMWithFallback, SYSTEM_PROMPT } from './langchainConfig.js';
 import { MATCH_CONFIG } from '../utils/scoring.js';
@@ -140,15 +141,29 @@ async function handleGreet(state: ReportFlowState): Promise<Partial<ReportFlowSt
 async function handleCollectDescription(state: ReportFlowState): Promise<Partial<ReportFlowState>> {
     console.log('[Graph:collectDescription] Message:', state.lastUserMessage?.substring(0, 50));
 
-    // Handle image upload
+    // Handle image upload - normalize to array
     let cloudinaryUrls = state.itemData.cloudinaryUrls || [];
-    if (state.imageBase64) {
+    const imagesBase64 = state.imageBase64
+        ? (Array.isArray(state.imageBase64) ? state.imageBase64 : [state.imageBase64])
+        : [];
+
+    if (imagesBase64.length > 0) {
         try {
-            console.log('[Graph:collectDescription] Uploading image...');
-            const uploadResult = await uploadImageTool.invoke({ imageBase64: state.imageBase64 });
-            if (uploadResult.success) {
-                cloudinaryUrls = [...cloudinaryUrls, uploadResult.url];
-                console.log('[Graph:collectDescription] Image uploaded:', uploadResult.url);
+            console.log(`[Graph:collectDescription] Uploading ${imagesBase64.length} image(s)...`);
+            if (imagesBase64.length === 1) {
+                // Single image upload
+                const uploadResult = await uploadImageTool.invoke({ imageBase64: imagesBase64[0] });
+                if (uploadResult.success) {
+                    cloudinaryUrls = [...cloudinaryUrls, uploadResult.url];
+                    console.log('[Graph:collectDescription] Image uploaded:', uploadResult.url);
+                }
+            } else {
+                // Multiple images upload
+                const uploadResult = await uploadMultipleImagesTool.invoke({ imagesBase64 });
+                if (uploadResult.success) {
+                    cloudinaryUrls = [...cloudinaryUrls, ...uploadResult.urls];
+                    console.log(`[Graph:collectDescription] ${uploadResult.urls.length} images uploaded`);
+                }
             }
         } catch (error) {
             console.error('[Graph:collectDescription] Image upload failed:', error);

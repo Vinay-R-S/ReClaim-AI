@@ -5,7 +5,7 @@
 
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { invokeLLMWithFallback, invokeLLMWithVision } from './langchainConfig.js';
+import { invokeLLMWithFallback, invokeLLMWithVision, invokeLLMWithMultipleImages } from './langchainConfig.js';
 import { uploadImage } from '../services/cloudinary.js';
 import { findMatchesForLostItem, findMatchesForFoundItem } from '../services/matching.js';
 import { awardFoundItemCredits } from '../services/credits.js';
@@ -21,13 +21,18 @@ export const extractItemDataTool = tool(
         message: string;
         currentData: CollectedItemData;
         context: ConversationContext;
-        imageBase64?: string;
+        imageBase64?: string | string[]; // Support single or multiple images
     }): Promise<{
         extracted: Partial<CollectedItemData>;
         confidence: number;
     }> => {
         const { message, currentData, context, imageBase64 } = input;
-        const hasImage = !!imageBase64;
+        // Normalize to array for consistent handling
+        const imagesArray = imageBase64
+            ? (Array.isArray(imageBase64) ? imageBase64 : [imageBase64])
+            : [];
+        const hasImage = imagesArray.length > 0;
+        const hasMultipleImages = imagesArray.length > 1;
 
         const prompt = hasImage
             ? `You are analyzing an image of a ${context === 'report_lost' ? 'lost' : 'found'} item along with user text.
@@ -95,10 +100,15 @@ Only include fields that have actual values from the message. Don't invent or as
         try {
             let response: { content: string };
 
-            if (hasImage && imageBase64) {
+            if (hasImage) {
                 // Use vision model for image analysis
-                console.log('[ExtractDataTool] Using vision model for image analysis');
-                response = await invokeLLMWithVision(prompt, imageBase64, { temperature: 0.1 });
+                if (hasMultipleImages) {
+                    console.log(`[ExtractDataTool] Using vision model for ${imagesArray.length} images`);
+                    response = await invokeLLMWithMultipleImages(prompt, imagesArray, { temperature: 0.1 });
+                } else {
+                    console.log('[ExtractDataTool] Using vision model for single image');
+                    response = await invokeLLMWithVision(prompt, imagesArray[0], { temperature: 0.1 });
+                }
             } else {
                 // Use regular LLM for text extraction
                 response = await invokeLLMWithFallback([
@@ -176,12 +186,12 @@ Only include fields that have actual values from the message. Don't invent or as
     },
     {
         name: 'extract_item_data',
-        description: 'Extract item information from user message and/or uploaded image',
+        description: 'Extract item information from user message and/or uploaded images',
         schema: z.object({
             message: z.string().describe('User message text'),
             currentData: z.any().describe('Currently collected item data'),
             context: z.enum(['report_lost', 'report_found', 'check_matches', 'find_collection', 'idle']),
-            imageBase64: z.string().optional().describe('Base64 encoded image'),
+            imageBase64: z.union([z.string(), z.array(z.string())]).optional().describe('Base64 encoded image(s)'),
         }),
     }
 );
@@ -205,6 +215,36 @@ export const uploadImageTool = tool(
         description: 'Upload an image to cloud storage',
         schema: z.object({
             imageBase64: z.string().describe('Base64 encoded image data'),
+        }),
+    }
+);
+
+/**
+ * Tool: Upload multiple images to Cloudinary
+ */
+export const uploadMultipleImagesTool = tool(
+    async (input: { imagesBase64: string[] }): Promise<{ urls: string[]; success: boolean }> => {
+        try {
+            if (!input.imagesBase64 || input.imagesBase64.length === 0) {
+                return { urls: [], success: true };
+            }
+
+            const uploadPromises = input.imagesBase64.map(img => uploadImage(img));
+            const results = await Promise.all(uploadPromises);
+            const urls = results.map(r => r.url);
+
+            console.log(`[UploadMultipleImagesTool] Uploaded ${urls.length} images`);
+            return { urls, success: true };
+        } catch (error) {
+            console.error('[UploadMultipleImagesTool] Error:', error);
+            return { urls: [], success: false };
+        }
+    },
+    {
+        name: 'upload_multiple_images',
+        description: 'Upload multiple images to cloud storage',
+        schema: z.object({
+            imagesBase64: z.array(z.string()).describe('Array of base64 encoded images'),
         }),
     }
 );
@@ -295,10 +335,10 @@ export const searchMatchesTool = tool(
     async (input: {
         itemData: CollectedItemData;
         type: 'Lost' | 'Found';
-        imageBase64?: string;
+        imageBase64?: string | string[]; // Support single or multiple images
     }): Promise<{ matches: MatchResult[] }> => {
         try {
-            const { itemData, type, imageBase64 } = input;
+            const { itemData, type } = input;
 
             const searchParams = {
                 name: itemData.name || 'Unknown Item',
@@ -307,7 +347,7 @@ export const searchMatchesTool = tool(
                 color: itemData.color,
                 coordinates: itemData.coordinates,
                 date: itemData.date instanceof Date ? itemData.date : new Date(itemData.date as any || Date.now()),
-                imageBase64,
+                cloudinaryUrls: itemData.cloudinaryUrls || [], // Pass cloudinary URLs for image matching
             };
 
             const matches = type === 'Lost'
@@ -327,7 +367,7 @@ export const searchMatchesTool = tool(
         schema: z.object({
             itemData: z.any().describe('Item data to match against'),
             type: z.enum(['Lost', 'Found']).describe('Type of item to search for'),
-            imageBase64: z.string().optional().describe('Image for visual matching'),
+            imageBase64: z.union([z.string(), z.array(z.string())]).optional().describe('Image(s) for visual matching'),
         }),
     }
 );

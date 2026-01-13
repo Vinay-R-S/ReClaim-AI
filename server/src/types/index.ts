@@ -187,7 +187,7 @@ export interface ChatRequest {
     conversationId?: string;
     message: string;
     context?: ConversationContext;
-    imageData?: string; // Base64
+    imageData?: string | string[]; // Base64 - single image or array
     location?: Coordinates;
 }
 

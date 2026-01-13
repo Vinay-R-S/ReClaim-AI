@@ -16,7 +16,7 @@ export async function updateUserItemCounts(
 ): Promise<{ success: boolean; error?: string }> {
     try {
         const increment = operation === 'increment' ? 1 : -1;
-        
+
         // Prepare update object based on item type
         const updateData: Record<string, FieldValue> = {
             totalItemsCount: FieldValue.increment(increment),
@@ -32,11 +32,11 @@ export async function updateUserItemCounts(
         await collections.users.doc(userId).update(updateData);
 
         console.log(`Updated ${itemType} item count for user ${userId}: ${operation} by 1`);
-        
+
         return { success: true };
     } catch (error) {
         console.error('Error updating user item counts:', error);
-        
+
         // If user document doesn't exist, create it with initial counts
         if (error instanceof Error && error.message.includes('No document to update')) {
             try {
@@ -48,7 +48,7 @@ export async function updateUserItemCounts(
 
                 await collections.users.doc(userId).set(initialData, { merge: true });
                 console.log(`Created initial item counts for user ${userId}`);
-                
+
                 return { success: true };
             } catch (createError) {
                 console.error('Error creating user item counts:', createError);
@@ -72,7 +72,7 @@ export async function initializeUserItemCounts(userId: string): Promise<{ succes
         }, { merge: true });
 
         console.log(`Initialized item counts for new user ${userId}`);
-        
+
         return { success: true };
     } catch (error) {
         console.error('Error initializing user item counts:', error);
@@ -91,20 +91,20 @@ export async function recalculateUserItemCounts(userId: string): Promise<{ succe
             .get();
 
         const items = snapshot.docs.map(doc => doc.data());
-        
+
         const lostCount = items.filter(item => item.type === 'Lost').length;
         const foundCount = items.filter(item => item.type === 'Found').length;
         const totalCount = items.length;
 
         // Update user with recalculated counts
         await collections.users.doc(userId).update({
-            lostItemsCount,
-            foundItemsCount,
-            totalItemsCount,
+            lostItemsCount: lostCount,
+            foundItemsCount: foundCount,
+            totalItemsCount: totalCount,
         });
 
         console.log(`Recalculated item counts for user ${userId}: Lost=${lostCount}, Found=${foundCount}, Total=${totalCount}`);
-        
+
         return { success: true };
     } catch (error) {
         console.error('Error recalculating user item counts:', error);
