@@ -20,13 +20,17 @@ ReClaim-AI/
 │   │   ├── components/
 │   │   ├── pages/
 │   │   ├── services/
-│   │   └── context/
+│   │   ├── context/
+│   │   ├── hooks/
+│   │   └── lib/
 │   └── package.json
 ├── server/          # Express + TypeScript backend
 │   ├── src/
 │   │   ├── routes/
 │   │   ├── services/
 │   │   ├── agents/
+│   │   ├── graph/       # LangGraph workflows
+│   │   ├── types/
 │   │   └── utils/
 │   └── package.json
 ├── .env.example     # Environment variables template
