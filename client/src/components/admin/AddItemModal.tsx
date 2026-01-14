@@ -357,7 +357,7 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
                 </p>
               )}
 
-              {/* Generate Button - Google Theme */}
+              {/* Generate Button */}
               <button
                 onClick={handleAnalyze}
                 disabled={imageFiles.length === 0}
@@ -385,7 +385,6 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
           {/* Step 3: Review */}
           {step === "review" && (
             <>
-              {/* Image Preview */}
               {/* Image Preview */}
               {imagePreviews.length > 0 && (
                 <div className="mb-6">

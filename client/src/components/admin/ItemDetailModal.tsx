@@ -10,6 +10,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { ImageCarousel } from "../ui/ImageCarousel";
 import {
   type Item,
   type ItemInput,
@@ -227,22 +228,14 @@ export function ItemDetailModal({
             </div>
           )}
 
-          {/* Images */}
-          <div className="mb-6 space-y-4">
-            {itemImages.length > 0 ? (
-              itemImages.map((img, idx) => (
-                <img
-                  key={idx}
-                  src={img}
-                  alt={`${item.name} ${idx + 1}`}
-                  className="w-full h-auto max-h-[60vh] object-contain rounded-xl bg-gray-50 border border-border"
-                />
-              ))
-            ) : (
-              <div className="w-full h-64 bg-gray-100 rounded-xl flex items-center justify-center">
-                <span className="text-4xl">📦</span>
-              </div>
-            )}
+          {/* Images Carousel */}
+          <div className="mb-6">
+            <ImageCarousel
+              images={itemImages}
+              alt={item.name}
+              className="rounded-xl"
+              imageClassName="rounded-xl max-h-[40vh] w-full"
+            />
           </div>
 
           {/* Details Grid */}
@@ -422,7 +415,7 @@ export function ItemDetailModal({
                             }
                             className="hover:text-google-red"
                           >
-                            ×
+                            x
                           </button>
                         </span>
                       ))}
@@ -516,7 +509,9 @@ export function ItemDetailModal({
                 <div className="flex items-center gap-4 bg-white p-3 rounded-lg border border-blue-50">
                   {matchedItem.imageUrl || matchedItem.cloudinaryUrls?.[0] ? (
                     <img
-                      src={matchedItem.imageUrl || matchedItem.cloudinaryUrls?.[0]}
+                      src={
+                        matchedItem.imageUrl || matchedItem.cloudinaryUrls?.[0]
+                      }
                       alt={matchedItem.name}
                       className="w-16 h-16 rounded-lg object-cover border border-gray-100"
                     />
@@ -533,10 +528,14 @@ export function ItemDetailModal({
                       {matchedItem.location}
                     </p>
                     <div className="flex items-center gap-2 mt-2">
-                      <span className={cn(
-                        "text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded",
-                        matchedItem.type === "Lost" ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"
-                      )}>
+                      <span
+                        className={cn(
+                          "text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded",
+                          matchedItem.type === "Lost"
+                            ? "bg-red-100 text-red-600"
+                            : "bg-green-100 text-green-600"
+                        )}
+                      >
                         {matchedItem.type}
                       </span>
                     </div>

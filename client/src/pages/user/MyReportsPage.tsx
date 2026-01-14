@@ -4,6 +4,7 @@ import { UserLayout } from "../../components/layout/UserLayout";
 import { useAuth } from "../../context/AuthContext";
 import { type Item } from "../../services/itemService";
 import { EditReportModal } from "../../components/user/EditReportModal";
+import { ImageCarousel } from "../../components/ui/ImageCarousel";
 import { Package, MapPin, Calendar, Edit2, Eye } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -83,6 +84,21 @@ export function MyReportsPage() {
 
   const getImageUrl = (item: Item) => {
     return item.imageUrl || item.cloudinaryUrls?.[0];
+  };
+
+  // Get all images from an item for carousel display
+  const getAllImages = (item: Item): string[] => {
+    const images: string[] = [];
+    if (item.cloudinaryUrls && item.cloudinaryUrls.length > 0) {
+      images.push(...item.cloudinaryUrls);
+    }
+    if (item.imageUrl && !images.includes(item.imageUrl)) {
+      images.push(item.imageUrl);
+    }
+    if (item.images && item.images.length > 0) {
+      images.push(...item.images.filter((img) => !images.includes(img)));
+    }
+    return images;
   };
 
   return (
@@ -198,14 +214,13 @@ export function MyReportsPage() {
               onClick={() => setSelectedItem(null)}
             />
             <div className="relative bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-              {/* Image */}
-              {getImageUrl(selectedItem) && (
-                <img
-                  src={getImageUrl(selectedItem)}
-                  alt={selectedItem.name}
-                  className="w-full h-48 object-cover"
-                />
-              )}
+              {/* Image Carousel */}
+              <ImageCarousel
+                images={getAllImages(selectedItem)}
+                alt={selectedItem.name}
+                className="rounded-t-2xl"
+                imageClassName="rounded-t-2xl"
+              />
 
               <div className="p-6">
                 <div className="flex items-start justify-between">

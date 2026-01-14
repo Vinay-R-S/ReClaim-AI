@@ -35,15 +35,48 @@ export function EditReportModal({
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper to parse date from various formats
+  const parseDateToString = (date: unknown): string => {
+    try {
+      if (!date) return new Date().toISOString().split("T")[0];
+
+      // Handle Firestore Timestamp instance
+      if (date instanceof Timestamp) {
+        return date.toDate().toISOString().split("T")[0];
+      }
+
+      // Handle serialized Timestamp from API (has seconds or _seconds)
+      if (typeof date === "object" && date !== null) {
+        const dateObj = date as { seconds?: number; _seconds?: number };
+        if (dateObj.seconds !== undefined || dateObj._seconds !== undefined) {
+          const seconds = dateObj.seconds ?? dateObj._seconds ?? 0;
+          return new Date(seconds * 1000).toISOString().split("T")[0];
+        }
+      }
+
+      // Handle Date object
+      if (date instanceof Date) {
+        return date.toISOString().split("T")[0];
+      }
+
+      // Handle ISO string
+      if (typeof date === "string") {
+        return new Date(date).toISOString().split("T")[0];
+      }
+
+      // Fallback
+      return new Date().toISOString().split("T")[0];
+    } catch {
+      return new Date().toISOString().split("T")[0];
+    }
+  };
+
   // Form state
   const [formData, setFormData] = useState({
-    name: item.name,
-    description: item.description,
-    location: item.location,
-    date:
-      item.date instanceof Timestamp
-        ? item.date.toDate().toISOString().split("T")[0]
-        : new Date(item.date).toISOString().split("T")[0],
+    name: item.name || "",
+    description: item.description || "",
+    location: item.location || "",
+    date: parseDateToString(item.date),
     tags: item.tags || [],
   });
 
@@ -78,10 +111,22 @@ export function EditReportModal({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    // Enforce max 5 images total
+    const totalImages = existingImages.length + newImages.length;
+    const maxNewImages = 5 - totalImages;
+
+    if (maxNewImages <= 0) {
+      setToast({
+        type: "error",
+        message: "Maximum 5 images allowed. Please remove some images first.",
+      });
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+
     try {
-      const uploadPromises = Array.from(files).map((file) =>
-        uploadItemImage(file)
-      );
+      const filesToUpload = Array.from(files).slice(0, maxNewImages);
+      const uploadPromises = filesToUpload.map((file) => uploadItemImage(file));
       const base64Images = await Promise.all(uploadPromises);
       setNewImages((prev) => [...prev, ...base64Images]);
     } catch (error) {

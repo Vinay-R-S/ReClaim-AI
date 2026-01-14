@@ -10,6 +10,7 @@ import {
   Clock,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { ImageCarousel } from "../ui/ImageCarousel";
 import {
   analyzeItemImage,
   analyzeMultipleImages,
@@ -617,13 +618,14 @@ export function ReportItemModal({
           {/* Step 3: Review */}
           {step === "review" && (
             <>
-              {/* Image Preview */}
+              {/* Image Preview Carousel */}
               {imagePreviews.length > 0 && (
                 <div className="mb-6">
-                  <img
-                    src={imagePreviews[0]}
+                  <ImageCarousel
+                    images={imagePreviews}
                     alt="Item"
-                    className="w-full h-48 object-cover rounded-xl"
+                    className="rounded-xl"
+                    imageClassName="rounded-xl"
                   />
                 </div>
               )}
