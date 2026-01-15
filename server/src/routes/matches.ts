@@ -100,10 +100,13 @@ router.post('/claim', async (req: Request, res: Response) => {
     }
 });
 
+import { initiateHandover } from '../services/handover.service.js';
+
 /**
  * POST /api/matches/verify
  * Admin verifies a claim (marks as successful or false)
  */
+
 router.post('/verify', async (req: Request, res: Response) => {
     try {
         const { itemId, claimUserId, isValid, adminId } = req.body;
@@ -120,33 +123,70 @@ router.post('/verify', async (req: Request, res: Response) => {
         const item = itemDoc.data()!;
 
         if (isValid) {
-            // Successful claim - award credits
-            const finderId = item.reportedBy;
-            await awardMatchCredits(finderId, claimUserId, itemId);
+            // VERIFIED MATCH - Initiate Handover
 
-            // Update item status
+            // 1. Find or Create Match Record
+            let matchId = '';
+            // Check if match exists (using item as either lost or found)
+            const matchQuery = await collections.matches
+                .where('foundItemId', '==', itemId)
+                .where('lostItemId', '==', item.matchedItemId || 'unknown') // Try to find by matched item
+                .limit(1)
+                .get();
+
+            if (!matchQuery.empty) {
+                matchId = matchQuery.docs[0].id;
+            } else {
+                // Try reverse
+                const matchQuery2 = await collections.matches
+                    .where('lostItemId', '==', itemId)
+                    .where('foundItemId', '==', item.matchedItemId || 'unknown')
+                    .limit(1)
+                    .get();
+                if (!matchQuery2.empty) {
+                    matchId = matchQuery2.docs[0].id;
+                }
+            }
+
+            // If still no match ID (e.g. manual claim without match record), create one
+            if (!matchId) {
+                const newMatch = await collections.matches.add({
+                    lostItemId: item.type === 'Lost' ? itemId : (item.matchedItemId || 'unknown'),
+                    foundItemId: item.type === 'Found' ? itemId : (item.matchedItemId || 'unknown'),
+                    matchScore: 100, // Verified manually
+                    status: 'matched',
+                    createdAt: FieldValue.serverTimestamp()
+                });
+                matchId = newMatch.id;
+            }
+
+            // 2. Initiate Handover
+            // We need both item IDs. 
+            const lostItemId = item.type === 'Lost' ? itemId : item.matchedItemId;
+            const foundItemId = item.type === 'Found' ? itemId : item.matchedItemId;
+
+            if (!lostItemId || !foundItemId) {
+                return res.status(400).json({ error: 'Cannot initiate handover: missing linked item ID' });
+            }
+
+            const result = await initiateHandover(matchId, lostItemId, foundItemId);
+
+            if (!result.success) {
+                return res.status(400).json({ error: result.message });
+            }
+
+            // Update item verification status but keep as Matched/Pending until handover
             await collections.items.doc(itemId).update({
-                status: 'Claimed',
+                verificationConfidence: 100,
                 verifiedBy: adminId,
                 verifiedAt: FieldValue.serverTimestamp(),
-                updatedAt: FieldValue.serverTimestamp(),
             });
-
-            // Get user email for notification
-            const userDoc = await collections.users.doc(claimUserId).get();
-            if (userDoc.exists) {
-                const userData = userDoc.data()!;
-                await sendClaimConfirmation(
-                    userData.email,
-                    item.name,
-                    item.location
-                );
-            }
 
             return res.json({
                 success: true,
-                message: 'Claim verified. Credits awarded to both parties.',
+                message: 'Match verified. Handover process initiated and emails sent.',
             });
+
         } else {
             // False claim - penalize
             await penalizeFalseClaim(claimUserId, itemId);

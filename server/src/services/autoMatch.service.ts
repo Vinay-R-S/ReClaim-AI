@@ -19,6 +19,7 @@ import {
     getTagsWithFallback
 } from '../utils/scoring.js';
 import { calculateCosineSimilarity } from '../utils/embeddings.js';
+import { initiateHandover } from './handover.service.js';
 
 // ============================================================================
 // HELPERS
@@ -230,6 +231,20 @@ export async function triggerAutoMatching(
 
                     const matchRef = await collections.matches.add(matchData);
                     console.log(`[AUTO-MATCH] 💾 Match record created: ${matchRef.id}`);
+
+                    // 🔔 INITIATE HANDOVER - Send verification emails
+                    try {
+                        console.log(`[AUTO-MATCH] 📧 Initiating handover process...`);
+                        const handoverResult = await initiateHandover(matchRef.id, lostItemId, foundItemId);
+                        if (handoverResult.success) {
+                            console.log(`[AUTO-MATCH] ✅ Handover emails sent successfully!`);
+                        } else {
+                            console.log(`[AUTO-MATCH] ⚠️ Handover initiation issue: ${handoverResult.message}`);
+                        }
+                    } catch (handoverError) {
+                        console.error(`[AUTO-MATCH] ❌ Handover error:`, handoverError);
+                        // Don't fail the match - handover can be retried
+                    }
                 }
 
                 // Track highest score for updating item status

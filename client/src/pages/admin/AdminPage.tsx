@@ -6,6 +6,7 @@ import { MatchesPage } from "./MatchesPage";
 import { UsersManagement } from "./UsersManagement";
 import { AdminSettings } from "./AdminSettings";
 import { PendingApprovalsPage } from "./PendingApprovalsPage";
+import { HandoversPage } from "./HandoversPage"; // [NEW]
 
 export function AdminPage() {
   return (
@@ -16,6 +17,7 @@ export function AdminPage() {
         <Route path="items" element={<AllItemsPage />} />
         <Route path="matches" element={<MatchesPage />} />
         <Route path="users" element={<UsersManagement />} />
+        <Route path="handovers" element={<HandoversPage />} /> {/* [NEW] */}
         <Route path="settings" element={<AdminSettings />} />
         <Route path="approvals" element={<PendingApprovalsPage />} />
         <Route path="*" element={<MainDashboard />} />

@@ -187,10 +187,13 @@ export function MyReportsPage() {
                   <div className="mt-3 flex items-center justify-between">
                     <span
                       className={cn(
-                        "badge",
-                        item.status === "Matched" && "badge-matched",
-                        item.status === "Pending" && "badge-pending",
-                        item.status === "Claimed" && "badge-claimed"
+                        "px-2 py-1 rounded-full text-xs font-medium border",
+                        item.status === "Matched" &&
+                          "bg-blue-50 text-blue-700 border-blue-200",
+                        item.status === "Pending" &&
+                          "bg-yellow-50 text-yellow-700 border-yellow-200",
+                        item.status === "Claimed" &&
+                          "bg-green-50 text-green-700 border-green-200"
                       )}
                     >
                       {item.status}

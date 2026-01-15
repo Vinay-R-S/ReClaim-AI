@@ -9,6 +9,7 @@ import { MyReportsPage } from "./pages/user/MyReportsPage";
 import { ProfilePage } from "./pages/user/ProfilePage";
 import { AdminPage } from "./pages/admin/AdminPage";
 import { UnderConstruction } from "./pages/UnderConstruction";
+import VerifyHandoverPage from "./pages/VerifyHandoverPage"; // [NEW]
 import "./index.css";
 
 function App() {
@@ -24,6 +25,11 @@ function App() {
           {/* Public Routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/auth" element={<AuthPage />} />
+          <Route
+            path="/verify/:matchId"
+            element={<VerifyHandoverPage />}
+          />{" "}
+          {/* [NEW] */}
           <Route path="/under-construction" element={<UnderConstruction />} />
           {/* Protected User Routes */}
           <Route

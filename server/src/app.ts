@@ -7,6 +7,7 @@ import matchesRoutes from './routes/matches.js';
 import notificationsRoutes from './routes/notifications.js';
 import settingsRoutes from './routes/settings.js';
 import verificationRoutes from './routes/verification.js';
+import handoverRoutes from './routes/handover.js'; // [NEW]
 import creditsRoutes from './routes/credits.js';
 import authRoutes from './routes/auth.js';
 

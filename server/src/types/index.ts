@@ -21,6 +21,8 @@ export interface User {
 export type ItemType = 'Lost' | 'Found';
 export type ItemStatus = 'Pending' | 'Matched' | 'Claimed' | 'Resolved';
 
+export * from './handover.js';
+
 export interface Coordinates {
     lat: number;
     lng: number;

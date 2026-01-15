@@ -52,6 +52,8 @@ export const collections = {
     verifications: db.collection('verifications'),
     settings: db.collection('settings'),
     matches: db.collection('matches'),  // Automatic image matching records
+    handovers: db.collection('handovers'),
+    handoverCodes: db.collection('handoverCodes'),
 } as const;
 
 export default app;

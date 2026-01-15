@@ -1,23 +1,26 @@
 /**
- * Email Service - Notifications via Resend
+ * Email Service - Notifications via NodeMailer
  */
 
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-// Lazy initialization - only create Resend client when needed
-let resend: Resend | null = null;
+// Email configuration
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587');
+const SMTP_USER = process.env.SMTP_USER || process.env.VITE_ADMIN_EMAIL;
+const SMTP_PASS = process.env.SMTP_PASS || process.env.VITE_ADMIN_PASSWORD; // You might need to add this env var
+const FROM_EMAIL = process.env.FROM_EMAIL || '"ReClaim AI" <noreply@reclaim.ai>';
 
-function getResendClient(): Resend | null {
-  if (!process.env.RESEND_API_KEY) {
-    return null;
-  }
-  if (!resend) {
-    resend = new Resend(process.env.RESEND_API_KEY);
-  }
-  return resend;
-}
-
-const FROM_EMAIL = process.env.FROM_EMAIL || 'ReClaim AI <onboarding@resend.dev>';
+// Create reusable transporter object using the default SMTP transport
+const transporter = nodemailer.createTransport({
+  host: SMTP_HOST,
+  port: SMTP_PORT,
+  secure: SMTP_PORT === 465, // true for 465, false for other ports
+  auth: {
+    user: SMTP_USER,
+    pass: SMTP_PASS,
+  },
+});
 
 export interface EmailOptions {
   to: string | string[];
@@ -31,19 +34,17 @@ export interface EmailOptions {
  */
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
   try {
-    const client = getResendClient();
-
-    if (!client) {
-      console.warn('Resend API key not configured, skipping email');
+    if (!SMTP_USER || !SMTP_PASS) {
+      console.warn('SMTP credentials not configured, skipping email to:', options.to);
       return false;
     }
 
-    console.log('Sending email via Resend:', {
+    console.log('Sending email via NodeMailer:', {
       to: options.to,
       subject: options.subject,
     });
 
-    const { data, error } = await client.emails.send({
+    const info = await transporter.sendMail({
       from: FROM_EMAIL,
       to: options.to,
       subject: options.subject,
@@ -51,12 +52,7 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
       text: options.text,
     });
 
-    if (error) {
-      console.error('Resend email error:', error);
-      return false;
-    }
-
-    console.log('Email sent successfully via Resend:', data?.id);
+    console.log('Email sent successfully:', info.messageId);
     return true;
   } catch (error) {
     console.error('Email send failed:', error);
@@ -299,78 +295,145 @@ export async function sendLoginNotification(
   loginTime: string
 ): Promise<boolean> {
   const html = `
-<!DOCTYPE html>
-<html>
-  <body style="margin:0; padding:0; background-color:#f6f7f9; font-family: Arial, Helvetica, sans-serif;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px;">
-      <tr>
-        <td align="center">
-          <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:6px; padding:32px;">
-
-        <!-- Header -->
-        <tr>
-          <td style="font-size:20px; font-weight:600; color:#111827; padding-bottom:16px;">
-            ReClaim AI Login Confirmation
-          </td>
-        </tr>
-
-        <!-- Body -->
-        <tr>
-          <td style="font-size:14px; line-height:1.6; color:#374151;">
-            <p style="margin:0 0 16px 0;">
-              Dear ${userName},
-            </p>
-
-            <p style="margin:0 0 16px 0;">
-              This email is to confirm that a successful login to your ReClaim AI account has occurred.
-            </p>
-
-            <p style="margin:24px 0 8px 0; font-weight:600; color:#111827;">
-              Login Information
-            </p>
-
-            <table cellpadding="0" cellspacing="0" style="font-size:14px; color:#374151;">
-              <tr>
-                <td style="padding:4px 8px 4px 0;">Date and Time:</td>
-                <td style="padding:4px 0;">${loginTime}</td>
-              </tr>
-              <tr>
-                <td style="padding:4px 8px 4px 0;">Account Email:</td>
-                <td style="padding:4px 0;">${userEmail}</td>
-              </tr>
-            </table>
-
-            <p style="margin:24px 0 16px 0;">
-              If you do not recognize this activity, please contact ReClaim AI support immediately.
-            </p>
-
-            <p style="margin:0;">
-              Sincerely,<br />
-              <strong>ReClaim AI Team</strong>
-            </p>
-          </td>
-        </tr>
-
-        <!-- Footer -->
-        <tr>
-          <td style="padding-top:32px; font-size:12px; color:#6b7280; border-top:1px solid #e5e7eb;">
-            This is an automated message. Please do not reply to this email.
-          </td>
-        </tr>
-
-      </table>
-    </td>
-  </tr>
-</table>
-  </body>
-</html>
+    <!DOCTYPE html>
+    <html>
+      <body style="margin:0; padding:0; background-color:#f6f7f9; font-family: Arial, Helvetica, sans-serif;">
+        <div style="padding:20px; background-color:#fff; border-radius:8px;">
+          <h2>Login Alert</h2>
+          <p>Dear ${userName},</p>
+          <p>A new login was detected on your account at ${loginTime}.</p>
+          <p>If this wasn't you, please secure your account immediately.</p>
+        </div>
+      </body>
+    </html>
   `;
 
   return sendEmail({
     to: userEmail,
-    subject: `ReClaim AI Login`,
+    subject: `ReClaim AI Login Alert`,
     html,
-    text: `Dear ${userName},\n\nThis email is to confirm that a successful login to your ReClaim AI account has occurred.\n\nLogin Information:\nDate and Time: ${loginTime}\nAccount Email: ${userEmail}\n\nIf you do not recognize this activity, please contact ReClaim AI support immediately.\n\nSincerely,\nReClaim AI Team\n\nThis is an automated message. Please do not reply to this email.`,
+    text: `Login Alert: New login detected for ${userName} at ${loginTime}.`,
+  });
+}
+
+/**
+ * Send handover code to lost person
+ */
+export async function sendHandoverCodeToLostPerson(
+  email: string,
+  itemName: string,
+  finderEmail: string,
+  collectionAddress: string,
+  code: string,
+  expiresAt: string
+): Promise<boolean> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #4285f4, #34a853); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; }
+        .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
+        .code-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 2px dashed #4285f4; text-align: center; }
+        .code { font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #4285f4; }
+        .info-row { margin: 10px 0; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .label { font-weight: bold; color: #555; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🤝 Verification Code</h1>
+        </div>
+        <div class="content">
+          <p>Your item <strong>${itemName}</strong> has been found! Used the code below to claim it.</p>
+          
+          <div class="code-box">
+            <div class="code">${code}</div>
+            <p style="font-size: 12px; color: #666; margin-top: 5px;">Valid until ${expiresAt}</p>
+          </div>
+
+          <h3>Collection Details</h3>
+          <div class="info-row">
+            <div class="label">Finder's Contact:</div>
+            <div>${finderEmail}</div>
+          </div>
+          <div class="info-row">
+            <div class="label">Collection Address:</div>
+            <div>${collectionAddress}</div>
+          </div>
+
+          <p><strong>Instructions:</strong> Meet the finder at the address above. When you receive your item, give them the 6-digit code above. They will enter it to confirm the handover.</p>
+        </div>
+        <div class="footer">
+          <p>ReClaim AI - Secure Handover</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `🔐 Your Handover Code for: ${itemName}`,
+    html,
+    text: `Your verification code for ${itemName} is: ${code}. Provide this to the finder (${finderEmail}) upon collection at ${collectionAddress}.`,
+  });
+}
+
+/**
+ * Send handover link to found person
+ */
+export async function sendHandoverLinkToFoundPerson(
+  email: string,
+  itemName: string,
+  verificationUrl: string
+): Promise<boolean> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #34a853, #4285f4); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; }
+        .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
+        .cta-button { display: inline-block; background: #34a853; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: bold; text-align: center; width: 80%; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>📦 Item Handover</h1>
+        </div>
+        <div class="content">
+          <p>You are about to hand over the found item: <strong>${itemName}</strong>.</p>
+          <p>When you meet the owner, ask them for their <strong>6-digit verification code</strong>.</p>
+          <p>Click the button below to verify the code and complete the process:</p>
+          
+          <div style="text-align: center;">
+            <a href="${verificationUrl}" class="cta-button">Verify Code & Confirm Handover</a>
+          </div>
+
+          <p><em>Important: Only hand over the item after the code is successfully verified.</em></p>
+        </div>
+        <div class="footer">
+          <p>ReClaim AI - Secure Handover</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `📦 Handover Confirmation: ${itemName}`,
+    html,
+    text: `Please verify the handover code for ${itemName} here: ${verificationUrl}`,
   });
 }
 
@@ -378,5 +441,5 @@ export async function sendLoginNotification(
  * Check if email service is configured
  */
 export function isEmailConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY;
+  return !!SMTP_USER && !!SMTP_PASS;
 }

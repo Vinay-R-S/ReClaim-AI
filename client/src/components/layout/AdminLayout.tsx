@@ -9,8 +9,6 @@ import {
   Users,
   UserCheck,
   Settings,
-  Bell,
-  Search,
   LogOut,
   User,
 } from "lucide-react";
@@ -50,7 +48,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           getAllMatches(),
         ]);
 
-        const pendingItems = items.filter(item => item.status === "Pending").length;
+        const pendingItems = items.filter(
+          (item) => item.status === "Pending"
+        ).length;
 
         setCounts({
           allItems: items.length, // Total items (Lost + Found)
@@ -110,9 +110,24 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     {
       title: "OVERVIEW",
       items: [
-        { name: "Dashboard", path: "/admin", icon: LayoutDashboard, badge: null },
-        { name: "All Items", path: "/admin/items", icon: Package, badge: counts.allItems || null },
-        { name: "Matches", path: "/admin/matches", icon: Link2, badge: counts.matches || null },
+        {
+          name: "Dashboard",
+          path: "/admin",
+          icon: LayoutDashboard,
+          badge: null,
+        },
+        {
+          name: "All Items",
+          path: "/admin/items",
+          icon: Package,
+          badge: counts.allItems || null,
+        },
+        {
+          name: "Matches",
+          path: "/admin/matches",
+          icon: Link2,
+          badge: counts.matches || null,
+        },
       ],
     },
     {
@@ -220,23 +235,6 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           <h1 className="text-xl font-medium text-text-primary">Dashboard</h1>
 
           <div className="flex items-center gap-4">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-              <input
-                type="text"
-                placeholder="Search items, users..."
-                className="w-64 pl-10 pr-4 py-2 rounded-lg border border-border bg-gray-50 text-sm 
-                         focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              />
-            </div>
-
-            {/* Notifications */}
-            <button className="p-2 rounded-full hover:bg-gray-100 transition-colors relative">
-              <Bell className="w-5 h-5 text-text-secondary" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-google-red rounded-full"></span>
-            </button>
-
             {/* User Avatar & Menu */}
             <div className="relative" ref={menuRef}>
               <button
