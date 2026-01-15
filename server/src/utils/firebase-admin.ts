@@ -51,7 +51,8 @@ export const collections = {
     collectionPoints: db.collection('collectionPoints'),
     verifications: db.collection('verifications'),
     settings: db.collection('settings'),
-    matches: db.collection('matches'),  // Automatic image matching records
+    matches: db.collection('matches'),  // Active automatic image matching records
+    matchHistory: db.collection('matchHistory'), // Completed matches (persisted)
     handovers: db.collection('handovers'),
     handoverCodes: db.collection('handoverCodes'),
 } as const;

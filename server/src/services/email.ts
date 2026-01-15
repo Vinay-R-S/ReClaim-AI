@@ -416,7 +416,7 @@ export async function sendHandoverLinkToFoundPerson(
           <p>Click the button below to verify the code and complete the process:</p>
           
           <div style="text-align: center;">
-            <a href="${verificationUrl}" class="cta-button">Verify Code & Confirm Handover</a>
+            <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer" class="cta-button">Verify Code & Confirm Handover</a>
           </div>
 
           <p><em>Important: Only hand over the item after the code is successfully verified.</em></p>

@@ -233,6 +233,44 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/matches/all
+ * Get all matches including historical (claimed) matches for dashboard graphs
+ */
+router.get('/all', async (req: Request, res: Response) => {
+    try {
+        // Get active matches
+        const activeSnapshot = await collections.matches
+            .orderBy('createdAt', 'desc')
+            .get();
+
+        // Get historical matches
+        const historySnapshot = await collections.matchHistory
+            .orderBy('createdAt', 'desc')
+            .get();
+
+        const activeMatches = activeSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            isActive: true,
+        }));
+
+        const historicalMatches = historySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            isActive: false,
+        }));
+
+        // Combine and return all matches
+        const allMatches = [...activeMatches, ...historicalMatches];
+
+        return res.json({ matches: allMatches });
+    } catch (error) {
+        console.error('Get all matches error:', error);
+        return res.status(500).json({ error: 'Failed to get all matches' });
+    }
+});
+
+/**
  * GET /api/matches/item/:itemId
  * Get all match records for a specific item
  */

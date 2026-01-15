@@ -33,6 +33,7 @@ app.use('/api/matches', matchesRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/verification', verificationRoutes);
+app.use('/api/handover', handoverRoutes); // Register handover routes
 app.use('/api/credits', creditsRoutes);
 app.use('/api/auth', authRoutes);
 

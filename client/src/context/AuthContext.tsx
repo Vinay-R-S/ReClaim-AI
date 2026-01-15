@@ -235,7 +235,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
       );
 
       if (displayName && result.user) {
+        // Update Firebase Auth profile with displayName
         await updateProfile(result.user, { displayName });
+
+        // Also update Firestore directly with the displayName
+        // (since onAuthStateChanged might fire before updateProfile completes)
+        const userRef = doc(db, "users", result.user.uid);
+        await setDoc(
+          userRef,
+          {
+            uid: result.user.uid,
+            email: result.user.email,
+            displayName: displayName, // Use the passed displayName directly
+            photoURL: result.user.photoURL,
+            role: "user",
+            status: "active",
+            createdAt: serverTimestamp(),
+            lastLoginAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       }
 
       if (result.user) {

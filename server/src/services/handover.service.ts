@@ -271,35 +271,98 @@ async function completeHandover(matchId: string, codeDocId: string, data: Handov
         verifiedAt: FieldValue.serverTimestamp()
     });
 
-    // 2. Fetch details for history
-    const lostItemDoc = await collections.items.doc(data.lostItemId).get();
-    const foundItemDoc = await collections.items.doc(data.foundItemId).get();
-    const lostItem = lostItemDoc.data() as Item;
-    const foundItem = foundItemDoc.data() as Item;
+    // 2. Fetch all details for comprehensive record
+    const [lostItemDoc, foundItemDoc, matchDoc] = await Promise.all([
+        collections.items.doc(data.lostItemId).get(),
+        collections.items.doc(data.foundItemId).get(),
+        collections.matches.doc(matchId).get()
+    ]);
 
-    // 3. Create Handover Record
+    const lostItem = { id: lostItemDoc.id, ...lostItemDoc.data() } as Item;
+    const foundItem = { id: foundItemDoc.id, ...foundItemDoc.data() } as Item;
+    const matchData = matchDoc.exists ? matchDoc.data() : null;
+
+    // Fetch user details
+    const [lostUserDoc, foundUserDoc] = await Promise.all([
+        collections.users.doc(lostItem.reportedBy).get(),
+        collections.users.doc(foundItem.reportedBy).get()
+    ]);
+
+    const lostUser = lostUserDoc.exists ? lostUserDoc.data() : null;
+    const foundUser = foundUserDoc.exists ? foundUserDoc.data() : null;
+
+    // 3. Create comprehensive Handover Record
     const handoverRef = collections.handovers.doc();
     batch.set(handoverRef, {
+        // IDs
         matchId,
         lostItemId: data.lostItemId,
         foundItemId: data.foundItemId,
-        lostPersonId: lostItem.reportedBy,
-        foundPersonId: foundItem.reportedBy,
-        itemName: foundItem.name,
-        codeHash: data.codeHash,
+        lostPersonId: lostItem.reportedBy || null,
+        foundPersonId: foundItem.reportedBy || null,
+
+        // Match Details
+        matchScore: matchData?.matchScore ?? lostItem.matchScore ?? foundItem.matchScore ?? 0,
+        matchCreatedAt: matchData?.createdAt || null,
+
+        // Lost Item Details
+        lostItemDetails: {
+            name: lostItem.name || null,
+            description: lostItem.description || null,
+            location: lostItem.location || null,
+            date: lostItem.date || null,
+            color: lostItem.color || null,
+            category: lostItem.category || null,
+            tags: lostItem.tags || null,
+            imageUrl: lostItem.imageUrl || lostItem.cloudinaryUrls?.[0] || null,
+        },
+
+        // Found Item Details  
+        foundItemDetails: {
+            name: foundItem.name || null,
+            description: foundItem.description || null,
+            location: foundItem.location || null,
+            date: foundItem.date || null,
+            color: foundItem.color || null,
+            category: foundItem.category || null,
+            tags: foundItem.tags || null,
+            imageUrl: foundItem.imageUrl || foundItem.cloudinaryUrls?.[0] || null,
+            collectionPoint: foundItem.collectionPoint || null,
+        },
+
+        // Person Details
+        lostPersonDetails: {
+            email: lostItem.reportedByEmail || lostUser?.email || null,
+            displayName: lostUser?.displayName || null,
+        },
+        foundPersonDetails: {
+            email: foundItem.reportedByEmail || foundUser?.email || null,
+            displayName: foundUser?.displayName || null,
+        },
+
+        // Handover Meta
+        verificationCode: data.codeHash || null, // Store hashed code for reference
         handoverTime: FieldValue.serverTimestamp(),
         createdAt: FieldValue.serverTimestamp(),
         status: 'completed'
     });
 
-    // 4. Update Items Status
+    // 4. Archive match to matchHistory (instead of deleting)
+    if (matchData) {
+        const matchHistoryRef = collections.matchHistory.doc(matchId);
+        batch.set(matchHistoryRef, {
+            ...matchData,
+            status: 'claimed',
+            claimedAt: FieldValue.serverTimestamp(),
+            handoverId: handoverRef.id,
+        });
+    }
+
+    // 5. Update Items Status
     batch.update(collections.items.doc(data.lostItemId), { status: 'Claimed', updatedAt: FieldValue.serverTimestamp() });
     batch.update(collections.items.doc(data.foundItemId), { status: 'Claimed', updatedAt: FieldValue.serverTimestamp() });
 
-    // 5. Remove from active matches?
-    // Usually keep but mark status. If collection is 'matches' it might just stay there.
-    // The requirement said "remove the item from the matches".
-    // Let's delete the match document.
+    // 6. Delete from active matches (now safely archived)
     batch.delete(collections.matches.doc(matchId));
 
     await batch.commit();

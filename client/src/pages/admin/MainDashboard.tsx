@@ -10,6 +10,7 @@ import {
   Activity,
   RefreshCw,
   Zap,
+  HandMetal,
 } from "lucide-react";
 import {
   BarChart,
@@ -28,7 +29,8 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { getItems, type Item } from "@/services/itemService";
-import { getAllMatches, type Match } from "@/services/matchService";
+import { getAllMatchesWithHistory, type Match } from "@/services/matchService";
+import { handoverService } from "@/services/handoverService";
 
 // ============================================================================
 // TYPES
@@ -36,9 +38,22 @@ import { getAllMatches, type Match } from "@/services/matchService";
 interface KPIData {
   totalItems: number;
   activeLost: number;
+  activeFound: number;
   totalMatches: number;
   pendingReview: number;
+  claimed: number;
+  matched: number;
   matchSuccessRate: number;
+}
+
+interface HandoverRecord {
+  id: string;
+  matchId: string;
+  lostItemId: string;
+  foundItemId: string;
+  itemName: string;
+  handoverTime: { seconds: number };
+  status: string;
 }
 
 interface ScoreDistribution {
@@ -305,7 +320,10 @@ function EfficiencyDonut({ matched, unmatched }: EfficiencyDonutProps) {
   ];
 
   return (
-    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+    <div
+      className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm h-full"
+      style={{ minHeight: "340px" }}
+    >
       <div className="flex items-center gap-2 mb-4">
         <CheckCircle className="w-5 h-5 text-green-500" />
         <h3 className="font-semibold text-text-primary">Match Efficiency</h3>
@@ -361,7 +379,7 @@ interface RecentMatchesPanelProps {
 }
 
 function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
-  const recentMatches = matches.slice(0, 6);
+  const recentMatches = matches.slice(0, 3); // Show only 3 recent matches
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return "bg-green-500";
@@ -379,7 +397,10 @@ function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
   };
 
   return (
-    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+    <div
+      className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm h-full"
+      style={{ minHeight: "340px" }}
+    >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Zap className="w-5 h-5 text-yellow-500" />
@@ -473,6 +494,77 @@ function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
     </div>
   );
 }
+// ============================================================================
+// CHART: HANDOVER TREND
+// ============================================================================
+interface HandoverTrendChartProps {
+  handovers: HandoverRecord[];
+  timeRange: "7d" | "30d" | "all";
+}
+
+function HandoverTrendChart({ handovers, timeRange }: HandoverTrendChartProps) {
+  // Calculate trend data based on time range
+  const getTrendData = () => {
+    const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
+    const result: { date: string; handovers: number }[] = [];
+
+    for (let i = days - 1; i >= 0; i--) {
+      const day = startOfDay(subDays(new Date(), i));
+      const dayEnd = new Date(day.getTime() + 24 * 60 * 60 * 1000);
+
+      const count = handovers.filter((h) => {
+        const secs = h.handoverTime?.seconds;
+        if (!secs) return false;
+        const handoverDate = new Date(secs * 1000);
+        return handoverDate >= day && handoverDate < dayEnd;
+      }).length;
+
+      result.push({
+        date: format(day, timeRange === "7d" ? "EEE" : "MMM d"),
+        handovers: count,
+      });
+    }
+
+    return result;
+  };
+
+  const data = getTrendData();
+  const totalHandovers = handovers.length;
+
+  return (
+    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <CheckCircle className="w-5 h-5 text-green-500" />
+          <h3 className="font-semibold text-text-primary">Handover History</h3>
+        </div>
+        <span className="text-xs text-text-secondary bg-green-100 text-green-700 px-2 py-1 rounded-full">
+          {totalHandovers} completed
+        </span>
+      </div>
+
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart
+          data={data}
+          margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 12 }} />
+          <Tooltip
+            contentStyle={{
+              borderRadius: "12px",
+              border: "none",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+            }}
+            formatter={(value: any) => [`${value} handovers`, "Completed"]}
+          />
+          <Bar dataKey="handovers" fill="#22c55e" radius={[8, 8, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 // ============================================================================
 // MAIN DASHBOARD COMPONENT
@@ -480,6 +572,7 @@ function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
 export function MainDashboard() {
   const [items, setItems] = useState<Item[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [handovers, setHandovers] = useState<HandoverRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [timeRange, setTimeRange] = useState<"7d" | "30d" | "all">("7d");
@@ -487,12 +580,14 @@ export function MainDashboard() {
   // Fetch data
   const fetchData = useCallback(async () => {
     try {
-      const [itemsData, matchesData] = await Promise.all([
+      const [itemsData, matchesData, handoverData] = await Promise.all([
         getItems(),
-        getAllMatches(),
+        getAllMatchesWithHistory(),
+        handoverService.getHistory().catch(() => []), // Graceful fallback
       ]);
       setItems(itemsData);
       setMatches(matchesData);
+      setHandovers(handoverData || []);
       setLastRefresh(new Date());
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
@@ -516,12 +611,19 @@ export function MainDashboard() {
     totalItems: items.length,
     activeLost: items.filter((i) => i.type === "Lost" && i.status === "Pending")
       .length,
+    activeFound: items.filter(
+      (i) => i.type === "Found" && i.status === "Pending"
+    ).length,
     totalMatches: matches.length,
     pendingReview: items.filter((i) => i.status === "Pending").length,
+    claimed: items.filter((i) => i.status === "Claimed").length,
+    matched: items.filter((i) => i.status === "Matched").length,
     matchSuccessRate:
       items.length > 0
         ? Math.round(
-            (items.filter((i) => i.status === "Matched").length /
+            (items.filter(
+              (i) => i.status === "Matched" || i.status === "Claimed"
+            ).length /
               items.length) *
               100
           )
@@ -629,7 +731,7 @@ export function MainDashboard() {
       </div>
 
       {/* KPI Cards Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
         <KPICard
           title="Total Items"
           value={kpiData.totalItems}
@@ -652,6 +754,13 @@ export function MainDashboard() {
           gradient="bg-gradient-to-br from-green-500 to-green-600"
         />
         <KPICard
+          title="Claimed"
+          value={kpiData.claimed}
+          icon={<HandMetal className="w-5 h-5 text-white" />}
+          subtext="Successfully handed over"
+          gradient="bg-gradient-to-br from-purple-500 to-purple-600"
+        />
+        <KPICard
           title="Pending Review"
           value={kpiData.pendingReview}
           icon={<Clock className="w-5 h-5 text-white" />}
@@ -663,7 +772,7 @@ export function MainDashboard() {
           value={kpiData.matchSuccessRate}
           icon={<TrendingUp className="w-5 h-5 text-white" />}
           subtext="Overall efficiency"
-          gradient="bg-gradient-to-br from-purple-500 to-purple-600"
+          gradient="bg-gradient-to-br from-teal-500 to-teal-600"
           isPercentage
         />
       </div>
@@ -686,30 +795,39 @@ export function MainDashboard() {
         </div>
       </div>
 
-      {/* User Stats Section */}
+      {/* Charts Row 3: Handover History */}
+      <HandoverTrendChart handovers={handovers} timeRange={timeRange} />
+
+      {/* Quick Stats Section */}
       <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Users className="w-5 h-5 text-primary" />
           <h3 className="font-semibold text-text-primary">Quick Statistics</h3>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="text-center p-4 bg-gray-50 rounded-xl">
-            <p className="text-2xl font-bold text-text-primary">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="text-center p-4 bg-red-50 rounded-xl">
+            <p className="text-2xl font-bold text-red-600">
               {items.filter((i) => i.type === "Lost").length}
             </p>
-            <p className="text-sm text-text-secondary">Lost Items</p>
+            <p className="text-sm text-text-secondary">Lost</p>
           </div>
-          <div className="text-center p-4 bg-gray-50 rounded-xl">
-            <p className="text-2xl font-bold text-text-primary">
+          <div className="text-center p-4 bg-blue-50 rounded-xl">
+            <p className="text-2xl font-bold text-blue-600">
               {items.filter((i) => i.type === "Found").length}
             </p>
-            <p className="text-sm text-text-secondary">Found Items</p>
+            <p className="text-sm text-text-secondary">Found</p>
           </div>
-          <div className="text-center p-4 bg-gray-50 rounded-xl">
+          <div className="text-center p-4 bg-green-50 rounded-xl">
             <p className="text-2xl font-bold text-green-600">{matchedItems}</p>
             <p className="text-sm text-text-secondary">Matched</p>
           </div>
-          <div className="text-center p-4 bg-gray-50 rounded-xl">
+          <div className="text-center p-4 bg-purple-50 rounded-xl">
+            <p className="text-2xl font-bold text-purple-600">
+              {kpiData.claimed}
+            </p>
+            <p className="text-sm text-text-secondary">Claimed</p>
+          </div>
+          <div className="text-center p-4 bg-orange-50 rounded-xl">
             <p className="text-2xl font-bold text-orange-500">
               {kpiData.pendingReview}
             </p>
