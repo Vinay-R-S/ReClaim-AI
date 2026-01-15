@@ -13,6 +13,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   updateProfile,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, googleProvider, db } from "../lib/firebase";
@@ -63,6 +64,7 @@ interface AuthContextType {
     displayName?: string
   ) => Promise<void>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   clearError: () => void;
   clearBlockedError: () => void;
 }
@@ -280,6 +282,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  // Reset password - sends password reset email via Firebase
+  const resetPassword = async (email: string) => {
+    try {
+      setError(null);
+      await sendPasswordResetEmail(auth, email);
+    } catch (err: any) {
+      const errorMessage = getAuthErrorMessage(err.code);
+      setError(errorMessage);
+      throw err;
+    }
+  };
+
   // Clear error
   const clearError = () => setError(null);
   const clearBlockedError = () => setBlockedError(null);
@@ -295,6 +309,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signInWithEmail,
     signUpWithEmail,
     signOut,
+    resetPassword,
     clearError,
     clearBlockedError,
   };

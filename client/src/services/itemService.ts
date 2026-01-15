@@ -16,6 +16,7 @@ import {
     deleteObject,
 } from "firebase/storage";
 import { db, storage } from "../lib/firebase";
+import { authFetch } from "../lib/authApi";
 
 // Item type definition
 export interface Item {
@@ -143,19 +144,14 @@ export async function deleteItem(id: string, imageUrl?: string): Promise<void> {
     await deleteDoc(docRef);
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
-
-// Update item via server API (recommended for consistency)
+// Update item via server API (requires authentication)
 export async function updateItemViaApi(
     id: string,
     updates: Partial<ItemInput>,
     newImages?: string[] // Base64 images
 ): Promise<void> {
-    const response = await fetch(`${API_URL}/api/items/${id}`, {
+    const response = await authFetch(`/api/items/${id}`, {
         method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
             updates,
             images: newImages
@@ -168,9 +164,9 @@ export async function updateItemViaApi(
     }
 }
 
-// Delete item via server API
+// Delete item via server API (requires authentication)
 export async function deleteItemViaApi(id: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/items/${id}`, {
+    const response = await authFetch(`/api/items/${id}`, {
         method: 'DELETE',
     });
 
@@ -239,3 +235,4 @@ export async function uploadItemImage(file: File): Promise<string> {
         throw new Error("Failed to process image for local storage");
     }
 }
+

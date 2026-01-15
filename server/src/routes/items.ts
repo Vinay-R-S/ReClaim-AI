@@ -1,5 +1,6 @@
 /**
  * Items API Routes - CRUD operations for lost/found items
+ * Protected routes require Firebase ID token authentication
  */
 
 import { Router, Request, Response } from 'express';
@@ -10,6 +11,7 @@ import { Item, ItemInput, ItemType } from '../types/index.js';
 import { updateUserItemCounts } from '../services/userStats.js';
 import { triggerAutoMatching } from '../services/autoMatch.service.js';
 import { generateEmbedding, createItemEmbeddingString } from '../utils/embeddings.js';
+import { authMiddleware, AuthRequest, itemCreateLimiter } from '../middleware/index.js';
 
 const router = Router();
 
@@ -100,19 +102,16 @@ router.get('/user/:userId', async (req: Request, res: Response) => {
 
 /**
  * POST /api/items
- * Create a new item
+ * Create a new item (requires authentication)
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authMiddleware, itemCreateLimiter, async (req: AuthRequest, res: Response) => {
     try {
-        const { userId, item, images } = req.body as {
-            userId: string;
+        // Use authenticated user ID instead of body parameter
+        const userId = req.user!.uid;
+        const { item, images } = req.body as {
             item: ItemInput;
             images?: string[]; // Base64 images
         };
-
-        if (!userId) {
-            return res.status(401).json({ error: 'User ID required' });
-        }
 
         // Upload images if provided
         let cloudinaryUrls: string[] = [];
@@ -224,9 +223,9 @@ router.post('/', async (req: Request, res: Response) => {
 
 /**
  * PUT /api/items/:id
- * Update an item
+ * Update an item (requires authentication)
  */
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
         const { updates, images } = req.body as {
@@ -281,9 +280,9 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /**
  * PUT /api/items/:id/status
- * Update item status (for admin handover)
+ * Update item status (requires authentication)
  */
-router.put('/:id/status', async (req: Request, res: Response) => {
+router.put('/:id/status', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
         const { status, matchedUserId } = req.body;
@@ -308,9 +307,9 @@ router.put('/:id/status', async (req: Request, res: Response) => {
 
 /**
  * DELETE /api/items/:id
- * Delete an item
+ * Delete an item (requires authentication)
  */
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
 
