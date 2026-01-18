@@ -10,7 +10,7 @@ import { uploadImage, uploadMultipleImages, deleteImage, isCloudinaryConfigured 
 import { Item, ItemInput, ItemType } from '../types/index.js';
 import { updateUserItemCounts } from '../services/userStats.js';
 import { triggerAutoMatching } from '../services/autoMatch.service.js';
-import { generateEmbedding, createItemEmbeddingString } from '../utils/embeddings.js';
+import { createItemEmbeddingString } from '../utils/embeddings.js';
 import { authMiddleware, AuthRequest, itemCreateLimiter } from '../middleware/index.js';
 
 const router = Router();
@@ -156,8 +156,7 @@ router.post('/', authMiddleware, itemCreateLimiter, async (req: AuthRequest, res
             newItem.coordinates = item.coordinates;
         }
 
-        // Generate semantic embedding
-        let itemEmbedding: number[] = [];
+        // Create embedding string for potential future use (or logging)
         try {
             const embeddingText = createItemEmbeddingString({
                 name: item.name,
@@ -165,13 +164,9 @@ router.post('/', authMiddleware, itemCreateLimiter, async (req: AuthRequest, res
                 tags: item.tags,
                 color: item.color
             });
-            console.log(`[ITEM-CREATE] Generating embedding for: "${embeddingText}"`);
-            itemEmbedding = await generateEmbedding(embeddingText);
-            if (itemEmbedding.length > 0) {
-                newItem.embedding = itemEmbedding;
-            }
+            console.log(`[ITEM-CREATE] Semantic text prepared: "${embeddingText}"`);
         } catch (embedError) {
-            console.error('Failed to generate item embedding:', embedError);
+            console.error('Failed to prepare semantic text:', embedError);
         }
 
         const docRef = await collections.items.add(newItem);
@@ -205,7 +200,6 @@ router.post('/', authMiddleware, itemCreateLimiter, async (req: AuthRequest, res
             coordinates: item.coordinates,  // Pass coordinates for location matching
             location: item.location,        // Pass location string for fallback
             date: new Date(item.date),      // Pass date for time matching
-            embedding: itemEmbedding,       // Pass pre-generated embedding
             category: item.category,        // Pass category for matching
         });
 

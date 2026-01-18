@@ -35,9 +35,9 @@ export const extractItemDataTool = tool(
         const hasMultipleImages = imagesArray.length > 1;
 
         const prompt = hasImage
-            ? `You are analyzing an image of a ${context === 'report_lost' ? 'lost' : 'found'} item along with user text.
+            ? `You are analyzing ${hasMultipleImages ? `multiple images (${imagesArray.length})` : 'an image'} of a ${context === 'report_lost' ? 'lost' : 'found'} item along with user text.
 
-ANALYZE THE IMAGE CAREFULLY and extract ALL visible details about the item.
+ANALYZE ALL IMAGES CAREFULLY. Synthesize details from every angle shown. Extract ALL visible details about the item.
 
 User message: "${message || 'No text provided, analyze image only'}"
 

@@ -8,18 +8,16 @@ import { Item, ItemType } from '../types/index.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import {
     MATCH_CONFIG,
-    calculateTagScore,
-    calculateDescriptionScore,
     calculateColorScore,
-    calculateCategoryScore,
     calculateLocationScore,
     calculateTimeScore,
     haversineDistance,
     calculateTimeDifference,
     getTagsWithFallback
 } from '../utils/scoring.js';
-import { calculateCosineSimilarity } from '../utils/embeddings.js';
 import { initiateHandover } from './handover.service.js';
+import { callLLM } from '../utils/llm.js';
+import { compareMultipleImages, isClarifaiConfigured } from './clarifaiMatch.service.js';
 
 // ============================================================================
 // HELPERS
@@ -33,6 +31,80 @@ function toDate(timestamp: any): Date {
     if (timestamp?.toDate) return timestamp.toDate();
     if (timestamp?.seconds) return new Date(timestamp.seconds * 1000);
     return new Date(timestamp);
+}
+
+/**
+ * Calculate image similarity using Clarifai
+ * Supports multiple images per item
+ */
+async function calculateImageScore(
+    itemImageUrls: string[],
+    searchImageUrls: string[]
+): Promise<number> {
+    // Check if Clarifai is configured
+    if (!isClarifaiConfigured()) {
+        return 0;
+    }
+
+    // If no images on either side, return 0
+    if (!itemImageUrls.length || !searchImageUrls.length) {
+        return 0;
+    }
+
+    try {
+        // Use multi-image comparison
+        const similarity = await compareMultipleImages(itemImageUrls, searchImageUrls);
+        // Convert 0-100 score to weighted match score
+        return Math.round((similarity / 100) * MATCH_CONFIG.WEIGHTS.image);
+    } catch (error) {
+        console.error('[Ordering] Image comparison failed:', error);
+        return 0;
+    }
+}
+
+/**
+ * Calculate semantic similarity using LLM
+ * Compares Name, Description, and Tags
+ */
+async function calculateSemanticScore(
+    item1: { name: string; description: string; tags?: string[] },
+    item2: { name: string; description: string; tags?: string[] }
+): Promise<number> {
+    try {
+        const prompt = `Compare these two items and determine if they are likely the same object.
+        
+Item A:
+Name: ${item1.name}
+Description: ${item1.description}
+Tags: ${item1.tags?.join(', ') || 'None'}
+
+Item B:
+Name: ${item2.name}
+Description: ${item2.description}
+Tags: ${item2.tags?.join(', ') || 'None'}
+
+Ignore minor spelling differences or rigid character matching. Focus on the MEANING and SEMANTIC similarity.
+Are they describing the same thing?
+
+Return ONLY a number from 0 to 100 representing the probability they are the same item.
+0 = Definitely different
+100 = Definitely identical`;
+
+        const response = await callLLM([
+            { role: 'system', content: 'You are a semantic matching engine for lost and found items. Output only a number.' },
+            { role: 'user', content: prompt }
+        ], { temperature: 0.1 });
+
+        const score = parseInt(response.content.replace(/[^0-9]/g, ''));
+
+        if (isNaN(score)) return 0;
+
+        // Scale to the semantic weight
+        return Math.round((Math.min(100, Math.max(0, score)) / 100) * MATCH_CONFIG.WEIGHTS.semantic);
+    } catch (error) {
+        console.error('[Matching] Semantic score failed:', error);
+        return 0;
+    }
 }
 
 // ============================================================================
@@ -52,18 +124,17 @@ export async function triggerAutoMatching(
         tags: string[];
         color?: string;
         imageUrl?: string;
+        cloudinaryUrls?: string[];
         coordinates?: { lat: number; lng: number };
         location: string;
         category?: string;
         date?: Date;
-        embedding?: number[];
     }
 ): Promise<{ bestMatchId?: string; highestScore: number } | null> {
-    console.log(`[AUTO-MATCH] ========== STARTING COMPREHENSIVE MATCHING (VECTOR) ==========`);
+    console.log(`[AUTO-MATCH] ========== STARTING COMPREHENSIVE MATCHING (LLM) ==========`);
     console.log(`[AUTO-MATCH] Item ID: ${itemId}`);
     console.log(`[AUTO-MATCH] Item Type: ${itemType}`);
     console.log(`[AUTO-MATCH] Threshold: ${MATCH_CONFIG.THRESHOLD}%`);
-    console.log(`[AUTO-MATCH] Vector Present: ${itemData.embedding && itemData.embedding.length > 0 ? 'YES' : 'NO'}`);
 
     try {
         // Determine opposite type
@@ -77,7 +148,6 @@ export async function triggerAutoMatching(
 
         const candidates = snapshot.docs;
         console.log(`[AUTO-MATCH] Candidates found: ${candidates.length}`);
-        console.log(`[AUTO-MATCH] Candidate List: ${candidates.map(c => `${c.id} (${(c.data() as any).name})`).join(', ')}`);
 
         if (candidates.length === 0) {
             console.log('[AUTO-MATCH] No candidates to match against');
@@ -101,7 +171,7 @@ export async function triggerAutoMatching(
             // PRE-FILTERS (Must pass all to continue)
             // ================================================================
 
-            // Improved Tag Matching with Name Fallback
+            // Filter 1: Tag Overlap (Basic check before expensive LLM)
             const itemTags = getTagsWithFallback(itemData.tags, itemData.name);
             const candidateTags = getTagsWithFallback(candidateData.tags, candidateData.name);
 
@@ -111,8 +181,6 @@ export async function triggerAutoMatching(
 
             if (commonTags.length < MATCH_CONFIG.REQUIREMENTS.minCommonTags) {
                 console.log(`[FILTER] ❌ Not enough common tags: ${commonTags.length} < ${MATCH_CONFIG.REQUIREMENTS.minCommonTags} - skipping`);
-                console.log(`         Item tags: ${JSON.stringify(itemTags)}`);
-                console.log(`         Cand tags: ${JSON.stringify(candidateTags)}`);
                 continue;
             }
 
@@ -146,23 +214,18 @@ export async function triggerAutoMatching(
             // CALCULATE ALL SCORES
             // ================================================================
 
-            // Semantic Score (Embeddings)
-            let semanticScore = 0;
-            if (itemData.embedding && candidateData.embedding) {
-                const similarity = calculateCosineSimilarity(itemData.embedding, candidateData.embedding);
-                semanticScore = Math.round(similarity * MATCH_CONFIG.WEIGHTS.semantic * 10) / 10;
-                console.log(`[MATCH] Vector Similarity: ${(similarity * 100).toFixed(1)}% -> Points: ${semanticScore}`);
-            } else {
-                console.log(`[MATCH] skipping vector match (missing embeddings)`);
-            }
+            // Semantic Score (LLM)
+            const semanticScore = await calculateSemanticScore(itemData, candidateData);
 
-            const combinedItemDesc = `${itemData.name} ${itemData.description || ''}`;
-            const combinedCandidateDesc = `${candidateData.name} ${candidateData.description || ''}`;
+            // Image Score
+            const itemImageUrls = itemData.cloudinaryUrls || (itemData.imageUrl ? [itemData.imageUrl] : []);
+            const candidateImageUrls = candidateData.cloudinaryUrls || (candidateData.imageUrl ? [candidateData.imageUrl] : []);
+            const hasImages = itemImageUrls.length > 0 && candidateImageUrls.length > 0;
 
-            const tagScore = calculateTagScore(itemTags, candidateTags);
-            const descriptionScore = calculateDescriptionScore(combinedItemDesc, combinedCandidateDesc);
+            const imageScore = await calculateImageScore(itemImageUrls, candidateImageUrls);
+
+            // Other Scores
             const colorScore = calculateColorScore(itemData.color, candidateData.color);
-            const categoryScore = calculateCategoryScore(itemData.category, candidateData.category);
             const locationScore = calculateLocationScore(
                 itemData.coordinates,
                 candidateData.coordinates,
@@ -171,25 +234,25 @@ export async function triggerAutoMatching(
             );
             const timeScore = calculateTimeScore(itemDate, candidateDate);
 
-            // Image score disabled for now
-            const imageScore = 0;
-
             // ================================================================
             // FINAL SCORE CALCULATION
             // ================================================================
 
-            const finalScore = Math.round(
+            let finalScore = Math.round(
                 semanticScore +
-                tagScore +
-                descriptionScore +
                 colorScore +
-                categoryScore +
                 locationScore +
                 timeScore +
                 imageScore
             );
 
-            console.log(`[MATCH][BREAKDOWN] Semantic:${semanticScore} + Tag:${tagScore} + Desc:${descriptionScore} + Color:${colorScore} + Cat:${categoryScore} + Loc:${locationScore} + Time:${timeScore} + Img:${imageScore}`);
+            // Normalization for missing images
+            if (!hasImages) {
+                const maxScoreWithoutImage = 100 - MATCH_CONFIG.WEIGHTS.image;
+                finalScore = Math.round((finalScore / maxScoreWithoutImage) * 100);
+            }
+
+            console.log(`[MATCH][BREAKDOWN] Semantic:${semanticScore} + Color:${colorScore} + Loc:${locationScore} + Time:${timeScore} + Img:${imageScore} => Raw:${semanticScore + colorScore + locationScore + timeScore + imageScore} / Norm:${finalScore}`);
 
             // Update highest score found (tracked even if below threshold)
             if (finalScore > highestScore) {
@@ -217,10 +280,10 @@ export async function triggerAutoMatching(
                         lostItemId,
                         foundItemId,
                         semanticScore,
-                        tagScore,
-                        descriptionScore,
+                        tagScore: semanticScore, // Mapped for frontend compatibility
+                        descriptionScore: 0,
                         colorScore,
-                        categoryScore,
+                        categoryScore: 0,
                         locationScore,
                         timeScore,
                         imageScore,

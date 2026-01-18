@@ -16,34 +16,34 @@ import { Match } from '../types/index.js';
 export const MATCH_CONFIG = {
     // Scoring weights (must sum to 100)
     WEIGHTS: {
-        semantic: 50, // New embedding-based score
-        tags: 0,      // Replaced by semantic
-        description: 0, // Replaced by semantic
-        color: 15,
+        semantic: 40, // Enabled: LLM-based semantic matching
+        tags: 0,      // Included in semantic
+        description: 0, // Included in semantic
+        color: 10,
         location: 20,
         time: 10,
-        category: 5,  // Option A: 5% Category Match
-        image: 0      // Reallocated to Category
+        category: 0,
+        image: 20     // Increased importance
     },
 
     // Threshold
-    THRESHOLD: 75,  // 75% minimum to match (restored from 60)
+    THRESHOLD: 70,  // Slightly lowered to allow partial matches (e.g. missing image)
 
     // Location scoring tiers (km)
     LOCATION: {
         maxDistance: 10,      // Skip if farther
-        tier1: 1,             // 0-1 km: 20 points
-        tier2: 2,             // 1-2 km: 15 points
-        tier3: 5,             // 2-5 km: 10 points
-        tier4: 10             // 5-10 km: 5 points
+        tier1: 0.6,           // 0-600m: 20 points
+        tier2: 2,             // 600m-2km: 15 points
+        tier3: 5,             // 2-5km: 10 points
+        tier4: 10             // 5-10km: 5 points
     },
 
     // Time scoring tiers (hours)
     TIME: {
-        maxHours: 72,         // Skip if farther (increased from 48)
-        tier1: 24,            // 0-24 hours: 10 points
-        tier2: 48,            // 24-48 hours: 7 points
-        tier3: 72,            // 48-72 hours: 5 points
+        maxHours: 72,         // Skip if farther
+        tier1: 2,             // 0-2 hours: 10 points
+        tier2: 24,            // 2-24 hours: 7 points
+        tier3: 72,            // 24-72 hours: 5 points
     },
 
     // Minimum requirements (pre-filters)
@@ -212,17 +212,28 @@ export function calculateColorScore(color1?: string, color2?: string): number {
  */
 function areSimilarColors(color1: string, color2: string): boolean {
     const similarGroups = [
-        ['black', 'dark grey', 'dark gray', 'charcoal', 'ebony', 'jet black'],
-        ['white', 'off-white', 'cream', 'ivory', 'beige', 'pearl'],
-        ['red', 'maroon', 'burgundy', 'crimson', 'scarlet'],
-        ['blue', 'navy', 'dark blue', 'royal blue', 'sky blue', 'azure'],
-        ['green', 'dark green', 'forest green', 'olive', 'emerald', 'lime'],
-        ['gray', 'grey', 'silver', 'ash', 'metal', 'gunmetal'],
-        ['brown', 'tan', 'khaki', 'chocolate', 'coffee', 'bronze'],
-        ['pink', 'light pink', 'rose', 'magenta', 'salmon'],
-        ['yellow', 'gold', 'golden', 'mustard'],
-        ['orange', 'amber', 'rust'],
-        ['purple', 'violet', 'lavender', 'lilac', 'indigo']
+        // Blacks / Darks
+        ['black', 'dark grey', 'dark gray', 'charcoal', 'ebony', 'jet black', 'onyx', 'midnight', 'ink'],
+        // Whites / Light
+        ['white', 'off-white', 'cream', 'ivory', 'beige', 'pearl', 'snow', 'alabaster', 'eggshell', 'bone', 'vanilla'],
+        // Reds
+        ['red', 'maroon', 'burgundy', 'crimson', 'scarlet', 'ruby', 'cherry', 'brick', 'wine', 'rosewood'],
+        // Blues
+        ['blue', 'navy', 'dark blue', 'royal blue', 'sky blue', 'azure', 'sapphire', 'teal', 'turquoise', 'cyan', 'indigo', 'cobalt', 'denim', 'baby blue'],
+        // Greens
+        ['green', 'dark green', 'forest green', 'olive', 'emerald', 'lime', 'mint', 'sage', 'jade', 'kelley', 'army green', 'moss'],
+        // Greys / Silvers
+        ['gray', 'grey', 'silver', 'ash', 'metal', 'gunmetal', 'slate', 'graphite', 'chrome', 'platinum', 'steel'],
+        // Browns / Earth Tones
+        ['brown', 'tan', 'khaki', 'chocolate', 'coffee', 'bronze', 'copper', 'mocha', 'camel', 'sand', 'taupe', 'mahogany', 'rust', 'sienna'],
+        // Pinks
+        ['pink', 'light pink', 'rose', 'magenta', 'salmon', 'fuchsia', 'coral', 'blush', 'peach', 'hot pink'],
+        // Yellows / Golds
+        ['yellow', 'gold', 'golden', 'mustard', 'lemon', 'canary', 'amber', 'blonde', 'honey'],
+        // Oranges
+        ['orange', 'amber', 'rust', 'tangerine', 'apricot', 'burnt orange', 'ginger', 'carrot'],
+        // Purples
+        ['purple', 'violet', 'lavender', 'lilac', 'indigo', 'plum', 'mauve', 'grape', 'amethyst', 'eggplant']
     ];
 
     for (const group of similarGroups) {

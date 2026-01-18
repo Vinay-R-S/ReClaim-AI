@@ -7,8 +7,6 @@ import { collections } from '../utils/firebase-admin.js';
 import { Item, MatchResult, Coordinates } from '../types/index.js';
 import {
     MATCH_CONFIG,
-    calculateTagScore,
-    calculateDescriptionScore,
     calculateColorScore,
     calculateLocationScore,
     calculateTimeScore,
@@ -16,6 +14,7 @@ import {
     calculateTimeDifference
 } from '../utils/scoring.js';
 import { compareMultipleImages, isClarifaiConfigured } from './clarifaiMatch.service.js';
+import { callLLM } from '../utils/llm.js';
 
 /**
  * Calculate image similarity using Clarifai
@@ -27,7 +26,6 @@ async function calculateImageScore(
 ): Promise<number> {
     // Check if Clarifai is configured
     if (!isClarifaiConfigured()) {
-        // Image matching disabled - Clarifai not configured
         return 0;
     }
 
@@ -39,10 +37,55 @@ async function calculateImageScore(
     try {
         // Use multi-image comparison
         const similarity = await compareMultipleImages(itemImageUrls, searchImageUrls);
-        // Convert 0-100 score to weighted match score (max 5 points)
-        return Math.round((similarity / 100) * 5);
+        // Convert 0-100 score to weighted match score
+        return Math.round((similarity / 100) * MATCH_CONFIG.WEIGHTS.image);
     } catch (error) {
         console.error('[Matching] Image comparison failed:', error);
+        return 0;
+    }
+}
+
+/**
+ * Calculate semantic similarity using LLM
+ * Compares Name, Description, and Tags
+ */
+async function calculateSemanticScore(
+    item1: { name: string; description: string; tags?: string[] },
+    item2: { name: string; description: string; tags?: string[] }
+): Promise<number> {
+    try {
+        const prompt = `Compare these two items and determine if they are likely the same object.
+        
+Item A:
+Name: ${item1.name}
+Description: ${item1.description}
+Tags: ${item1.tags?.join(', ') || 'None'}
+
+Item B:
+Name: ${item2.name}
+Description: ${item2.description}
+Tags: ${item2.tags?.join(', ') || 'None'}
+
+Ignore minor spelling differences or rigid character matching. Focus on the MEANING and SEMANTIC similarity.
+Are they describing the same thing?
+
+Return ONLY a number from 0 to 100 representing the probability they are the same item.
+0 = Definitely different
+100 = Definitely identical`;
+
+        const response = await callLLM([
+            { role: 'system', content: 'You are a semantic matching engine for lost and found items. Output only a number.' },
+            { role: 'user', content: prompt }
+        ], { temperature: 0.1 });
+
+        const score = parseInt(response.content.replace(/[^0-9]/g, ''));
+
+        if (isNaN(score)) return 0;
+
+        // Scale to the semantic weight
+        return Math.round((Math.min(100, Math.max(0, score)) / 100) * MATCH_CONFIG.WEIGHTS.semantic);
+    } catch (error) {
+        console.error('[Matching] Semantic score failed:', error);
         return 0;
     }
 }
@@ -69,8 +112,8 @@ export async function findMatchesForLostItem(
         coordinates?: Coordinates;
         date: Date;
         color?: string;
-        imageBase64?: string;  // Legacy single image
-        cloudinaryUrls?: string[];  // Multiple uploaded images
+        imageBase64?: string;
+        cloudinaryUrls?: string[];
     }
 ): Promise<MatchResult[]> {
     // Get all found items that are pending
@@ -93,7 +136,7 @@ export async function findMatchesForLostItem(
         const itemDate = toDate(item.date);
         const searchDate = toDate(lostItem.date);
 
-        // Pre-filter: Check distance
+        // 1. Hard Filter: Distance
         if (lostItem.coordinates && item.coordinates) {
             const dist = haversineDistance(
                 lostItem.coordinates.lat, lostItem.coordinates.lng,
@@ -104,44 +147,35 @@ export async function findMatchesForLostItem(
             }
         }
 
-        // Pre-filter: Check time
+        // 2. Hard Filter: Time
         const timeDiff = calculateTimeDifference(itemDate, searchDate);
         if (timeDiff > MATCH_CONFIG.REQUIREMENTS.maxTimeDiff) {
             return null;
         }
 
-        // Calculate scores
-        const tagScore = calculateTagScore(lostItem.tags || [], item.tags || []);
-
-        // Pre-filter: Tags
-        // Note: autoMatch enforces minCommonTags=1. We should probably do same here,
-        // but for manual search we might want to be more lenient?
-        // Let's stick to the config for consistency.
-        // Check overlap
-        const commonTags = (lostItem.tags || []).filter(t =>
-            (item.tags || []).map(it => it.toLowerCase()).includes(t.toLowerCase())
-        );
-        if (commonTags.length < MATCH_CONFIG.REQUIREMENTS.minCommonTags) {
-            // Exception: if valid name match or description match, maybe include?
-            // But config says requirement.
-            return null;
-        }
-
-        const descriptionScore = calculateDescriptionScore(lostItem.description || '', item.description || '');
-        const colorScore = calculateColorScore(lostItem.color || '', item.color || ''); // item.color is not in Item type yet? It is in Firestore.
-        // Wait, Item interface has color? Yes, I added it in autoMatch but let's check definition.
-
-        const locationScore = calculateLocationScore(lostItem.coordinates, item.coordinates);
-        const timeScore = calculateTimeScore(searchDate, itemDate);
-
-        // Image score - compare all available images
+        // 3. Calculate Scores
+        // Image score
         const itemImageUrls = item.cloudinaryUrls || (item.imageUrl ? [item.imageUrl] : []);
         const searchImageUrls = lostItem.cloudinaryUrls || [];
-        const imageScore = await calculateImageScore(itemImageUrls, searchImageUrls);
+        const hasImages = itemImageUrls.length > 0 && searchImageUrls.length > 0;
 
-        const totalScore = Math.round(
-            tagScore + descriptionScore + colorScore + locationScore + timeScore + imageScore
+        const imageScore = await calculateImageScore(itemImageUrls, searchImageUrls);
+        const semanticScore = await calculateSemanticScore(lostItem, item);
+        const colorScore = calculateColorScore(lostItem.color || '', item.color || '');
+        const locationScore = calculateLocationScore(lostItem.coordinates, item.coordinates, lostItem.location, item.location);
+        const timeScore = calculateTimeScore(searchDate, itemDate);
+
+        let totalScore = Math.round(
+            semanticScore + colorScore + locationScore + timeScore + imageScore
         );
+
+        // Normalization for missing images
+        // If image matching was impossible (one side has no images), we shouldn't penalize
+        // Max possible score without image is 80 (100 - 20)
+        if (!hasImages) {
+            const maxScoreWithoutImage = 100 - MATCH_CONFIG.WEIGHTS.image;
+            totalScore = Math.round((totalScore / maxScoreWithoutImage) * 100);
+        }
 
         if (totalScore < MATCH_CONFIG.THRESHOLD) {
             return null;
@@ -152,8 +186,8 @@ export async function findMatchesForLostItem(
             item,
             score: totalScore,
             breakdown: {
-                tagScore,
-                descriptionScore,
+                tagScore: semanticScore, // Mapping semantic to tagScore for frontend compatibility
+                descriptionScore: 0,
                 colorScore,
                 locationScore,
                 timeScore,
@@ -178,8 +212,8 @@ export async function findMatchesForFoundItem(
         coordinates?: Coordinates;
         date: Date;
         color?: string;
-        imageBase64?: string;  // Legacy single image
-        cloudinaryUrls?: string[];  // Multiple uploaded images
+        imageBase64?: string;
+        cloudinaryUrls?: string[];
     }
 ): Promise<MatchResult[]> {
     // Get all lost items that are pending
@@ -202,7 +236,7 @@ export async function findMatchesForFoundItem(
         const itemDate = toDate(item.date);
         const searchDate = toDate(foundItem.date);
 
-        // Pre-filter: Check distance
+        // 1. Hard Filter: Distance
         if (foundItem.coordinates && item.coordinates) {
             const dist = haversineDistance(
                 foundItem.coordinates.lat, foundItem.coordinates.lng,
@@ -213,36 +247,32 @@ export async function findMatchesForFoundItem(
             }
         }
 
-        // Pre-filter: Check time
+        // 2. Hard Filter: Time
         const timeDiff = calculateTimeDifference(itemDate, searchDate);
         if (timeDiff > MATCH_CONFIG.REQUIREMENTS.maxTimeDiff) {
             return null;
         }
 
-        // Calculate scores
-        const tagScore = calculateTagScore(foundItem.tags || [], item.tags || []);
-
-        const commonTags = (foundItem.tags || []).filter(t =>
-            (item.tags || []).map(it => it.toLowerCase()).includes(t.toLowerCase())
-        );
-        if (commonTags.length < MATCH_CONFIG.REQUIREMENTS.minCommonTags) {
-            return null;
-        }
-
-        const descriptionScore = calculateDescriptionScore(foundItem.description || '', item.description || '');
-        const colorScore = calculateColorScore(foundItem.color || '', item.color || '');
-
-        const locationScore = calculateLocationScore(foundItem.coordinates, item.coordinates);
-        const timeScore = calculateTimeScore(searchDate, itemDate);
-
-        // Image score - compare all available images
+        // 3. Calculate Scores
         const itemImageUrls = item.cloudinaryUrls || (item.imageUrl ? [item.imageUrl] : []);
         const searchImageUrls = foundItem.cloudinaryUrls || [];
-        const imageScore = await calculateImageScore(itemImageUrls, searchImageUrls);
+        const hasImages = itemImageUrls.length > 0 && searchImageUrls.length > 0;
 
-        const totalScore = Math.round(
-            tagScore + descriptionScore + colorScore + locationScore + timeScore + imageScore
+        const imageScore = await calculateImageScore(itemImageUrls, searchImageUrls);
+        const semanticScore = await calculateSemanticScore(foundItem, item);
+        const colorScore = calculateColorScore(foundItem.color || '', item.color || '');
+        const locationScore = calculateLocationScore(foundItem.coordinates, item.coordinates, undefined, item.location);
+        const timeScore = calculateTimeScore(searchDate, itemDate);
+
+        let totalScore = Math.round(
+            semanticScore + colorScore + locationScore + timeScore + imageScore
         );
+
+        // Normalization for missing images
+        if (!hasImages) {
+            const maxScoreWithoutImage = 100 - MATCH_CONFIG.WEIGHTS.image;
+            totalScore = Math.round((totalScore / maxScoreWithoutImage) * 100);
+        }
 
         if (totalScore < MATCH_CONFIG.THRESHOLD) {
             return null;
@@ -253,8 +283,8 @@ export async function findMatchesForFoundItem(
             item,
             score: totalScore,
             breakdown: {
-                tagScore,
-                descriptionScore,
+                tagScore: semanticScore,
+                descriptionScore: 0,
                 colorScore,
                 locationScore,
                 timeScore,
