@@ -64,15 +64,15 @@ async function calculateImageScore(
 
 /**
  * Calculate semantic similarity using LLM
- * Compares Name, Description, and Tags
+ * Compares Name, Description, and Tags with improved prompt
  */
 async function calculateSemanticScore(
     item1: { name: string; description: string; tags?: string[] },
     item2: { name: string; description: string; tags?: string[] }
 ): Promise<number> {
     try {
-        const prompt = `Compare these two items and determine if they are likely the same object.
-        
+        const prompt = `You are an expert at identifying if two lost/found item descriptions refer to the SAME physical object.
+
 Item A:
 Name: ${item1.name}
 Description: ${item1.description}
@@ -83,17 +83,28 @@ Name: ${item2.name}
 Description: ${item2.description}
 Tags: ${item2.tags?.join(', ') || 'None'}
 
-Ignore minor spelling differences or rigid character matching. Focus on the MEANING and SEMANTIC similarity.
-Are they describing the same thing?
+SCORING GUIDELINES:
+- 90-100: Almost certainly the same item (same type, color, key features match)
+- 75-89: Very likely the same (most details align, minor differences acceptable)
+- 60-74: Possibly the same (similar type, some details match)
+- 40-59: Uncertain (same category but significant differences)
+- 20-39: Probably different (same general type but key details don't match)
+- 0-19: Definitely different items
 
-Return ONLY a number from 0 to 100 representing the probability they are the same item.
-0 = Definitely different
-100 = Definitely identical`;
+IMPORTANT:
+- Focus on OBJECT TYPE, COLOR, DISTINGUISHING FEATURES
+- Ignore minor spelling differences, word order, or phrasing variations
+- "Blue backpack with laptop compartment" = "Backpack (blue) for laptops" = HIGH SCORE
+- Different colors of same item type = MEDIUM score (50-60)
+- Same category but different subtypes = LOW score (20-40)
+- Completely different items = 0-10
+
+Return ONLY a number from 0-100.`;
 
         const response = await callLLM([
-            { role: 'system', content: 'You are a semantic matching engine for lost and found items. Output only a number.' },
+            { role: 'system', content: 'You are a precise semantic matching engine. Be confident when items clearly match. Output only a number 0-100.' },
             { role: 'user', content: prompt }
-        ], { temperature: 0.1 });
+        ], { temperature: 0.2 }); // Slightly higher temp for better reasoning
 
         const score = parseInt(response.content.replace(/[^0-9]/g, ''));
 

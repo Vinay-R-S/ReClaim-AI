@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { UserLayout } from "../../components/layout/UserLayout";
-import { ChatInterface } from "../../components/ui/ChatInterface";
 import { ReportItemModal } from "../../components/user/ReportItemModal";
-import { Search, Package, MessageCircle, X } from "lucide-react";
+import { Search, Package } from "lucide-react";
 
 type ReportType = "Lost" | "Found" | null;
 
 export function HomePage() {
   const [reportType, setReportType] = useState<ReportType>(null);
-  const [showChat, setShowChat] = useState(false);
 
   const handleReportSuccess = () => {
     // Could show a success toast or redirect
@@ -19,7 +17,7 @@ export function HomePage() {
     <UserLayout>
       <div className="space-y-6">
         {/* Action Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Report Lost */}
           <div
             onClick={() => setReportType("Lost")}
@@ -49,22 +47,6 @@ export function HomePage() {
             </h3>
             <p className="text-sm text-text-secondary">
               Found something? Help reunite it with its owner.
-            </p>
-          </div>
-
-          {/* Check Matches */}
-          <div
-            onClick={() => setShowChat(true)}
-            className="card p-6 cursor-pointer hover:shadow-lg transition-all hover:border-blue-200 border-2 border-transparent"
-          >
-            <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mb-4">
-              <MessageCircle className="w-6 h-6 text-blue-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-text-primary mb-2">
-              Check Matches
-            </h3>
-            <p className="text-sm text-text-secondary">
-              Chat with AI to check for potential matches or claim items.
             </p>
           </div>
         </div>
@@ -112,28 +94,6 @@ export function HomePage() {
             onClose={() => setReportType(null)}
             onSuccess={handleReportSuccess}
           />
-        )}
-
-        {/* Chat Modal for Verification/Matches */}
-        {showChat && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl h-[80vh] flex flex-col">
-              <div className="flex items-center justify-between p-4 border-b border-border">
-                <h2 className="text-lg font-semibold text-text-primary">
-                  Chat Assistant
-                </h2>
-                <button
-                  onClick={() => setShowChat(false)}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-hidden p-4">
-                <ChatInterface />
-              </div>
-            </div>
-          </div>
         )}
       </div>
     </UserLayout>

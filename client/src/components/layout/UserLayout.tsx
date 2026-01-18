@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Bell, HelpCircle, LogOut, User, Settings } from "lucide-react";
+import { HelpCircle, LogOut, User, Settings } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
 
@@ -10,19 +10,10 @@ interface UserLayoutProps {
   children: React.ReactNode;
 }
 
-interface RecentItem {
-  id: string;
-  name: string;
-  type: "Lost" | "Found";
-  createdAt: { seconds: number } | Date | string;
-  status: string;
-}
-
 const navTabs = [
   { name: "Assistant", path: "/app" },
   { name: "My Reports", path: "/app/reports" },
-  { name: "Matches", path: "/app/matches" },
-  { name: "Collection Points", path: "/app/collection-points" },
+  { name: "Handovers", path: "/app/handovers" },
 ];
 
 export function UserLayout({ children }: UserLayoutProps) {
@@ -30,8 +21,11 @@ export function UserLayout({ children }: UserLayoutProps) {
   const navigate = useNavigate();
   const { user, role, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [credits, setCredits] = useState(0);
-  const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
+  const [credits, setCredits] = useState(() => {
+    // Initialize from sessionStorage if available
+    const cached = sessionStorage.getItem("userCredits");
+    return cached ? parseInt(cached, 10) : 0;
+  });
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside
@@ -45,28 +39,52 @@ export function UserLayout({ children }: UserLayoutProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch credits and recent items
+  // Fetch credits only once per session
   useEffect(() => {
     if (!user?.uid) return;
 
-    // Fetch credits
+    // Check if we already have fresh credits in sessionStorage
+    const cachedCredits = sessionStorage.getItem("userCredits");
+    const cacheTimestamp = sessionStorage.getItem("userCreditsTimestamp");
+    const now = Date.now();
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+    // Use cache if it's less than 5 minutes old
+    if (
+      cachedCredits &&
+      cacheTimestamp &&
+      now - parseInt(cacheTimestamp, 10) < CACHE_DURATION
+    ) {
+      setCredits(parseInt(cachedCredits, 10));
+      return;
+    }
+
+    // Fetch fresh credits
     fetch(`${API_URL}/api/credits/${user.uid}`)
       .then((res) => res.json())
       .then((data) => {
-        setCredits(data.credits || 0);
+        const newCredits = data.credits || 0;
+        setCredits(newCredits);
+        // Cache the result
+        sessionStorage.setItem("userCredits", newCredits.toString());
+        sessionStorage.setItem("userCreditsTimestamp", now.toString());
       })
       .catch((err) => console.error("Failed to fetch credits:", err));
-
-    // Fetch user's recent items
-    fetch(`${API_URL}/api/items?userId=${user.uid}&limit=3`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setRecentItems(data.slice(0, 3));
-        }
-      })
-      .catch((err) => console.error("Failed to fetch recent items:", err));
   }, [user?.uid]);
+
+  // Listen for credit updates (e.g., after handover)
+  useEffect(() => {
+    const handleCreditUpdate = (event: CustomEvent) => {
+      const newCredits = event.detail.credits;
+      setCredits(newCredits);
+      sessionStorage.setItem("userCredits", newCredits.toString());
+      sessionStorage.setItem("userCreditsTimestamp", Date.now().toString());
+    };
+
+    window.addEventListener("creditsUpdated" as any, handleCreditUpdate);
+    return () =>
+      window.removeEventListener("creditsUpdated" as any, handleCreditUpdate);
+  }, []);
 
   const handleSignOut = async () => {
     try {
@@ -93,34 +111,14 @@ export function UserLayout({ children }: UserLayoutProps) {
     return "U";
   };
 
-  // Format relative time
-  const formatRelativeTime = (date: { seconds: number } | Date | string) => {
-    let d: Date;
-    if (typeof date === "object" && "seconds" in date) {
-      d = new Date(date.seconds * 1000);
-    } else if (date instanceof Date) {
-      d = date;
-    } else {
-      d = new Date(date);
-    }
-
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins} minutes ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    if (diffDays === 1) return "Yesterday";
-    return `${diffDays} days ago`;
-  };
+  const isHowItWorksPage = location.pathname === "/app/how-it-works";
 
   return (
     <div className="min-h-screen bg-background">
       {/* Top Navigation Bar */}
-      <header className="bg-surface border-b border-border sticky top-0 z-50">
+      <header
+        className={`${isHowItWorksPage ? "bg-white" : "bg-surface"} border-b border-border sticky top-0 z-50`}
+      >
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           {/* Logo */}
           <Link to="/app" className="flex items-center gap-2">
@@ -156,18 +154,13 @@ export function UserLayout({ children }: UserLayoutProps) {
 
           {/* Right Side Actions */}
           <div className="flex items-center gap-3">
-            <button
+            <Link
+              to="/app/how-it-works"
               className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-              aria-label="Notifications"
-            >
-              <Bell className="w-5 h-5 text-text-secondary" />
-            </button>
-            <button
-              className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-              aria-label="Get help"
+              aria-label="How it works"
             >
               <HelpCircle className="w-5 h-5 text-text-secondary" />
-            </button>
+            </Link>
 
             {/* User Menu */}
             <div className="relative" ref={menuRef}>
@@ -263,42 +256,6 @@ export function UserLayout({ children }: UserLayoutProps) {
         <div className="flex gap-6">
           {/* Left Sidebar */}
           <aside className="hidden lg:block w-80">
-            {/* Recent Activity */}
-            <div className="card p-4 mb-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium text-text-primary">
-                  Recent Activity
-                </h3>
-                <Link
-                  to="/app/reports"
-                  className="text-sm text-primary font-medium hover:underline"
-                >
-                  View all
-                </Link>
-              </div>
-              <div className="space-y-3">
-                {recentItems.length > 0 ? (
-                  recentItems.map((item) => (
-                    <ActivityItem
-                      key={item.id}
-                      icon={item.type === "Lost" ? "🔍" : "📦"}
-                      iconBg={
-                        item.type === "Lost"
-                          ? "bg-google-red"
-                          : "bg-google-green"
-                      }
-                      title={`${item.type} item: ${item.name}`}
-                      time={formatRelativeTime(item.createdAt)}
-                    />
-                  ))
-                ) : (
-                  <p className="text-sm text-text-secondary text-center py-4">
-                    No recent activity
-                  </p>
-                )}
-              </div>
-            </div>
-
             {/* Credits Card */}
             <div className="card p-4">
               <div className="flex items-center gap-3">
@@ -321,32 +278,6 @@ export function UserLayout({ children }: UserLayoutProps) {
           <div className="flex-1 max-w-3xl">{children}</div>
         </div>
       </main>
-    </div>
-  );
-}
-
-interface ActivityItemProps {
-  icon: string;
-  iconBg: string;
-  title: string;
-  time: string;
-}
-
-function ActivityItem({ icon, iconBg, title, time }: ActivityItemProps) {
-  return (
-    <div className="flex items-start gap-3">
-      <div
-        className={cn(
-          "w-8 h-8 rounded-full flex items-center justify-center text-white text-sm",
-          iconBg,
-        )}
-      >
-        {icon}
-      </div>
-      <div>
-        <p className="text-sm text-text-primary">{title}</p>
-        <p className="text-xs text-text-secondary">{time}</p>
-      </div>
     </div>
   );
 }

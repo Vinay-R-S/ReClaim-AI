@@ -10,8 +10,9 @@ import { sendCreditsNotification } from './email.js';
 type CreditReason = keyof typeof CREDIT_VALUES;
 
 const REASON_DESCRIPTIONS: Record<CreditReason, string> = {
+    SIGNUP_BONUS: 'Welcome bonus for joining ReClaim AI',
     REPORT_FOUND: 'Reporting a found item',
-    SUCCESSFUL_MATCH_FINDER: 'Your found item was claimed by its owner',
+    SUCCESSFUL_MATCH_FINDER: 'Your found item was claimed successfully',
     SUCCESSFUL_MATCH_OWNER: 'Successfully claiming your lost item',
     FALSE_CLAIM: 'False claim penalty',
 };
@@ -151,6 +152,16 @@ export async function getCreditHistory(
         console.error('Error getting credit history:', error);
         return [];
     }
+}
+
+/**
+ * Award signup bonus to new user
+ */
+export async function awardSignupBonus(
+    userId: string
+): Promise<{ success: boolean; newBalance: number }> {
+    const result = await updateCredits(userId, 'SIGNUP_BONUS', undefined, false);
+    return { success: result.success, newBalance: result.newBalance };
 }
 
 /**

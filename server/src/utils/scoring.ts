@@ -16,41 +16,41 @@ import { Match } from '../types/index.js';
 export const MATCH_CONFIG = {
     // Scoring weights (must sum to 100)
     WEIGHTS: {
-        semantic: 40, // Enabled: LLM-based semantic matching
+        semantic: 50, // Increased: LLM-based semantic matching (most important)
         tags: 0,      // Included in semantic
         description: 0, // Included in semantic
         color: 10,
-        location: 20,
+        location: 15,  // Slightly reduced
         time: 10,
         category: 0,
-        image: 20     // Increased importance
+        image: 15     // Slightly reduced
     },
 
-    // Threshold
-    THRESHOLD: 70,  // Slightly lowered to allow partial matches (e.g. missing image)
+    // Threshold - Lowered to allow more matches
+    THRESHOLD: 55,  // Lower threshold = more lenient matching
 
     // Location scoring tiers (km)
     LOCATION: {
-        maxDistance: 10,      // Skip if farther
-        tier1: 0.6,           // 0-600m: 20 points
-        tier2: 2,             // 600m-2km: 15 points
-        tier3: 5,             // 2-5km: 10 points
-        tier4: 10             // 5-10km: 5 points
+        maxDistance: 15,      // Increased from 10km
+        tier1: 0.6,           // 0-600m: 15 points
+        tier2: 2,             // 600m-2km: 12 points
+        tier3: 5,             // 2-5km: 8 points
+        tier4: 15             // 5-15km: 5 points
     },
 
     // Time scoring tiers (hours)
     TIME: {
-        maxHours: 72,         // Skip if farther
+        maxHours: 96,         // Increased from 72h to 96h (4 days)
         tier1: 2,             // 0-2 hours: 10 points
         tier2: 24,            // 2-24 hours: 7 points
-        tier3: 72,            // 24-72 hours: 5 points
+        tier3: 96,            // 24-96 hours: 5 points
     },
 
     // Minimum requirements (pre-filters)
     REQUIREMENTS: {
         minCommonTags: 1,
-        maxDistance: 10,      // km
-        maxTimeDiff: 72       // hours (increased from 48)
+        maxDistance: 15,      // Increased from 10km
+        maxTimeDiff: 96       // Increased from 72h
     }
 };
 
@@ -246,7 +246,7 @@ function areSimilarColors(color1: string, color2: string): boolean {
 }
 
 /**
- * SCORE 4: Location Proximity (0-20 points)
+ * SCORE 4: Location Proximity (0-15 points)
  * Based on distance between coordinates
  */
 export function calculateLocationScore(
@@ -255,7 +255,7 @@ export function calculateLocationScore(
     loc1?: string,
     loc2?: string
 ): number {
-    // 1. Precise Coordinate Matching (Max 20 points)
+    // 1. Precise Coordinate Matching (Max 15 points)
     if (coords1 && coords2) {
         const distance = haversineDistance(
             coords1.lat,
@@ -265,29 +265,29 @@ export function calculateLocationScore(
         );
 
         // Tiered scoring
-        if (distance <= MATCH_CONFIG.LOCATION.tier1) return 20;  // 0-1 km
-        if (distance <= MATCH_CONFIG.LOCATION.tier2) return 15;  // 1-2 km
-        if (distance <= MATCH_CONFIG.LOCATION.tier3) return 10;  // 2-5 km
-        if (distance <= MATCH_CONFIG.LOCATION.tier4) return 5;   // 5-10 km
+        if (distance <= MATCH_CONFIG.LOCATION.tier1) return 15;  // 0-600m
+        if (distance <= MATCH_CONFIG.LOCATION.tier2) return 12;  // 600m-2km
+        if (distance <= MATCH_CONFIG.LOCATION.tier3) return 8;   // 2-5km
+        if (distance <= MATCH_CONFIG.LOCATION.tier4) return 5;   // 5-15km
 
-        return 0; // > 10km is a hard fail for coordinates
+        return 0; // > 15km is a hard fail for coordinates
     }
 
-    // 2. Text-based Fallback (Max 10 points)
+    // 2. Text-based Fallback (Max 8 points)
     // If coordinates are missing, we check if the location names are similar
     if (loc1 && loc2) {
         const s1 = loc1.toLowerCase();
         const s2 = loc2.toLowerCase();
 
         // Exact match of strings (e.g. "College Canteen")
-        if (s1 === s2) return 10;
+        if (s1 === s2) return 8;
 
         // Check for common words (e.g. "Rajarajeshwari Nagar" vs "Rajarajeshwari Nagar, Bengaluru")
         const words1 = s1.split(/[\s,]+/).filter(w => w.length > 3);
         const words2 = s2.split(/[\s,]+/).filter(w => w.length > 3);
 
         const common = words1.filter(w => words2.includes(w));
-        if (common.length > 0) return 7; // Significant overlap
+        if (common.length > 0) return 5; // Significant overlap
     }
 
     return 0;

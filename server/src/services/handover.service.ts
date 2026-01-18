@@ -332,10 +332,12 @@ async function completeHandover(matchId: string, codeDocId: string, data: Handov
 
         // Person Details
         lostPersonDetails: {
+            userId: lostItem.reportedBy || null,
             email: lostItem.reportedByEmail || lostUser?.email || null,
             displayName: lostUser?.displayName || null,
         },
         foundPersonDetails: {
+            userId: foundItem.reportedBy || null,
             email: foundItem.reportedByEmail || foundUser?.email || null,
             displayName: foundUser?.displayName || null,
         },
@@ -366,6 +368,77 @@ async function completeHandover(matchId: string, codeDocId: string, data: Handov
     batch.delete(collections.matches.doc(matchId));
 
     await batch.commit();
+
+    // ✨ Award credits to both users AFTER successful handover
+    try {
+        const lostUserId = lostItem.reportedBy;
+        const foundUserId = foundItem.reportedBy;
+
+        if (lostUserId && foundUserId) {
+            // Import updateCredits at top of file
+            const { updateCredits } = await import('./credits.js');
+
+            // Award 10 credits to lost person (claimer)
+            await updateCredits(lostUserId, 'SUCCESSFUL_MATCH_OWNER', data.lostItemId);
+
+            // Award 20 credits to found person (finder)
+            await updateCredits(foundUserId, 'SUCCESSFUL_MATCH_FINDER', data.foundItemId);
+
+            console.log(`✅ Credits awarded: ${lostUserId} (+10), ${foundUserId} (+20)`);
+        }
+    } catch (creditError) {
+        // Log but don't fail handover if credits fail
+        console.error('Failed to award handover credits:', creditError);
+    }
+
+    // ✨ Record on blockchain (non-blocking)
+    try {
+        const blockchainEnabled = process.env.BLOCKCHAIN_ENABLED === 'true';
+
+        if (blockchainEnabled) {
+            console.log('🔗 Recording handover on blockchain...');
+
+            const { recordHandoverOnBlockchain } = await import('./blockchain.service.js');
+
+            const result = await recordHandoverOnBlockchain({
+                matchId,
+                lostItemId: data.lostItemId,
+                foundItemId: data.foundItemId,
+                lostPersonId: lostItem.reportedBy,
+                foundPersonId: foundItem.reportedBy,
+                itemDetails: {
+                    lostItemName: lostItem.name,
+                    foundItemName: foundItem.name,
+                    location: foundItem.collectionPoint || foundItem.location,
+                    matchScore: matchData?.matchScore || 0
+                }
+            });
+
+            if (result.success) {
+                console.log(`✅ Blockchain record created: ${result.txHash}`);
+                console.log(`   View on Etherscan: https://sepolia.etherscan.io/tx/${result.txHash}`);
+
+                // Store txHash in Firestore handover record
+                await handoverRef.update({
+                    blockchainTxHash: result.txHash,
+                    blockchainRecorded: true,
+                    blockchainRecordedAt: FieldValue.serverTimestamp()
+                });
+            } else {
+                console.error(`⚠️ Blockchain recording failed: ${result.error}`);
+                // Mark as failed but don't block handover
+                await handoverRef.update({
+                    blockchainRecorded: false,
+                    blockchainError: result.error
+                });
+            }
+        } else {
+            console.log('ℹ️  Blockchain disabled in config, skipping...');
+        }
+    } catch (blockchainError: any) {
+        // Log error but don't fail the handover
+        console.error('Blockchain integration error:', blockchainError.message);
+    }
 }
 
 /**

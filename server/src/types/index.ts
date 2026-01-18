@@ -159,7 +159,7 @@ export interface CreditTransaction {
     id: string;
     userId: string;
     amount: number;
-    reason: 'report_found' | 'successful_match_finder' | 'successful_match_owner' | 'false_claim';
+    reason: 'signup_bonus' | 'report_found' | 'successful_match_finder' | 'successful_match_owner' | 'false_claim';
     relatedItemId?: string;
     createdAt: Timestamp;
 }
@@ -215,8 +215,9 @@ export const SAFETY_LIMITS = {
 
 // ============ Credit Constants ============
 export const CREDIT_VALUES = {
-    REPORT_FOUND: 20,
-    SUCCESSFUL_MATCH_FINDER: 50,
-    SUCCESSFUL_MATCH_OWNER: 10,
+    SIGNUP_BONUS: 10,              // New user welcome bonus
+    REPORT_FOUND: 0,               // No credits for just reporting (changed from 20)
+    SUCCESSFUL_MATCH_FINDER: 20,  // Credits awarded when handover completes (changed from 50)
+    SUCCESSFUL_MATCH_OWNER: 10,   // Credits awarded to claimer when handover completes
     FALSE_CLAIM: -30,
 } as const;

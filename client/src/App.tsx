@@ -23,6 +23,16 @@ const MyReportsPage = lazy(() =>
 const ProfilePage = lazy(() =>
   import("./pages/user/ProfilePage").then((m) => ({ default: m.ProfilePage })),
 );
+const HowItWorksPage = lazy(() =>
+  import("./pages/user/HowItWorksPage").then((m) => ({
+    default: m.HowItWorksPage,
+  })),
+);
+const HandoversPage = lazy(() =>
+  import("./pages/user/HandoversPage").then((m) => ({
+    default: m.HandoversPage,
+  })),
+);
 const AdminPage = lazy(() =>
   import("./pages/admin/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
@@ -83,18 +93,18 @@ function App() {
               }
             />
             <Route
-              path="/app/matches"
+              path="/app/how-it-works"
               element={
                 <ProtectedRoute>
-                  <HomePage />
+                  <HowItWorksPage />
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/app/collection-points"
+              path="/app/handovers"
               element={
                 <ProtectedRoute>
-                  <HomePage />
+                  <HandoversPage />
                 </ProtectedRoute>
               }
             />

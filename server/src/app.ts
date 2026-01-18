@@ -10,6 +10,7 @@ import notificationsRoutes from './routes/notifications.js';
 import settingsRoutes from './routes/settings.js';
 import verificationRoutes from './routes/verification.js';
 import handoverRoutes from './routes/handover.js';
+import handoversRoutes from './routes/handovers.js';
 import creditsRoutes from './routes/credits.js';
 import authRoutes from './routes/auth.js';
 import { authLimiter, apiLimiter, errorHandler, notFoundHandler } from './middleware/index.js';
@@ -68,6 +69,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/handover', handoverRoutes);
+app.use('/api/handovers', handoversRoutes);
 app.use('/api/credits', creditsRoutes);
 app.use('/api/auth', authRoutes);
 

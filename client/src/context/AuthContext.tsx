@@ -61,7 +61,7 @@ interface AuthContextType {
   signUpWithEmail: (
     email: string,
     password: string,
-    displayName?: string
+    displayName?: string,
   ) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<"user" | "admin" | null>(null);
   const [userStatus, setUserStatus] = useState<"active" | "blocked" | null>(
-    null
+    null,
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +119,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Check if user is blocked - HARD BLOCK
         if (status === "blocked") {
           setBlockedError(
-            "Your account has been blocked due to policy violations."
+            "Your account has been blocked due to policy violations.",
           );
           // Immediately sign out the blocked user
           await firebaseSignOut(auth);
@@ -134,7 +134,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await setDoc(
           doc(db, "users", uid),
           { lastLoginAt: serverTimestamp() },
-          { merge: true }
+          { merge: true },
         );
       } else {
         // New user - handled by saveUserToFirestore
@@ -157,18 +157,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const userSnap = await getDoc(userRef);
 
       if (!userSnap.exists()) {
-        // New user - create document with default 'user' role
+        // New user - create document with default 'user' role AND credits
         const newUser = {
           uid: user.uid,
           email: user.email,
           displayName: user.displayName,
           photoURL: user.photoURL,
-          role: "user", // Default role
+          role: "user",
+          status: "active",
+          credits: 10, // ✨ Initialize with 10 credits
+          lostItemsCount: 0, // ✨ Initialize counts
+          foundItemsCount: 0,
+          totalItemsCount: 0,
           createdAt: serverTimestamp(),
           lastLoginAt: serverTimestamp(),
         };
         await setDoc(userRef, newUser);
         setRole("user");
+
+        // ✨ Log credit transaction in backend
+        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+        try {
+          await fetch(`${API_URL}/api/credits/signup-bonus`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.uid }),
+          });
+        } catch (err) {
+          console.error("Failed to log signup bonus:", err);
+        }
       } else {
         // Existing user - update last login
         await setDoc(
@@ -176,7 +193,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           {
             lastLoginAt: serverTimestamp(),
           },
-          { merge: true }
+          { merge: true },
         );
         // Role is set in fetchUserRole
       }
@@ -225,7 +242,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signUpWithEmail = async (
     email: string,
     password: string,
-    displayName?: string
+    displayName?: string,
   ) => {
     try {
       setError(null);
@@ -233,7 +250,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const result = await createUserWithEmailAndPassword(
         auth,
         email,
-        password
+        password,
       );
 
       if (displayName && result.user) {
@@ -248,15 +265,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
           {
             uid: result.user.uid,
             email: result.user.email,
-            displayName: displayName, // Use the passed displayName directly
+            displayName: displayName,
             photoURL: result.user.photoURL,
             role: "user",
             status: "active",
+            credits: 10, // ✨ Initialize with 10 credits
+            lostItemsCount: 0, // ✨ Initialize counts
+            foundItemsCount: 0,
+            totalItemsCount: 0,
             createdAt: serverTimestamp(),
             lastLoginAt: serverTimestamp(),
           },
-          { merge: true }
+          { merge: true },
         );
+
+        // ✨ Log credit transaction
+        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+        try {
+          await fetch(`${API_URL}/api/credits/signup-bonus`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: result.user.uid }),
+          });
+        } catch (err) {
+          console.error("Failed to log signup bonus:", err);
+        }
       }
 
       if (result.user) {
