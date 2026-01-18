@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import { X, MapPin } from "lucide-react";
-import { LocationPicker } from "./LocationPicker";
+import { LazyLocationPicker } from "./LazyLocationPicker";
 
 interface LocationModalProps {
   isOpen: boolean;
@@ -55,7 +55,7 @@ export function LocationModal({
 
         {/* Location Picker */}
         <div className="p-4">
-          <LocationPicker
+          <LazyLocationPicker
             value={selectedLocation}
             onChange={setSelectedLocation}
             placeholder="Search for a location..."

@@ -125,8 +125,10 @@ export function UserLayout({ children }: UserLayoutProps) {
           {/* Logo */}
           <Link to="/app" className="flex items-center gap-2">
             <img
-              src="/Logo.png"
+              src="/Logo.webp"
               alt="ReClaim AI Logo"
+              width={40}
+              height={40}
               className="w-10 h-10 object-contain rounded-full"
             />
             <span className="font-medium text-xl text-text-primary">
@@ -144,7 +146,7 @@ export function UserLayout({ children }: UserLayoutProps) {
                   "nav-tab",
                   location.pathname === tab.path
                     ? "nav-tab-active"
-                    : "nav-tab-inactive"
+                    : "nav-tab-inactive",
                 )}
               >
                 {tab.name}
@@ -154,10 +156,16 @@ export function UserLayout({ children }: UserLayoutProps) {
 
           {/* Right Side Actions */}
           <div className="flex items-center gap-3">
-            <button className="p-2 rounded-full hover:bg-gray-100 transition-colors">
+            <button
+              className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+              aria-label="Notifications"
+            >
               <Bell className="w-5 h-5 text-text-secondary" />
             </button>
-            <button className="p-2 rounded-full hover:bg-gray-100 transition-colors">
+            <button
+              className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+              aria-label="Get help"
+            >
               <HelpCircle className="w-5 h-5 text-text-secondary" />
             </button>
 
@@ -182,7 +190,7 @@ export function UserLayout({ children }: UserLayoutProps) {
 
               {/* Dropdown Menu */}
               {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-72 bg-surface/80 backdrop-blur-md rounded-xl border border-border shadow-lg py-2 z-50">
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl border border-border shadow-lg py-2 z-50">
                   {/* User Info */}
                   <div className="px-4 py-3 border-b border-border">
                     <div className="flex items-center gap-3">
@@ -330,7 +338,7 @@ function ActivityItem({ icon, iconBg, title, time }: ActivityItemProps) {
       <div
         className={cn(
           "w-8 h-8 rounded-full flex items-center justify-center text-white text-sm",
-          iconBg
+          iconBg,
         )}
       >
         {icon}

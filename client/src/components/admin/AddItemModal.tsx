@@ -1,15 +1,12 @@
 import { useState, useRef } from "react";
 import { X, Upload, Image as ImageIcon, Loader2, Sparkles } from "lucide-react";
-import {
-  uploadItemImage,
-  type ItemInput,
-} from "../../services/itemService";
+import { uploadItemImage, type ItemInput } from "../../services/itemService";
 import {
   analyzeItemImage,
   getAvailableProviders,
   type AIProvider,
 } from "../../services/aiService";
-import { LocationPicker } from "../ui/LocationPicker";
+import { LazyLocationPicker } from "../ui/LazyLocationPicker";
 
 interface AddItemModalProps {
   onClose: () => void;
@@ -17,8 +14,12 @@ interface AddItemModalProps {
 }
 
 export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
-  const [step, setStep] = useState<"upload" | "analyzing" | "review" | "success">("upload");
-  const [matchResult, setMatchResult] = useState<{ highestScore: number } | null>(null);
+  const [step, setStep] = useState<
+    "upload" | "analyzing" | "review" | "success"
+  >("upload");
+  const [matchResult, setMatchResult] = useState<{
+    highestScore: number;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -92,8 +93,9 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
     } catch (err) {
       console.error("Error analyzing image:", err);
       alert(
-        `Analysis failed: ${err instanceof Error ? err.message : "Unknown error"
-        }`
+        `Analysis failed: ${
+          err instanceof Error ? err.message : "Unknown error"
+        }`,
       );
       setStep("upload");
     } finally {
@@ -114,20 +116,24 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
       if (imageFiles.length > 0) {
         // Convert images to base64
         uploadedImages = await Promise.all(
-          imageFiles.map((file) => uploadItemImage(file))
+          imageFiles.map((file) => uploadItemImage(file)),
         );
       }
 
       // Call backend API to trigger automatic matching
       const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
-      const userId = 'admin'; // TODO: Get actual admin user ID
+      const userId = "admin"; // TODO: Get actual admin user ID
 
-      console.log('[ADMIN-MODAL] Creating item via API with', uploadedImages.length, 'images');
+      console.log(
+        "[ADMIN-MODAL] Creating item via API with",
+        uploadedImages.length,
+        "images",
+      );
 
       const response = await fetch(`${API_URL}/api/items`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           userId,
@@ -148,10 +154,10 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to create item');
+        throw new Error(error.error || "Failed to create item");
       }
 
-      console.log('[ADMIN-MODAL] Item created successfully');
+      console.log("[ADMIN-MODAL] Item created successfully");
       const result = await response.json();
       setMatchResult(result.matchResult);
       setStep("success");
@@ -159,8 +165,9 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
     } catch (err) {
       console.error("Error adding item:", err);
       alert(
-        `Failed to publish item: ${err instanceof Error ? err.message : "Unknown error"
-        }`
+        `Failed to publish item: ${
+          err instanceof Error ? err.message : "Unknown error"
+        }`,
       );
     } finally {
       setLoading(false);
@@ -304,13 +311,13 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
                 <label className="text-sm text-text-secondary mb-1 block">
                   Location <span className="text-google-red">*</span>
                 </label>
-                <LocationPicker
+                <LazyLocationPicker
                   value={formData.location}
                   onChange={(location) =>
                     setFormData({ ...formData, location })
                   }
                   onLocationSelect={(location, coordinates) =>
-                    setFormData(prev => ({ ...prev, location, coordinates }))
+                    setFormData((prev) => ({ ...prev, location, coordinates }))
                   }
                   placeholder="Search for a location..."
                 />
@@ -327,10 +334,11 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
                       <button
                         type="button"
                         onClick={() => setAiProvider("gemini")}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${aiProvider === "gemini"
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border hover:bg-gray-50"
-                          }`}
+                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                          aiProvider === "gemini"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:bg-gray-50"
+                        }`}
                       >
                         🌟 Gemini
                       </button>
@@ -339,10 +347,11 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
                       <button
                         type="button"
                         onClick={() => setAiProvider("groq")}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${aiProvider === "groq"
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border hover:bg-gray-50"
-                          }`}
+                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                          aiProvider === "groq"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:bg-gray-50"
+                        }`}
                       >
                         ⚡ Groq
                       </button>
@@ -584,9 +593,12 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
               <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Sparkles className="w-8 h-8" />
               </div>
-              <h3 className="text-2xl font-bold text-text-primary mb-2">Item Published!</h3>
+              <h3 className="text-2xl font-bold text-text-primary mb-2">
+                Item Published!
+              </h3>
               <p className="text-text-secondary mb-6 text-sm">
-                The {formData.type.toLowerCase()} item has been added to the database.
+                The {formData.type.toLowerCase()} item has been added to the
+                database.
               </p>
 
               {matchResult && matchResult.highestScore > 0 ? (
@@ -595,7 +607,9 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
                     <Sparkles className="w-4 h-4" />
                     <span className="font-semibold">AI Match Score</span>
                   </div>
-                  <div className="text-4xl font-bold text-blue-600 mb-1">{matchResult.highestScore}%</div>
+                  <div className="text-4xl font-bold text-blue-600 mb-1">
+                    {matchResult.highestScore}%
+                  </div>
                   <p className="text-xs text-blue-500">
                     Highest similarity found with existing items.
                   </p>
@@ -618,6 +632,6 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
           )}
         </div>
       </div>
-    </div >
+    </div>
   );
 }

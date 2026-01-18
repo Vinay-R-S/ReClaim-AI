@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
-/* Google Sans Font */
-@import url("https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap");
+/* Google Sans Font - loaded via preload in index.html for better performance */
+/* Font-display: swap is used to prevent render-blocking */
 
 /* Custom CSS Variables */
 :root {
@@ -28,7 +28,11 @@
 body {
   background-color: var(--color-background);
   color: var(--color-text-primary);
-  font-family: "Google Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    "Google Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -99,7 +103,7 @@ body {
 
 .nav-tab-active {
   background-color: var(--color-primary-light);
-  color: var(--color-primary);
+  color: var(--color-primary-hover);
 }
 
 .nav-tab-inactive {
@@ -325,6 +329,7 @@ body {
 
 /* Shadow utilities */
 .shadow-lg {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
     0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }

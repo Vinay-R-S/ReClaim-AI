@@ -308,7 +308,7 @@ export function ChatInterface() {
           conversationId: conversationId ?? undefined,
           context: currentContext ?? undefined,
           imageData: base64Images.length === 1 ? base64Images[0] : base64Images,
-        }
+        },
       );
 
       if (!conversationId) {
@@ -380,7 +380,7 @@ export function ChatInterface() {
         {
           conversationId: conversationId ?? undefined,
           context: currentContext ?? undefined,
-        }
+        },
       );
 
       if (!conversationId) {
@@ -436,7 +436,7 @@ export function ChatInterface() {
         {
           conversationId: conversationId ?? undefined,
           context: currentContext ?? undefined,
-        }
+        },
       );
 
       if (!conversationId) {
@@ -490,6 +490,7 @@ export function ChatInterface() {
           <button
             onClick={() => setToast(null)}
             className="ml-2 hover:opacity-70"
+            aria-label="Dismiss notification"
           >
             <X size={16} />
           </button>
@@ -619,6 +620,7 @@ export function ChatInterface() {
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading}
               title="Attach images (up to 5)"
+              aria-label="Attach images"
             >
               <Paperclip className="w-5 h-5 text-text-secondary" />
             </button>
@@ -627,6 +629,7 @@ export function ChatInterface() {
               onClick={handleLocationShare}
               disabled={isLoading}
               title="Share location"
+              aria-label="Share location"
             >
               <MapPin className="w-5 h-5 text-text-secondary" />
             </button>
@@ -635,6 +638,7 @@ export function ChatInterface() {
               onClick={() => setShowDateTimeModal(true)}
               disabled={isLoading}
               title="Set date and time"
+              aria-label="Set date and time"
             >
               <Calendar className="w-5 h-5 text-text-secondary" />
             </button>
@@ -643,6 +647,7 @@ export function ChatInterface() {
               disabled={isLoading || !inputValue.trim()}
               className="p-2 rounded-full bg-primary text-white hover:bg-primary-hover transition-colors disabled:opacity-50"
               title="Send message"
+              aria-label="Send message"
             >
               {isLoading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />

@@ -2,7 +2,17 @@ import { useState, useEffect, useRef } from "react";
 import { UserLayout } from "../../components/layout/UserLayout";
 import { useAuth } from "../../context/AuthContext";
 import { type Item } from "../../services/itemService";
-import { Mail, Calendar, Award, Package, Search, CheckCircle, Camera, Loader2, Clock } from "lucide-react";
+import {
+  Mail,
+  Calendar,
+  Award,
+  Package,
+  Search,
+  CheckCircle,
+  Camera,
+  Loader2,
+  Clock,
+} from "lucide-react";
 import { Timestamp, doc, getDoc, updateDoc } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import { db } from "../../lib/firebase";
@@ -28,7 +38,7 @@ function getNameFromEmail(email: string | null | undefined): string {
   // Convert "john.doe" to "John Doe" or "johndoe" to "Johndoe"
   const nameParts = localPart
     .split(/[._-]/)
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
     .join(" ");
 
   return nameParts || email;
@@ -72,15 +82,23 @@ export function ProfilePage() {
         }
 
         // Fetch user's items
-        const itemsResponse = await fetch(`${API_URL}/api/items?reportedBy=${user.uid}`);
+        const itemsResponse = await fetch(
+          `${API_URL}/api/items?reportedBy=${user.uid}`,
+        );
         if (itemsResponse.ok) {
           const itemsData = await itemsResponse.json();
           const items: Item[] = itemsData.items || [];
 
           const lostItems = items.filter((item) => item.type === "Lost").length;
-          const foundItems = items.filter((item) => item.type === "Found").length;
-          const matchedItems = items.filter((item) => item.status === "Matched").length;
-          const claimedItems = items.filter((item) => item.status === "Claimed" || item.status === "Resolved").length;
+          const foundItems = items.filter(
+            (item) => item.type === "Found",
+          ).length;
+          const matchedItems = items.filter(
+            (item) => item.status === "Matched",
+          ).length;
+          const claimedItems = items.filter(
+            (item) => item.status === "Claimed" || item.status === "Resolved",
+          ).length;
 
           setStats((prev) => ({
             ...prev,
@@ -93,7 +111,9 @@ export function ProfilePage() {
         }
 
         // Fetch credits
-        const creditsResponse = await fetch(`${API_URL}/api/credits/${user.uid}`);
+        const creditsResponse = await fetch(
+          `${API_URL}/api/credits/${user.uid}`,
+        );
         if (creditsResponse.ok) {
           const creditsData = await creditsResponse.json();
           setStats((prev) => ({
@@ -278,7 +298,9 @@ export function ProfilePage() {
       console.error("Error uploading profile picture:", error);
       const errorMessage = error?.message || "Unknown error occurred";
       console.error("Full error:", error);
-      alert(`Failed to upload profile picture: ${errorMessage}. Please try again.`);
+      alert(
+        `Failed to upload profile picture: ${errorMessage}. Please try again.`,
+      );
       setPhotoPreview(null);
     } finally {
       setUploadingPhoto(false);
@@ -337,6 +359,7 @@ export function ProfilePage() {
                 disabled={uploadingPhoto}
                 className="absolute bottom-0 right-0 w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center shadow-lg hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Change profile picture"
+                aria-label="Change profile picture"
               >
                 <Camera className="w-5 h-5" />
               </button>
@@ -362,13 +385,23 @@ export function ProfilePage() {
                 {userData?.createdAt && (
                   <div className="flex items-center gap-2 text-sm text-text-secondary justify-center md:justify-start">
                     <Calendar className="w-5 h-5" />
-                    <span><span className="font-semibold text-text-primary">Member since:</span> {formatDate(userData.createdAt)}</span>
+                    <span>
+                      <span className="font-semibold text-text-primary">
+                        Member since:
+                      </span>{" "}
+                      {formatDate(userData.createdAt)}
+                    </span>
                   </div>
                 )}
                 {userData?.lastLoginAt && (
                   <div className="flex items-center gap-2 text-sm text-text-secondary justify-center md:justify-start">
                     <Clock className="w-5 h-5" />
-                    <span><span className="font-semibold text-text-primary">Last login:</span> {formatDate(userData.lastLoginAt)}</span>
+                    <span>
+                      <span className="font-semibold text-text-primary">
+                        Last login:
+                      </span>{" "}
+                      {formatDate(userData.lastLoginAt)}
+                    </span>
                   </div>
                 )}
               </div>
@@ -378,14 +411,20 @@ export function ProfilePage() {
 
         {/* Statistics Grid */}
         <div>
-          <h2 className="text-xl font-semibold text-text-primary mb-4">Statistics</h2>
+          <h2 className="text-xl font-semibold text-text-primary mb-4">
+            Statistics
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Total Reports */}
             <div className="card p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-text-secondary mb-1">Total Reports</p>
-                  <p className="text-3xl font-bold text-text-primary">{stats.totalReports}</p>
+                  <p className="text-sm text-text-secondary mb-1">
+                    Total Reports
+                  </p>
+                  <p className="text-3xl font-bold text-text-primary">
+                    {stats.totalReports}
+                  </p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center">
                   <Package className="w-7 h-7 text-blue-600" />
@@ -398,7 +437,9 @@ export function ProfilePage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-text-secondary mb-1">Lost Items</p>
-                  <p className="text-3xl font-bold text-text-primary">{stats.lostItems}</p>
+                  <p className="text-3xl font-bold text-text-primary">
+                    {stats.lostItems}
+                  </p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
                   <Search className="w-7 h-7 text-red-600" />
@@ -410,8 +451,12 @@ export function ProfilePage() {
             <div className="card p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-text-secondary mb-1">Found Items</p>
-                  <p className="text-3xl font-bold text-text-primary">{stats.foundItems}</p>
+                  <p className="text-sm text-text-secondary mb-1">
+                    Found Items
+                  </p>
+                  <p className="text-3xl font-bold text-text-primary">
+                    {stats.foundItems}
+                  </p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center">
                   <Package className="w-7 h-7 text-green-600" />
@@ -423,8 +468,12 @@ export function ProfilePage() {
             <div className="card p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-text-secondary mb-1">Matched Items</p>
-                  <p className="text-3xl font-bold text-text-primary">{stats.matchedItems}</p>
+                  <p className="text-sm text-text-secondary mb-1">
+                    Matched Items
+                  </p>
+                  <p className="text-3xl font-bold text-text-primary">
+                    {stats.matchedItems}
+                  </p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-yellow-50 flex items-center justify-center">
                   <CheckCircle className="w-7 h-7 text-yellow-600" />
@@ -436,8 +485,12 @@ export function ProfilePage() {
             <div className="card p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-text-secondary mb-1">Claimed Items</p>
-                  <p className="text-3xl font-bold text-text-primary">{stats.claimedItems}</p>
+                  <p className="text-sm text-text-secondary mb-1">
+                    Claimed Items
+                  </p>
+                  <p className="text-3xl font-bold text-text-primary">
+                    {stats.claimedItems}
+                  </p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-purple-50 flex items-center justify-center">
                   <Award className="w-7 h-7 text-purple-600" />
@@ -450,7 +503,9 @@ export function ProfilePage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-text-secondary mb-1">Credits</p>
-                  <p className="text-3xl font-bold text-text-primary">{stats.credits}</p>
+                  <p className="text-3xl font-bold text-text-primary">
+                    {stats.credits}
+                  </p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-yellow-200 flex items-center justify-center">
                   <span className="text-3xl">🪙</span>
@@ -459,9 +514,7 @@ export function ProfilePage() {
             </div>
           </div>
         </div>
-
       </div>
     </UserLayout>
   );
 }
-

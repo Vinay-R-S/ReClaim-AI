@@ -197,7 +197,7 @@ export function EditReportModal({
       await updateItemViaApi(
         item.id,
         updates,
-        newImages.length > 0 ? newImages : undefined
+        newImages.length > 0 ? newImages : undefined,
       );
 
       setToast({ type: "success", message: "Report updated successfully!" });
@@ -232,6 +232,7 @@ export function EditReportModal({
             onClick={onClose}
             disabled={loading}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+            aria-label="Close"
           >
             <X className="w-5 h-5 text-gray-500" />
           </button>
@@ -246,7 +247,7 @@ export function EditReportModal({
                 "p-3 rounded-lg flex items-center gap-2 text-sm",
                 toast.type === "success"
                   ? "bg-green-50 text-green-700 border border-green-200"
-                  : "bg-red-50 text-red-700 border border-red-200"
+                  : "bg-red-50 text-red-700 border border-red-200",
               )}
             >
               {toast.type === "success" ? (
@@ -275,6 +276,7 @@ export function EditReportModal({
                   <button
                     onClick={() => removeExistingImage(idx)}
                     className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                    aria-label="Remove image"
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -291,6 +293,7 @@ export function EditReportModal({
                   <button
                     onClick={() => removeNewImage(idx)}
                     className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                    aria-label="Remove image"
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -396,6 +399,7 @@ export function EditReportModal({
                   <button
                     onClick={() => removeTag(tag)}
                     className="text-gray-500 hover:text-red-500"
+                    aria-label={`Remove tag ${tag}`}
                   >
                     ×
                   </button>

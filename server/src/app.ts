@@ -1,6 +1,7 @@
 // Main Express app - imported dynamically after env vars are loaded
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import helmet from 'helmet';
 import chatRoutes from './routes/chat.js';
 import itemsRoutes from './routes/items.js';
@@ -16,17 +17,25 @@ import { authLimiter, apiLimiter, errorHandler, notFoundHandler } from './middle
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// ============= SECURITY MIDDLEWARE =============
+// SECURITY MIDDLEWARE
+
+app.use(compression({
+    threshold: 1024,
+    filter: (req, res) => {
+        if (req.headers['x-no-compression']) return false;
+        return compression.filter(req, res);
+    }
+}));
 
 // Security headers (XSS, clickjacking, content-type sniffing protection)
 app.use(helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allow images from Cloudinary
-    contentSecurityPolicy: false, // Disable CSP for now (can be configured later)
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: false,
 }));
 
 // CORS configuration with credentials support
 app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:4173'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -38,11 +47,11 @@ app.use('/api/auth', authLimiter);
 // Rate limiting on all API routes (general)
 app.use('/api', apiLimiter);
 
-// ============= BODY PARSING =============
+// BODY PARSING
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ============= HEALTH CHECK =============
+// HEALTH CHECK
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
@@ -51,7 +60,7 @@ app.get('/health', (req, res) => {
     });
 });
 
-// ============= API ROUTES =============
+// API ROUTES
 app.use('/api/chat', chatRoutes);
 app.use('/api/items', itemsRoutes);
 app.use('/api/matches', matchesRoutes);
@@ -62,7 +71,7 @@ app.use('/api/handover', handoverRoutes);
 app.use('/api/credits', creditsRoutes);
 app.use('/api/auth', authRoutes);
 
-// ============= ERROR HANDLING =============
+// ERROR HANDLING
 
 // 404 handler for undefined routes
 app.use(notFoundHandler);
@@ -70,11 +79,10 @@ app.use(notFoundHandler);
 // Global error handler (must be last)
 app.use(errorHandler);
 
-// ============= START SERVER =============
+// START SERVER
 app.listen(PORT, () => {
-    console.log(`🚀 ReClaim AI Server running on http://localhost:${PORT}`);
-    console.log(`📌 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`ReClaim AI Server running on http://localhost:${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
 export default app;
-

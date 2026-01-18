@@ -11,7 +11,7 @@ import {
   RefreshCw,
   Zap,
   HandMetal,
-} from "lucide-react";
+} from "@/lib/icons";
 import {
   BarChart,
   Bar,
@@ -127,7 +127,7 @@ function KPICard({
         "relative overflow-hidden rounded-2xl p-5 transition-all duration-300",
         "hover:scale-[1.02] hover:shadow-xl cursor-pointer",
         "border border-white/20",
-        gradient
+        gradient,
       )}
     >
       {/* Background decoration */}
@@ -260,14 +260,14 @@ function MatchTrendChart({
                 "px-3 py-1 text-xs font-medium rounded-md transition-colors",
                 timeRange === range
                   ? "bg-white text-primary shadow-sm"
-                  : "text-text-secondary hover:text-text-primary"
+                  : "text-text-secondary hover:text-text-primary",
               )}
             >
               {range === "7d"
                 ? "7 Days"
                 : range === "30d"
-                ? "30 Days"
-                : "All Time"}
+                  ? "30 Days"
+                  : "All Time"}
             </button>
           ))}
         </div>
@@ -453,7 +453,7 @@ function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
                   <div
                     className={cn(
                       "px-2 py-0.5 rounded-full text-white text-xs font-bold",
-                      getScoreColor(match.matchScore)
+                      getScoreColor(match.matchScore),
                     )}
                   >
                     {match.matchScore}%
@@ -612,7 +612,7 @@ export function MainDashboard() {
     activeLost: items.filter((i) => i.type === "Lost" && i.status === "Pending")
       .length,
     activeFound: items.filter(
-      (i) => i.type === "Found" && i.status === "Pending"
+      (i) => i.type === "Found" && i.status === "Pending",
     ).length,
     totalMatches: matches.length,
     pendingReview: items.filter((i) => i.status === "Pending").length,
@@ -622,10 +622,10 @@ export function MainDashboard() {
       items.length > 0
         ? Math.round(
             (items.filter(
-              (i) => i.status === "Matched" || i.status === "Claimed"
+              (i) => i.status === "Matched" || i.status === "Claimed",
             ).length /
               items.length) *
-              100
+              100,
           )
         : 0,
   };

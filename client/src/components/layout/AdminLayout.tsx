@@ -11,7 +11,7 @@ import {
   Settings,
   LogOut,
   User,
-} from "lucide-react";
+} from "@/lib/icons";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
 import { getItems } from "../../services/itemService";
@@ -49,7 +49,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         ]);
 
         const pendingItems = items.filter(
-          (item) => item.status === "Pending"
+          (item) => item.status === "Pending",
         ).length;
 
         setCounts({
@@ -174,8 +174,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         {/* Logo */}
         <div className="h-16 px-4 flex items-center gap-2 border-b border-border">
           <img
-            src="/Logo.png"
+            src="/Logo.webp"
             alt="ReClaim AI Logo"
+            width={40}
+            height={40}
             className="w-10 h-10 object-contain rounded-full"
           />
           <span className="font-medium text-xl text-text-primary">ReClaim</span>
@@ -202,7 +204,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                         "sidebar-link",
                         isActive
                           ? "sidebar-link-active"
-                          : "sidebar-link-inactive"
+                          : "sidebar-link-inactive",
                       )}
                     >
                       <item.icon className="w-5 h-5" />
@@ -213,7 +215,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                             "px-2 py-0.5 rounded-full text-xs font-medium",
                             isActive
                               ? "bg-primary text-white"
-                              : "bg-gray-200 text-text-secondary"
+                              : "bg-gray-200 text-text-secondary",
                           )}
                         >
                           {item.badge}
@@ -256,7 +258,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
               {/* Dropdown Menu */}
               {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-72 bg-surface/80 backdrop-blur-md rounded-xl border border-border shadow-lg py-2 z-50">
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl border border-border shadow-lg py-2 z-50">
                   {/* User Info */}
                   <div className="px-4 py-3 border-b border-border">
                     <div className="flex items-center gap-3">

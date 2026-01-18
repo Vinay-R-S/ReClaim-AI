@@ -18,7 +18,7 @@ import {
   getAvailableProviders,
   type AIProvider,
 } from "../../services/aiService";
-import { LocationPicker } from "../ui/LocationPicker";
+import { LazyLocationPicker } from "../ui/LazyLocationPicker";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -83,7 +83,7 @@ export function ReportItemModal({
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result as string);
             reader.readAsDataURL(file);
-          })
+          }),
       );
 
       Promise.all(previewPromises).then((previews) => {
@@ -128,7 +128,7 @@ export function ReportItemModal({
         const enhanced = await enhanceTextDescription(
           formData.name,
           formData.description,
-          aiProvider
+          aiProvider,
         );
 
         setFormData((prev) => ({
@@ -176,7 +176,7 @@ export function ReportItemModal({
       alert(
         `Analysis failed: ${
           err instanceof Error ? err.message : "Unknown error"
-        }`
+        }`,
       );
       setStep("upload");
     } finally {
@@ -236,10 +236,16 @@ export function ReportItemModal({
         }
       }
 
+      // Get auth token
+      const token = await user.getIdToken();
+
       // Submit to API
       const response = await fetch(`${API_URL}/api/items`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           userId: user.uid,
           item: itemData,
@@ -261,7 +267,7 @@ export function ReportItemModal({
       alert(
         `Failed to submit: ${
           err instanceof Error ? err.message : "Unknown error"
-        }`
+        }`,
       );
     } finally {
       setLoading(false);
@@ -319,6 +325,7 @@ export function ReportItemModal({
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             disabled={loading}
+            aria-label="Close"
           >
             <X className="w-5 h-5 text-text-secondary" />
           </button>
@@ -372,6 +379,7 @@ export function ReportItemModal({
                               }}
                               className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
                               title="Remove image"
+                              aria-label="Remove image"
                             >
                               ×
                             </button>
@@ -464,7 +472,7 @@ export function ReportItemModal({
                     : "Found Location"}{" "}
                   <span className="text-red-500">*</span>
                 </label>
-                <LocationPicker
+                <LazyLocationPicker
                   value={formData.location}
                   onChange={(location) =>
                     setFormData({ ...formData, location })
@@ -487,7 +495,7 @@ export function ReportItemModal({
                     <MapPin className="w-4 h-4 inline mr-1" />
                     Collection Location <span className="text-red-500">*</span>
                   </label>
-                  <LocationPicker
+                  <LazyLocationPicker
                     value={formData.collectionLocation}
                     onChange={(location) =>
                       setFormData({ ...formData, collectionLocation: location })
@@ -705,6 +713,7 @@ export function ReportItemModal({
                       <button
                         onClick={() => handleTagRemove(tag)}
                         className="hover:text-red-500"
+                        aria-label={`Remove tag ${tag}`}
                       >
                         ×
                       </button>

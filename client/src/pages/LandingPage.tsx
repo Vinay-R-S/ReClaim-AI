@@ -18,8 +18,10 @@ export function LandingPage() {
           {/* Logo */}
           <div className="flex items-center gap-2">
             <img
-              src="/Logo.png"
+              src="/Logo.webp"
               alt="ReClaim AI Logo"
+              width={40}
+              height={40}
               className="w-10 h-10 object-contain rounded-full"
             />
             <span className="font-medium text-xl text-text-primary">
@@ -240,8 +242,11 @@ export function LandingPage() {
             <div className="md:col-span-2">
               <div className="flex items-center gap-2 mb-4">
                 <img
-                  src="/Logo.png"
+                  src="/Logo.webp"
                   alt="ReClaim AI Logo"
+                  width={40}
+                  height={40}
+                  loading="lazy"
                   className="w-10 h-10 object-contain rounded-full"
                 />
                 <span className="font-medium text-xl text-text-primary">

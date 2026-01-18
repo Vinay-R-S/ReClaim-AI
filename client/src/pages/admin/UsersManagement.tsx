@@ -18,7 +18,7 @@ import {
 } from "../../services/userService";
 import { UserDetailModal } from "../../components/admin/UserDetailModal";
 import { Timestamp } from "firebase/firestore";
-import ExcelJS from "exceljs";
+// ExcelJS is loaded dynamically on export to reduce bundle size
 import { getItems } from "../../services/itemService";
 
 type SortOrder = "asc" | "desc" | null;
@@ -44,7 +44,7 @@ export function UsersManagement() {
   const [users, setUsers] = useState<UserWithItemCounts[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserWithItemCounts | null>(
-    null
+    null,
   );
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -68,10 +68,10 @@ export function UsersManagement() {
 
       const usersWithCounts = fetchedUsers.map((user) => {
         const userLostItems = allItems.filter(
-          (item) => item.reportedBy === user.uid && item.type === "Lost"
+          (item) => item.reportedBy === user.uid && item.type === "Lost",
         );
         const userFoundItems = allItems.filter(
-          (item) => item.reportedBy === user.uid && item.type === "Found"
+          (item) => item.reportedBy === user.uid && item.type === "Found",
         );
 
         const lostCount = userLostItems.length;
@@ -124,7 +124,7 @@ export function UsersManagement() {
           `• Immediately prevent the user from logging in\n` +
           `• Sign them out of all active sessions\n` +
           `• Block access to all features\n\n` +
-          `Are you sure you want to block this user?`
+          `Are you sure you want to block this user?`,
       );
 
       if (!confirmed) {
@@ -141,8 +141,8 @@ export function UsersManagement() {
         prev.map((u) =>
           u.uid === user.uid
             ? { ...u, status: newStatus as "active" | "blocked" }
-            : u
-        )
+            : u,
+        ),
       );
     } catch (error) {
       console.error("Error updating user status:", error);
@@ -313,8 +313,11 @@ export function UsersManagement() {
     }
   };
 
-  // Export to Excel
+  // Export to Excel (ExcelJS loaded dynamically to reduce initial bundle size)
   const handleExportToExcel = async () => {
+    // Dynamic import - ExcelJS is only loaded when user clicks Export
+    const ExcelJS = (await import("exceljs")).default;
+
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Users");
 
@@ -407,7 +410,7 @@ export function UsersManagement() {
                   itemsFilter !== "all" ||
                   dateRangeFilter !== "all" ||
                   itemTypeFilter !== "all") &&
-                  "bg-primary/10 text-primary"
+                  "bg-primary/10 text-primary",
               )}
             >
               <Filter className="w-4 h-4" />
@@ -681,7 +684,7 @@ export function UsersManagement() {
                       "border-b border-border transition-colors",
                       (user.status || "active") === "blocked"
                         ? "bg-gray-50/50 opacity-75"
-                        : "hover:bg-gray-50"
+                        : "hover:bg-gray-50",
                     )}
                   >
                     <td className="py-3 px-4">
@@ -720,7 +723,7 @@ export function UsersManagement() {
                           "badge px-3 py-1",
                           (user.status || "active") === "active"
                             ? "badge-active"
-                            : "badge-blocked"
+                            : "badge-blocked",
                         )}
                       >
                         {(user.status || "active") === "active"
@@ -737,7 +740,7 @@ export function UsersManagement() {
                           "inline-block px-2 py-1 rounded text-xs font-medium",
                           user.lostCount > 0
                             ? "bg-google-red/10 text-google-red"
-                            : "text-text-secondary"
+                            : "text-text-secondary",
                         )}
                       >
                         {user.lostCount}
@@ -749,7 +752,7 @@ export function UsersManagement() {
                           "inline-block px-2 py-1 rounded text-xs font-medium",
                           user.foundCount > 0
                             ? "bg-google-green/10 text-google-green"
-                            : "text-text-secondary"
+                            : "text-text-secondary",
                         )}
                       >
                         {user.foundCount}
@@ -776,7 +779,7 @@ export function UsersManagement() {
                               ? "text-google-red hover:bg-red-50"
                               : "text-google-green hover:bg-green-50",
                             updatingUserId === user.uid &&
-                              "opacity-50 cursor-not-allowed"
+                              "opacity-50 cursor-not-allowed",
                           )}
                           title={
                             (user.status || "active") === "active"

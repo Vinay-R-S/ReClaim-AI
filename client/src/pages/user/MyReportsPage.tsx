@@ -156,7 +156,7 @@ export function MyReportsPage() {
                       "absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-medium",
                       item.type === "Lost"
                         ? "bg-red-100 text-red-700"
-                        : "bg-green-100 text-green-700"
+                        : "bg-green-100 text-green-700",
                     )}
                   >
                     {item.type}
@@ -193,7 +193,7 @@ export function MyReportsPage() {
                         item.status === "Pending" &&
                           "bg-yellow-50 text-yellow-700 border-yellow-200",
                         item.status === "Claimed" &&
-                          "bg-green-50 text-green-700 border-green-200"
+                          "bg-green-50 text-green-700 border-green-200",
                       )}
                     >
                       {item.status}
@@ -233,7 +233,7 @@ export function MyReportsPage() {
                         "badge mb-2",
                         selectedItem.type === "Lost"
                           ? "bg-red-100 text-red-700"
-                          : "bg-green-100 text-green-700"
+                          : "bg-green-100 text-green-700",
                       )}
                     >
                       {selectedItem.type}
@@ -245,6 +245,7 @@ export function MyReportsPage() {
                   <button
                     onClick={() => setSelectedItem(null)}
                     className="text-text-secondary hover:text-text-primary"
+                    aria-label="Close"
                   >
                     ✕
                   </button>

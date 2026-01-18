@@ -79,7 +79,7 @@ export function HomePage() {
               <div className="w-10 h-10 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center mx-auto mb-3">
                 1
               </div>
-              <h4 className="font-medium text-text-primary mb-1">Report</h4>
+              <h3 className="font-medium text-text-primary mb-1">Report</h3>
               <p className="text-sm text-text-secondary">
                 Take a photo and provide details about the item
               </p>
@@ -88,7 +88,7 @@ export function HomePage() {
               <div className="w-10 h-10 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center mx-auto mb-3">
                 2
               </div>
-              <h4 className="font-medium text-text-primary mb-1">Match</h4>
+              <h3 className="font-medium text-text-primary mb-1">Match</h3>
               <p className="text-sm text-text-secondary">
                 AI analyzes and matches lost & found items
               </p>
@@ -97,7 +97,7 @@ export function HomePage() {
               <div className="w-10 h-10 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center mx-auto mb-3">
                 3
               </div>
-              <h4 className="font-medium text-text-primary mb-1">Reunite</h4>
+              <h3 className="font-medium text-text-primary mb-1">Reunite</h3>
               <p className="text-sm text-text-secondary">
                 Verify ownership and collect your item
               </p>
