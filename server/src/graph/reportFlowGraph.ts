@@ -532,8 +532,8 @@ async function handleCollectDateTime(state: ReportFlowState): Promise<Partial<Re
         itemData: updatedItemData,
         responseMessage,
         responseChips: [
-            { label: 'Confirm', icon: '✅' },
-            { label: 'Edit details', icon: '✏️' },
+            { label: 'Confirm' },
+            { label: 'Edit details' },
         ],
         currentNode: 'confirmDetails',
         turnCount: state.turnCount + 1,
@@ -581,8 +581,8 @@ async function handleConfirmDetails(state: ReportFlowState): Promise<Partial<Rep
             itemData: updatedItemData,
             responseMessage,
             responseChips: [
-                { label: 'Confirm', icon: '✅' },
-                { label: 'Edit details', icon: '✏️' },
+                { label: 'Confirm' },
+                { label: 'Edit details' },
             ],
             currentNode: 'confirmDetails',
             turnCount: state.turnCount + 1,
@@ -611,8 +611,8 @@ async function handleSaveAndSearch(state: ReportFlowState): Promise<Partial<Repo
             error: 'Failed to save item',
             responseMessage: 'Sorry, there was an error saving your report. Please try again.',
             responseChips: [
-                { label: 'Report lost item', icon: '🔍' },
-                { label: 'Report found item', icon: '📦' },
+                { label: 'Report lost item' },
+                { label: 'Report found item' },
             ],
             isComplete: true,
             currentNode: 'complete',
@@ -812,7 +812,7 @@ async function handleConfirmMatch(state: ReportFlowState): Promise<Partial<Repor
     const message = state.lastUserMessage.toLowerCase().trim();
     console.log('[Graph:handleConfirmMatch] User response:', message);
 
-    if (message.includes('confirm') || message.includes('yes') || message.includes('✅')) {
+    if (message.includes('confirm') || message.includes('yes')) {
         // User confirmed!
         const foundItem = state.pendingMatch?.item;
 

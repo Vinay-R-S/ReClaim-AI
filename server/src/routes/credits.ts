@@ -141,7 +141,7 @@ router.post('/signup-bonus', async (req: Request, res: Response) => {
             createdAt: FieldValue.serverTimestamp(),
         });
 
-        console.log(`✅ Signup bonus transaction logged for ${userId}`);
+        console.log(`Signup bonus transaction logged for ${userId}`);
         return res.json({ success: true });
     } catch (error) {
         console.error('Signup bonus error:', error);

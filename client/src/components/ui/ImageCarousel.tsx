@@ -30,7 +30,7 @@ export function ImageCarousel({
       e.stopPropagation();
       setCurrentIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
     },
-    [images.length]
+    [images.length],
   );
 
   const handleNext = useCallback(
@@ -38,7 +38,7 @@ export function ImageCarousel({
       e.stopPropagation();
       setCurrentIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
     },
-    [images.length]
+    [images.length],
   );
 
   const goToIndex = useCallback((e: React.MouseEvent, index: number) => {
@@ -52,10 +52,10 @@ export function ImageCarousel({
       <div
         className={cn(
           "w-full h-48 bg-gray-100 rounded-xl flex items-center justify-center",
-          className
+          className,
         )}
       >
-        <span className="text-4xl">📦</span>
+        <span className="text-4xl">No Image</span>
       </div>
     );
   }
@@ -69,7 +69,7 @@ export function ImageCarousel({
         className={cn(
           "w-full h-48 object-cover rounded-xl",
           className,
-          imageClassName
+          imageClassName,
         )}
       />
     );
@@ -83,7 +83,7 @@ export function ImageCarousel({
         alt={`${alt} ${currentIndex + 1}`}
         className={cn(
           "w-full h-48 object-cover rounded-xl transition-opacity duration-300",
-          imageClassName
+          imageClassName,
         )}
       />
 
@@ -118,7 +118,7 @@ export function ImageCarousel({
                 "w-2 h-2 rounded-full transition-all",
                 index === currentIndex
                   ? "bg-white scale-110"
-                  : "bg-white/50 hover:bg-white/75"
+                  : "bg-white/50 hover:bg-white/75",
               )}
               aria-label={`Go to image ${index + 1}`}
             />

@@ -48,7 +48,7 @@ async function initializeBlockchain() {
 
     for (const rpcUrl of SEPOLIA_RPC_URLS) {
         try {
-            console.log(`🔄 Trying RPC: ${rpcUrl.substring(0, 40)}...`);
+            console.log(`Trying RPC: ${rpcUrl.substring(0, 40)}...`);
 
             provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
                 staticNetwork: true, // Skip network detection
@@ -63,7 +63,7 @@ async function initializeBlockchain() {
             // Test the connection with a simple call
             await provider.getBlockNumber();
 
-            console.log('✅ Blockchain service initialized');
+            console.log('Blockchain service initialized');
             console.log('   Admin wallet:', wallet.address);
             console.log('   Contract:', contractAddress);
             console.log('   RPC:', rpcUrl);
@@ -71,7 +71,7 @@ async function initializeBlockchain() {
             return; // Success!
 
         } catch (error: any) {
-            console.warn(`⚠️ RPC ${rpcUrl.substring(0, 30)}... failed:`, error.message);
+            console.warn(`RPC ${rpcUrl.substring(0, 30)}... failed:`, error.message);
             lastError = error;
             // Try next RPC
             provider = null;
@@ -81,7 +81,7 @@ async function initializeBlockchain() {
     }
 
     // If we get here, all RPCs failed
-    console.error('❌ All RPC endpoints failed');
+    console.error('All RPC endpoints failed');
     throw new Error(`Blockchain initialization failed: ${lastError?.message || 'All RPC endpoints failed'}`);
 }
 
@@ -111,7 +111,7 @@ export async function recordHandoverOnBlockchain(data: {
         try {
             // Reset contract if this is a retry
             if (attempt > 0) {
-                console.log(`🔄 Retry attempt ${attempt + 1}/${MAX_RETRIES}...`);
+                console.log(`Retry attempt ${attempt + 1}/${MAX_RETRIES}...`);
                 provider = null;
                 wallet = null;
                 contract = null;
@@ -128,7 +128,7 @@ export async function recordHandoverOnBlockchain(data: {
             const foundPersonHash = hashData(data.foundPersonId);
             const itemDetailsHash = hashData(JSON.stringify(data.itemDetails));
 
-            console.log(`📝 Recording handover ${data.matchId} on blockchain...`);
+            console.log(`Recording handover ${data.matchId} on blockchain...`);
 
             // Send transaction with gas limit
             const tx = await contract.recordHandover(
@@ -143,12 +143,12 @@ export async function recordHandoverOnBlockchain(data: {
                 }
             );
 
-            console.log(`⏳ Transaction sent: ${tx.hash}`);
+            console.log(`Transaction sent: ${tx.hash}`);
 
             // Wait for confirmation (1 block)
             const receipt = await tx.wait(1);
 
-            console.log(`✅ Handover recorded! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed.toString()}`);
+            console.log(`Handover recorded! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed.toString()}`);
 
             return {
                 success: true,
@@ -158,7 +158,7 @@ export async function recordHandoverOnBlockchain(data: {
         } catch (error: any) {
             attempt++;
 
-            console.error(`❌ Blockchain recording failed (attempt ${attempt}/${MAX_RETRIES}):`, error.message);
+            console.error(`Blockchain recording failed (attempt ${attempt}/${MAX_RETRIES}):`, error.message);
 
             // If it's the last attempt or a non-retryable error, return failure
             if (attempt >= MAX_RETRIES ||

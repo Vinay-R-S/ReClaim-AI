@@ -216,7 +216,7 @@ export function ItemDetailModal({
                 "mb-4 p-3 rounded-lg flex items-center gap-2 text-sm",
                 toast.type === "success"
                   ? "bg-green-50 text-green-700 border border-green-200"
-                  : "bg-red-50 text-red-700 border border-red-200"
+                  : "bg-red-50 text-red-700 border border-red-200",
               )}
             >
               {toast.type === "success" ? (
@@ -303,7 +303,7 @@ export function ItemDetailModal({
                     "inline-block px-3 py-1 rounded-full text-sm font-medium",
                     item.type === "Lost"
                       ? "bg-google-red/10 text-google-red"
-                      : "bg-google-green/10 text-google-green"
+                      : "bg-google-green/10 text-google-green",
                   )}
                 >
                   {item.type}
@@ -342,7 +342,7 @@ export function ItemDetailModal({
                     "badge",
                     item.status === "Matched" && "badge-matched",
                     item.status === "Pending" && "badge-pending",
-                    item.status === "Claimed" && "badge-claimed"
+                    item.status === "Claimed" && "badge-claimed",
                   )}
                 >
                   {item.status}
@@ -486,7 +486,7 @@ export function ItemDetailModal({
                           "h-full rounded-full",
                           (item.matchScore || 0) >= 90
                             ? "bg-google-green"
-                            : "bg-google-blue"
+                            : "bg-google-blue",
                         )}
                         style={{ width: `${item.matchScore}%` }}
                       />
@@ -517,7 +517,7 @@ export function ItemDetailModal({
                     />
                   ) : (
                     <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center text-2xl">
-                      📦
+                      No Image
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
@@ -533,7 +533,7 @@ export function ItemDetailModal({
                           "text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded",
                           matchedItem.type === "Lost"
                             ? "bg-red-100 text-red-600"
-                            : "bg-green-100 text-green-600"
+                            : "bg-green-100 text-green-600",
                         )}
                       >
                         {matchedItem.type}

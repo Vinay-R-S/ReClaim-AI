@@ -63,7 +63,7 @@ export function ChatInterface() {
     // Handle location chip - open location modal
     if (
       label.toLowerCase().includes("location") ||
-      label.toLowerCase().includes("📍")
+      label.toLowerCase().includes("location")
     ) {
       setShowLocationModal(true);
       return;
@@ -72,24 +72,21 @@ export function ChatInterface() {
     // Handle Add photo chip - open file picker
     if (
       label.toLowerCase().includes("photo") ||
-      label.toLowerCase().includes("📷")
+      label.toLowerCase().includes("photo")
     ) {
       fileInputRef.current?.click();
       return;
     }
 
     // Handle Confirm chip - send confirmation to backend
-    if (
-      label.toLowerCase().includes("confirm") ||
-      label.toLowerCase().includes("✅")
-    ) {
+    if (label.toLowerCase().includes("confirm")) {
       if (!user?.uid || !conversationId) return;
 
       setIsLoading(true);
       const userMessage: Message = {
         id: Date.now().toString(),
         type: "user",
-        content: "✅ Confirmed",
+        content: "Confirmed",
       };
       setMessages((prev) => [...prev, userMessage]);
 
@@ -127,7 +124,7 @@ export function ChatInterface() {
     // Handle Edit details chip - ask user to provide corrections
     if (
       label.toLowerCase().includes("edit") ||
-      label.toLowerCase().includes("✏️")
+      label.toLowerCase().includes("edit")
     ) {
       setMessages((prev) => [
         ...prev,
@@ -361,7 +358,7 @@ export function ChatInterface() {
     const userMessage: Message = {
       id: Date.now().toString(),
       type: "user",
-      content: `📍 Location: ${locationName}`,
+      content: `Location: ${locationName}`,
     };
 
     const loadingMessage: Message = {

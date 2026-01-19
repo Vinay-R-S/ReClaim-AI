@@ -344,7 +344,7 @@ export function AddItemModal({
                             : "border-border hover:bg-gray-50"
                         }`}
                       >
-                        🌟 Gemini
+                        Gemini
                       </button>
                     )}
                     {availableProviders.includes("groq") && (
@@ -357,7 +357,7 @@ export function AddItemModal({
                             : "border-border hover:bg-gray-50"
                         }`}
                       >
-                        ⚡ Groq
+                        Groq
                       </button>
                     )}
                   </div>

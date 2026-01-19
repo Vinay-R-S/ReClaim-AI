@@ -191,7 +191,7 @@ export async function triggerAutoMatching(
             );
 
             if (commonTags.length < MATCH_CONFIG.REQUIREMENTS.minCommonTags) {
-                console.log(`[FILTER] ❌ Not enough common tags: ${commonTags.length} < ${MATCH_CONFIG.REQUIREMENTS.minCommonTags} - skipping`);
+                console.log(`[FILTER] Not enough common tags: ${commonTags.length} < ${MATCH_CONFIG.REQUIREMENTS.minCommonTags} - skipping`);
                 continue;
             }
 
@@ -205,7 +205,7 @@ export async function triggerAutoMatching(
                 );
 
                 if (distance > MATCH_CONFIG.REQUIREMENTS.maxDistance) {
-                    console.log(`[FILTER] ❌ Too far: ${distance.toFixed(2)}km > ${MATCH_CONFIG.REQUIREMENTS.maxDistance}km - skipping`);
+                    console.log(`[FILTER] Too far: ${distance.toFixed(2)}km > ${MATCH_CONFIG.REQUIREMENTS.maxDistance}km - skipping`);
                     continue;
                 }
             }
@@ -215,11 +215,11 @@ export async function triggerAutoMatching(
             const timeDiff = calculateTimeDifference(itemDate, candidateDate);
 
             if (timeDiff > MATCH_CONFIG.REQUIREMENTS.maxTimeDiff) {
-                console.log(`[FILTER] ❌ Too old: ${timeDiff.toFixed(1)}h > ${MATCH_CONFIG.REQUIREMENTS.maxTimeDiff}h - skipping`);
+                console.log(`[FILTER] Too old: ${timeDiff.toFixed(1)}h > ${MATCH_CONFIG.REQUIREMENTS.maxTimeDiff}h - skipping`);
                 continue;
             }
 
-            console.log(`[FILTER] ✅ Passed all pre-filters`);
+            console.log(`[FILTER] Passed all pre-filters`);
 
             // ================================================================
             // CALCULATE ALL SCORES
@@ -273,7 +273,7 @@ export async function triggerAutoMatching(
 
             // Check if this is a match (score >= threshold)
             if (finalScore >= MATCH_CONFIG.THRESHOLD) {
-                console.log(`[MATCH] ✅ MATCH FOUND! Score: ${finalScore}% >= ${MATCH_CONFIG.THRESHOLD}%`);
+                console.log(`[MATCH] MATCH FOUND! Score: ${finalScore}% >= ${MATCH_CONFIG.THRESHOLD}%`);
 
                 // Determine which is lost and which is found
                 const lostItemId = itemType === 'Lost' ? itemId : candidateId;
@@ -304,19 +304,19 @@ export async function triggerAutoMatching(
                     };
 
                     const matchRef = await collections.matches.add(matchData);
-                    console.log(`[AUTO-MATCH] 💾 Match record created: ${matchRef.id}`);
+                    console.log(`[AUTO-MATCH] Match record created: ${matchRef.id}`);
 
-                    // 🔔 INITIATE HANDOVER - Send verification emails
+                    // INITIATE HANDOVER - Send verification emails
                     try {
-                        console.log(`[AUTO-MATCH] 📧 Initiating handover process...`);
+                        console.log(`[AUTO-MATCH] Initiating handover process...`);
                         const handoverResult = await initiateHandover(matchRef.id, lostItemId, foundItemId);
                         if (handoverResult.success) {
-                            console.log(`[AUTO-MATCH] ✅ Handover emails sent successfully!`);
+                            console.log(`[AUTO-MATCH] Handover emails sent successfully!`);
                         } else {
-                            console.log(`[AUTO-MATCH] ⚠️ Handover initiation issue: ${handoverResult.message}`);
+                            console.log(`[AUTO-MATCH] Handover initiation issue: ${handoverResult.message}`);
                         }
                     } catch (handoverError) {
-                        console.error(`[AUTO-MATCH] ❌ Handover error:`, handoverError);
+                        console.error(`[AUTO-MATCH] Handover error:`, handoverError);
                         // Don't fail the match - handover can be retried
                     }
                 }
@@ -325,10 +325,10 @@ export async function triggerAutoMatching(
                 if (finalScore > highestScore) {
                     highestScore = finalScore;
                     bestMatchId = candidateId;
-                    console.log(`[AUTO-MATCH] 🏆 New highest score: ${finalScore}%`);
+                    console.log(`[AUTO-MATCH] New highest score: ${finalScore}%`);
                 }
             } else {
-                console.log(`[MATCH] ❌ No match: Score ${finalScore}% < ${MATCH_CONFIG.THRESHOLD}% threshold`);
+                console.log(`[MATCH] No match: Score ${finalScore}% < ${MATCH_CONFIG.THRESHOLD}% threshold`);
             }
         }
 
@@ -342,7 +342,7 @@ export async function triggerAutoMatching(
 
         // If we found at least one match, update both items' status
         if (highestScore >= MATCH_CONFIG.THRESHOLD) {
-            console.log(`\n[AUTO-MATCH] 🎯 Updating item statuses to "Matched"`);
+            console.log(`\n[AUTO-MATCH] Updating item statuses to "Matched"`);
 
             // Update new item
             await collections.items.doc(itemId).update({
@@ -360,15 +360,15 @@ export async function triggerAutoMatching(
                 updatedAt: FieldValue.serverTimestamp(),
             });
 
-            console.log(`[AUTO-MATCH] 🎉 Matching complete!`);
+            console.log(`[AUTO-MATCH] Matching complete!`);
         } else {
-            console.log(`\n[AUTO-MATCH] ℹ️  No matches found`);
+            console.log(`\n[AUTO-MATCH] No matches found`);
         }
 
         return { bestMatchId, highestScore };
 
     } catch (error) {
-        console.error(`[AUTO-MATCH] ❌ ERROR during matching for item ${itemId}:`, error);
+        console.error(`[AUTO-MATCH] ERROR during matching for item ${itemId}:`, error);
         throw error;
     }
 }

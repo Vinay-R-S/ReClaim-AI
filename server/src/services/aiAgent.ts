@@ -329,9 +329,9 @@ function getNodeFromState(state: string): any {
  */
 function getIdleChips() {
     return [
-        { label: 'Report lost item', icon: '🔍' },
-        { label: 'Report found item', icon: '📦' },
-        { label: 'Check matches', icon: '🔔' },
-        { label: 'Find collection point', icon: '📍' },
+        { label: 'Report lost item' },
+        { label: 'Report found item' },
+        { label: 'Check matches' },
+        { label: 'Find collection point' },
     ];
 }

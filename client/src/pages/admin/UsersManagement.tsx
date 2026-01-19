@@ -119,7 +119,7 @@ export function UsersManagement() {
     // Confirmation dialog for blocking (fraud warning)
     if (newStatus === "blocked") {
       const confirmed = window.confirm(
-        `⚠️ WARNING: Blocking User: ${user.displayName || user.email}\n\n` +
+        `WARNING: Blocking User: ${user.displayName || user.email}\n\n` +
           `This action will:\n` +
           `• Immediately prevent the user from logging in\n` +
           `• Sign them out of all active sessions\n` +

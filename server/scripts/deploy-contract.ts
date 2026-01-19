@@ -24,7 +24,7 @@ async function main() {
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const wallet = new ethers.Wallet(privateKey, provider);
 
-    console.log('📍 Deploying from wallet:', wallet.address);
+    console.log('Deploying from wallet:', wallet.address);
 
     // Check balance
     const balance = await provider.getBalance(wallet.address);
@@ -37,7 +37,7 @@ async function main() {
     // Contract compilation needed - you'll compile this using Remix IDE
     // After compilation, you'll get the bytecode
 
-    console.log('\n⚠️  MANUAL STEP REQUIRED:');
+    console.log('\nMANUAL STEP REQUIRED:');
     console.log('1. Go to https://remix.ethereum.org');
     console.log('2. Create new file: ReclaimHandover.sol');
     console.log('3. Copy contract code from server/src/contracts/ReclaimHandover.sol');
@@ -49,10 +49,10 @@ async function main() {
 
 main()
     .then(() => {
-        console.log('✅ Deployment guide printed');
+        console.log('Deployment guide printed');
         process.exit(0);
     })
     .catch((error) => {
-        console.error('❌ Error:', error.message);
+        console.error('Error:', error.message);
         process.exit(1);
     });

@@ -113,7 +113,7 @@ export async function initiateHandover(
         // 2. Validation (log warning but don't block - for automation)
         const validationWarning = validateHandoverCriteria(lostItem, foundItem);
         if (validationWarning) {
-            console.log(`[HANDOVER] ⚠️ Validation warning (proceeding anyway): ${validationWarning}`);
+            console.log(`[HANDOVER] Validation warning (proceeding anyway): ${validationWarning}`);
         }
 
         // 3. Generate Code
@@ -386,17 +386,17 @@ async function completeHandover(matchId: string, codeDocId: string, data: Handov
             // Award 10 credits to lost person (claimer) - only if not admin
             if (lostUserRole !== 'admin') {
                 await updateCredits(lostUserId, 'SUCCESSFUL_MATCH_OWNER', data.lostItemId);
-                console.log(`✅ Credits awarded to lost person ${lostUserId}: +10`);
+                console.log(`Credits awarded to lost person ${lostUserId}: +10`);
             } else {
-                console.log(`ℹ️  Skipping credits for admin user ${lostUserId}`);
+                console.log(`Skipping credits for admin user ${lostUserId}`);
             }
 
             // Award 20 credits to found person (finder) - only if not admin
             if (foundUserRole !== 'admin') {
                 await updateCredits(foundUserId, 'SUCCESSFUL_MATCH_FINDER', data.foundItemId);
-                console.log(`✅ Credits awarded to found person ${foundUserId}: +20`);
+                console.log(`Credits awarded to found person ${foundUserId}: +20`);
             } else {
-                console.log(`ℹ️  Skipping credits for admin user ${foundUserId}`);
+                console.log(`Skipping credits for admin user ${foundUserId}`);
             }
         }
     } catch (creditError) {
@@ -428,7 +428,7 @@ async function completeHandover(matchId: string, codeDocId: string, data: Handov
             });
 
             if (result.success) {
-                console.log(`✅ Blockchain record created: ${result.txHash}`);
+                console.log(`Blockchain record created: ${result.txHash}`);
                 console.log(`   View on Etherscan: https://sepolia.etherscan.io/tx/${result.txHash}`);
 
                 // Store txHash in Firestore handover record
@@ -438,7 +438,7 @@ async function completeHandover(matchId: string, codeDocId: string, data: Handov
                     blockchainRecordedAt: FieldValue.serverTimestamp()
                 });
             } else {
-                console.error(`⚠️ Blockchain recording failed: ${result.error}`);
+                console.error(`Blockchain recording failed: ${result.error}`);
                 // Mark as failed but don't block handover
                 await handoverRef.update({
                     blockchainRecorded: false,
@@ -446,7 +446,7 @@ async function completeHandover(matchId: string, codeDocId: string, data: Handov
                 });
             }
         } else {
-            console.log('ℹ️  Blockchain disabled in config, skipping...');
+            console.log('Blockchain disabled in config, skipping...');
         }
     } catch (blockchainError: any) {
         // Log error but don't fail the handover
@@ -476,9 +476,9 @@ async function blockUserAndReset(matchId: string, codeDocRef: any, lostItemId: s
 
             if (userRole !== 'admin') {
                 batch.update(collections.users.doc(userId), { status: 'blocked' });
-                console.log(`⚠️ User ${userId} blocked for failed verification attempts`);
+                console.log(`User ${userId} blocked for failed verification attempts`);
             } else {
-                console.log(`ℹ️ Skipping block for admin user ${userId}`);
+                console.log(`Skipping block for admin user ${userId}`);
             }
         }
     }

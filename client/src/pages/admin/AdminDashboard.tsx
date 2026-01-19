@@ -24,7 +24,7 @@ function StatsCard({ title, value, trend }: StatsCardProps) {
         <div
           className={cn(
             "stats-trend flex items-center gap-1",
-            trend.direction === "up" ? "stats-trend-up" : "stats-trend-down"
+            trend.direction === "up" ? "stats-trend-up" : "stats-trend-down",
           )}
         >
           {trend.direction === "up" ? (
@@ -186,7 +186,7 @@ export function AdminDashboard() {
                           />
                         ) : (
                           <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-xl">
-                            📦
+                            No Image
                           </div>
                         )}
                         <div>
@@ -211,14 +211,16 @@ export function AdminDashboard() {
                           "badge",
                           item.status === "Matched" && "badge-matched",
                           item.status === "Pending" && "badge-pending",
-                          item.status === "Claimed" && "badge-claimed"
+                          item.status === "Claimed" && "badge-claimed",
                         )}
                       >
                         {item.status}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm font-bold text-text-primary">
-                      {item.matchScore !== undefined ? `${item.matchScore}%` : "-"}
+                      {item.matchScore !== undefined
+                        ? `${item.matchScore}%`
+                        : "-"}
                     </td>
                     <td className="py-3 px-4">
                       <button

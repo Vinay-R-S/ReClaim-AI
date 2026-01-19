@@ -156,14 +156,14 @@ export function getGreetingMessage(context: ConversationContext): { content: str
             return {
                 content: "I'll help you report your lost item. Can you describe what you lost? Include details like the item type, color, brand, and any distinctive features.",
                 chips: [
-                    { label: 'Add photo', icon: '📷' },
+                    { label: 'Add photo' },
                 ],
             };
         case 'report_found':
             return {
                 content: "Thank you for reporting a found item! Please describe the item you found, including its color, brand, size, and any distinguishing features.",
                 chips: [
-                    { label: 'Add photo', icon: '📷' },
+                    { label: 'Add photo' },
                 ],
             };
         case 'check_matches':
@@ -174,17 +174,17 @@ export function getGreetingMessage(context: ConversationContext): { content: str
             return {
                 content: "I'll help you find the nearest collection point. Can you share your current location or tell me which area you're in?",
                 chips: [
-                    { label: 'Share location', icon: '📍' },
+                    { label: 'Share location' },
                 ],
             };
         default:
             return {
                 content: "Hello! I'm your ReClaim assistant. How can I help you today?",
                 chips: [
-                    { label: 'Report lost item', icon: '🔍' },
-                    { label: 'Report found item', icon: '📦' },
-                    { label: 'Check matches', icon: '🔔' },
-                    { label: 'Find collection point', icon: '📍' },
+                    { label: 'Report lost item' },
+                    { label: 'Report found item' },
+                    { label: 'Check matches' },
+                    { label: 'Find collection point' },
                 ],
             };
     }
@@ -355,8 +355,8 @@ export function getNextQuestion(
                             question: formatConfirmation(collectedData, context),
                             nextState: 'confirm_details',
                             chips: [
-                                { label: 'Confirm', icon: '✅' },
-                                { label: 'Edit details', icon: '✏️' },
+                                { label: 'Confirm' },
+                                { label: 'Edit details' },
                             ],
                         };
                     }
@@ -366,15 +366,15 @@ export function getNextQuestion(
                     };
                 }
                 return {
-                    question: `I identified: **${collectedData.name}**\n${hasDescription ? `📝 ${collectedData.description!.substring(0, 150)}` : ''}\n\nWhere did you ${context === 'report_lost' ? 'last see it' : 'find it'}?`,
+                    question: `I identified: **${collectedData.name}**\n${hasDescription ? `${collectedData.description!.substring(0, 150)}` : ''}\n\nWhere did you ${context === 'report_lost' ? 'last see it' : 'find it'}?`,
                     nextState: 'ask_location',
-                    chips: [{ label: 'Share location', icon: '📍' }],
+                    chips: [{ label: 'Share location' }],
                 };
             }
             return {
                 question: 'Can you describe the item? Include details like type, color, brand, and any distinguishing features.',
                 nextState: 'ask_description',
-                chips: [{ label: 'Add photo', icon: '📷' }],
+                chips: [{ label: 'Add photo' }],
             };
 
         case 'ask_location':
@@ -385,8 +385,8 @@ export function getNextQuestion(
                         question: formatConfirmation(collectedData, context),
                         nextState: 'confirm_details',
                         chips: [
-                            { label: 'Confirm', icon: '✅' },
-                            { label: 'Edit details', icon: '✏️' },
+                            { label: 'Confirm' },
+                            { label: 'Edit details' },
                         ],
                     };
                 }
@@ -398,7 +398,7 @@ export function getNextQuestion(
             return {
                 question: 'Where did you ' + (context === 'report_lost' ? 'last see' : 'find') + ' this item? (building, area, or address)',
                 nextState: 'ask_location',
-                chips: [{ label: 'Share location', icon: '📍' }],
+                chips: [{ label: 'Share location' }],
             };
 
         case 'ask_datetime':
@@ -408,8 +408,8 @@ export function getNextQuestion(
                     question: formatConfirmation(collectedData, context),
                     nextState: 'confirm_details',
                     chips: [
-                        { label: 'Confirm', icon: '✅' },
-                        { label: 'Edit details', icon: '✏️' },
+                        { label: 'Confirm' },
+                        { label: 'Edit details' },
                     ],
                 };
             }
@@ -423,8 +423,8 @@ export function getNextQuestion(
                 question: formatConfirmation(collectedData, context),
                 nextState: 'confirm_details',
                 chips: [
-                    { label: 'Confirm', icon: '✅' },
-                    { label: 'Edit details', icon: '✏️' },
+                    { label: 'Confirm' },
+                    { label: 'Edit details' },
                 ],
             };
 
@@ -439,8 +439,8 @@ export function getNextQuestion(
                 question: 'Is there anything else I can help you with?',
                 nextState: 'idle',
                 chips: [
-                    { label: 'Report lost item', icon: '🔍' },
-                    { label: 'Report found item', icon: '📦' },
+                    { label: 'Report lost item' },
+                    { label: 'Report found item' },
                 ],
             };
     }
@@ -478,12 +478,12 @@ function formatConfirmation(data: Partial<ItemInput>, context: ConversationConte
     const parts = [
         `Here's what I have for your ${action} item report:`,
         '',
-        `📦 **Item:** ${data.name || 'Unknown'}`,
-        data.description && `📝 **Description:** ${data.description.substring(0, 200)}${data.description.length > 200 ? '...' : ''}`,
-        data.location && `📍 **Location:** ${data.location}`,
-        dateStr && `📅 **Date/Time:** ${dateStr}`,
-        data.tags?.length && `🏷️ **Tags:** ${data.tags.join(', ')}`,
-        (data as any).cloudinaryUrls?.length && `🖼️ **Image:** Uploaded`,
+        `**Item:** ${data.name || 'Unknown'}`,
+        data.description && `**Description:** ${data.description.substring(0, 200)}${data.description.length > 200 ? '...' : ''}`,
+        data.location && `**Location:** ${data.location}`,
+        dateStr && `**Date/Time:** ${dateStr}`,
+        data.tags?.length && `**Tags:** ${data.tags.join(', ')}`,
+        (data as any).cloudinaryUrls?.length && `**Image:** Uploaded`,
         '',
         'Does this look correct?',
     ];

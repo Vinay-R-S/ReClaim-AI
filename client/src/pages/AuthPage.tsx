@@ -32,7 +32,7 @@ export function AuthPage() {
   } = useAuth();
 
   const [isSignUp, setIsSignUp] = useState(
-    searchParams.get("mode") === "signup"
+    searchParams.get("mode") === "signup",
   );
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -103,7 +103,7 @@ export function AuthPage() {
         await signUpWithEmail(
           formData.email,
           formData.password,
-          formData.displayName
+          formData.displayName,
         );
       } else {
         await signInWithEmail(formData.email, formData.password);
@@ -357,7 +357,7 @@ export function AuthPage() {
       <div className="hidden lg:flex flex-1 bg-gradient-to-br from-white via-primary-light to-blue-50 items-center justify-center p-12">
         <div className="max-w-lg text-center">
           <div className="w-24 h-24 rounded-2xl bg-white shadow-lg flex items-center justify-center mx-auto mb-8">
-            <span className="text-5xl">🔍</span>
+            <span className="text-5xl"></span>
           </div>
           <h2 className="text-3xl font-medium mb-4 text-text-primary">
             Lost Something?

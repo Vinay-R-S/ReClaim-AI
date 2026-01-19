@@ -86,7 +86,7 @@ export async function sendMatchNotification(
     <body>
       <div class="container">
         <div class="header">
-          <h1>🎉 Potential Match Found!</h1>
+          <h1>Potential Match Found!</h1>
         </div>
         <div class="content">
           <p>Great news! We've found a potential match for your item:</p>
@@ -106,7 +106,7 @@ export async function sendMatchNotification(
 
   return sendEmail({
     to: userEmail,
-    subject: `🔔 Potential Match Found: ${itemName}`,
+    subject: `Potential Match Found: ${itemName}`,
     html,
     text: `Potential Match Found! We found a ${matchScore}% match for "${itemName}". Log in to ReClaim AI to view details.`,
   });
@@ -136,14 +136,14 @@ export async function sendClaimConfirmation(
     <body>
       <div class="container">
         <div class="header">
-          <h1>✅ Claim Confirmed!</h1>
+          <h1>Claim Confirmed!</h1>
         </div>
         <div class="content">
           <p>Your claim for the following item has been confirmed:</p>
           <h2>${itemName}</h2>
           <div class="info-box">
-            <p><strong>📍 Collection Point:</strong> ${collectionPoint}</p>
-            <p><strong>📋 What to bring:</strong> A valid ID for verification</p>
+            <p><strong>Collection Point:</strong> ${collectionPoint}</p>
+            <p><strong>What to bring:</strong> A valid ID for verification</p>
           </div>
           <p>Please visit the collection point during operating hours to pick up your item.</p>
         </div>
@@ -157,7 +157,7 @@ export async function sendClaimConfirmation(
 
   return sendEmail({
     to: userEmail,
-    subject: `✅ Claim Confirmed: ${itemName}`,
+    subject: `Claim Confirmed: ${itemName}`,
     html,
     text: `Your claim for "${itemName}" has been confirmed. Please visit ${collectionPoint} with a valid ID to collect your item.`,
   });
@@ -188,7 +188,7 @@ export async function sendCreditsNotification(
     <body>
       <div class="container">
         <div class="header">
-          <h1>🏆 Credits Earned!</h1>
+          <h1>Credits Earned!</h1>
         </div>
         <div class="content">
           <p class="credits">+${creditsEarned}</p>
@@ -205,7 +205,7 @@ export async function sendCreditsNotification(
 
   return sendEmail({
     to: userEmail,
-    subject: `🏆 You earned ${creditsEarned} credits!`,
+    subject: `You earned ${creditsEarned} credits!`,
     html,
     text: `You earned ${creditsEarned} credits for: ${reason}. Total credits: ${totalCredits}`,
   });
@@ -241,7 +241,7 @@ export async function sendVerificationSuccessEmail(
     <body>
       <div class="container">
         <div class="header">
-          <h1>🎉 Ownership Verified!</h1>
+          <h1>Ownership Verified!</h1>
           <p class="success-badge">${confidenceScore}% Match</p>
         </div>
         <div class="content">
@@ -249,7 +249,7 @@ export async function sendVerificationSuccessEmail(
           <h2 style="color: #4285f4; margin: 15px 0;">${itemName}</h2>
           
           <div class="info-box">
-            <p style="margin: 0;"><strong>📍 Collection Point:</strong></p>
+            <p style="margin: 0;"><strong>Collection Point:</strong></p>
             <p style="margin: 5px 0 0 0; font-size: 16px;">${collectionPoint}</p>
             ${collectionInstructions ? `<p style="margin: 10px 0 0 0; color: #666;"><em>${collectionInstructions}</em></p>` : ''}
           </div>
@@ -280,7 +280,7 @@ export async function sendVerificationSuccessEmail(
 
   return sendEmail({
     to: userEmail,
-    subject: `🎉 Verification Complete: Collect Your ${itemName}`,
+    subject: `Verification Complete: Collect Your ${itemName}`,
     html,
     text: `Your ownership of "${itemName}" has been verified with ${confidenceScore}% confidence. Please visit ${collectionPoint} with a valid ID to collect your item.${collectionInstructions ? ` Note: ${collectionInstructions}` : ''}`,
   });
@@ -408,7 +408,7 @@ export async function sendHandoverLinkToFoundPerson(
     <body>
       <div class="container">
         <div class="header">
-          <h1>📦 Item Handover</h1>
+          <h1>Item Handover</h1>
         </div>
         <div class="content">
           <p>You are about to hand over the found item: <strong>${itemName}</strong>.</p>
@@ -431,7 +431,7 @@ export async function sendHandoverLinkToFoundPerson(
 
   return sendEmail({
     to: email,
-    subject: `📦 Handover Confirmation: ${itemName}`,
+    subject: `Handover Confirmation: ${itemName}`,
     html,
     text: `Please verify the handover code for ${itemName} here: ${verificationUrl}`,
   });

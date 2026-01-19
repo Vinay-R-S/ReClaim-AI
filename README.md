@@ -1,39 +1,64 @@
 # ReClaim AI - Lost & Found Management System
 
-An AI-powered lost and found management platform that uses computer vision and natural language processing to help reunite people with their lost items.
+An AI-powered lost and found management platform that uses computer vision, natural language processing, and blockchain verification to help reunite people with their lost items.
 
 ## Features
 
+### Core Features
+
 - **AI-Powered Item Recognition** - Upload images and let AI identify and describe items
-- **Smart Matching** - Automatic matching between lost and found items
-- **Real-time Chat** - Conversational interface to report lost/found items
+- **Smart Matching** - Automatic matching between lost and found items using semantic + visual similarity
+- **Real-time Chat** - Conversational AI interface to report lost/found items
 - **Admin Dashboard** - Manage all reported items, users, and matches
 - **Credits System** - Reward users for reporting found items
 - **Location Picker** - Search and select locations with interactive map
+
+### CCTV Intelligence
+
+- **Live Webcam Detection** - Real-time object detection using YOLOv8
+- **Video Analysis** - Upload surveillance footage to find lost items
+- **Keyframe Extraction** - Automatically captures timestamps when items appear
+- **Groq AI Analysis** - Semantic analysis with match confidence scoring
+- **One-Click Registration** - Register detected objects as found items
+
+### Blockchain Verification
+
+- **Ethereum (Sepolia)** - Handover transactions recorded on blockchain
+- **Immutable Records** - Tamper-proof verification of item transfers
+- **Smart Contracts** - Automated handover verification
+
+### AI Technologies
+
+- **YOLOv8** - Real-time object detection for CCTV
+- **Groq/Gemini LLM** - Natural language understanding
+- **Clarifai** - Visual similarity matching for images
+- **LangGraph** - Stateful AI workflows
 
 ## Project Structure
 
 ```
 ReClaim-AI/
-├── client/          # React + Vite frontend
+├── client/              # React + Vite frontend
 │   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── services/
-│   │   ├── context/
-│   │   ├── hooks/
-│   │   └── lib/
+│   │   ├── components/  # Reusable UI components
+│   │   ├── pages/       # Page components (User, Admin)
+│   │   ├── services/    # API service functions
+│   │   ├── context/     # React context providers
+│   │   ├── hooks/       # Custom React hooks
+│   │   └── lib/         # Utilities, icons, Firebase
 │   └── package.json
-├── server/          # Express + TypeScript backend
+├── server/              # Express + TypeScript backend
 │   ├── src/
-│   │   ├── routes/
-│   │   ├── services/
-│   │   ├── agents/
-│   │   ├── graph/       # LangGraph workflows
-│   │   ├── types/
-│   │   └── utils/
+│   │   ├── routes/      # API endpoints
+│   │   ├── services/    # Business logic (matching, handover, blockchain)
+│   │   ├── middleware/  # Auth middleware
+│   │   ├── graph/       # LangGraph AI workflows
+│   │   └── utils/       # LLM, email utilities
 │   └── package.json
-├── .env.example     # Environment variables template
+├── models/              # Python YOLO service
+│   ├── app.py           # Flask API for object detection
+│   └── requirements.txt # Python dependencies
+├── .env.example         # Environment variables template
 └── README.md
 ```
 
@@ -42,6 +67,7 @@ ReClaim-AI/
 ### Prerequisites
 
 - Node.js 18+
+- Python 3.9+ (for YOLO service)
 - npm or yarn
 - Firebase project
 - Cloudinary account (for image storage)
@@ -60,6 +86,13 @@ npm install
 # Install server dependencies
 cd ../server
 npm install
+
+# Install Python dependencies (for CCTV)
+cd ..
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # macOS/Linux
+pip install -r models/requirements.txt
 ```
 
 ### 2. Configure Environment Variables
@@ -74,22 +107,34 @@ Then edit `.env` with your credentials (see [Environment Variables](#-environmen
 
 ### 3. Run Development Servers
 
-**Terminal 1 - Backend:**
+**Terminal 1 - Python YOLO Service:**
+
+```bash
+.venv\Scripts\python models\app.py
+# Runs on http://localhost:5000
+```
+
+**Terminal 2 - Node.js Backend:**
 
 ```bash
 cd server
 npm run dev
+# Runs on http://localhost:3001
 ```
 
-**Terminal 2 - Frontend:**
+**Terminal 3 - React Frontend:**
 
 ```bash
 cd client
 npm run dev
+# Runs on http://localhost:5173
 ```
 
+**Access Points:**
+
 - Frontend: http://localhost:5173
-- Backend: http://localhost:3001
+- Backend API: http://localhost:3001
+- YOLO Service: http://localhost:5000
 
 ---
 
@@ -214,7 +259,6 @@ npm run dev
 If you see Firestore index errors, create these composite indexes:
 
 1. **creditTransactions** collection:
-
    - `userId` (Ascending) + `createdAt` (Descending)
 
 2. **items** collection:
@@ -233,14 +277,32 @@ If you see Firestore index errors, create these composite indexes:
 - Leaflet (Maps)
 - Lucide Icons
 
-### Backend
+### Backend (Node.js)
 
 - Node.js + Express
 - TypeScript
 - Firebase Admin SDK
 - Cloudinary (Image storage)
 - Groq/Gemini (AI/LLM)
+- LangGraph (AI workflows)
 - Resend (Email)
+- Ethers.js (Blockchain)
+
+### Backend (Python)
+
+- Flask + Flask-CORS
+- YOLOv8 (Ultralytics)
+- OpenCV
+- NumPy
+
+### External Services
+
+- Firebase (Auth, Firestore)
+- Cloudinary (Image CDN)
+- Clarifai (Image similarity)
+- Groq/Gemini (LLM)
+- Ethereum Sepolia (Blockchain)
+- Geoapify (Geocoding)
 
 ---
 
