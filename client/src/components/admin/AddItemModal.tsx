@@ -7,6 +7,7 @@ import {
   type AIProvider,
 } from "../../services/aiService";
 import { LazyLocationPicker } from "../ui/LazyLocationPicker";
+import { authFetch } from "../../lib/authApi";
 
 interface AddItemModalProps {
   onClose: () => void;
@@ -121,22 +122,16 @@ export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
       }
 
       // Call backend API to trigger automatic matching
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
-      const userId = "admin"; // TODO: Get actual admin user ID
-
+      // Note: authFetch automatically adds the Firebase auth token
       console.log(
         "[ADMIN-MODAL] Creating item via API with",
         uploadedImages.length,
         "images",
       );
 
-      const response = await fetch(`${API_URL}/api/items`, {
+      const response = await authFetch("/api/items", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
-          userId,
           item: {
             name: formData.name,
             description: formData.description,

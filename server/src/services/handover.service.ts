@@ -370,6 +370,7 @@ async function completeHandover(matchId: string, codeDocId: string, data: Handov
     await batch.commit();
 
     // ✨ Award credits to both users AFTER successful handover
+    // NOTE: Admin users do NOT receive credits (they submit on behalf of others)
     try {
         const lostUserId = lostItem.reportedBy;
         const foundUserId = foundItem.reportedBy;
@@ -378,13 +379,25 @@ async function completeHandover(matchId: string, codeDocId: string, data: Handov
             // Import updateCredits at top of file
             const { updateCredits } = await import('./credits.js');
 
-            // Award 10 credits to lost person (claimer)
-            await updateCredits(lostUserId, 'SUCCESSFUL_MATCH_OWNER', data.lostItemId);
+            // Check if users are admins - admins don't get credits
+            const lostUserRole = lostUser?.role;
+            const foundUserRole = foundUser?.role;
 
-            // Award 20 credits to found person (finder)
-            await updateCredits(foundUserId, 'SUCCESSFUL_MATCH_FINDER', data.foundItemId);
+            // Award 10 credits to lost person (claimer) - only if not admin
+            if (lostUserRole !== 'admin') {
+                await updateCredits(lostUserId, 'SUCCESSFUL_MATCH_OWNER', data.lostItemId);
+                console.log(`✅ Credits awarded to lost person ${lostUserId}: +10`);
+            } else {
+                console.log(`ℹ️  Skipping credits for admin user ${lostUserId}`);
+            }
 
-            console.log(`✅ Credits awarded: ${lostUserId} (+10), ${foundUserId} (+20)`);
+            // Award 20 credits to found person (finder) - only if not admin
+            if (foundUserRole !== 'admin') {
+                await updateCredits(foundUserId, 'SUCCESSFUL_MATCH_FINDER', data.foundItemId);
+                console.log(`✅ Credits awarded to found person ${foundUserId}: +20`);
+            } else {
+                console.log(`ℹ️  Skipping credits for admin user ${foundUserId}`);
+            }
         }
     } catch (creditError) {
         // Log but don't fail handover if credits fail
@@ -443,6 +456,7 @@ async function completeHandover(matchId: string, codeDocId: string, data: Handov
 
 /**
  * Block user and reset items on failure
+ * NOTE: Admin users are NEVER blocked (only regular users can be blocked)
  */
 async function blockUserAndReset(matchId: string, codeDocRef: any, lostItemId: string, foundItemId: string) {
     const batch = collections.matches.firestore.batch();
@@ -450,13 +464,22 @@ async function blockUserAndReset(matchId: string, codeDocRef: any, lostItemId: s
     // 1. Update code status to blocked
     batch.update(codeDocRef, { status: 'blocked' });
 
-    // 2. Block the "Lost Person" (reporter of lost item)
-    // Need to fetch item to get user
+    // 2. Block the "Lost Person" (reporter of lost item) - ONLY if not admin
+    // Need to fetch item and user to check role
     const lostItemDoc = await collections.items.doc(lostItemId).get();
     if (lostItemDoc.exists) {
         const userId = lostItemDoc.data()?.reportedBy;
         if (userId) {
-            batch.update(collections.users.doc(userId), { status: 'blocked' });
+            // Check if user is admin before blocking
+            const userDoc = await collections.users.doc(userId).get();
+            const userRole = userDoc.data()?.role;
+
+            if (userRole !== 'admin') {
+                batch.update(collections.users.doc(userId), { status: 'blocked' });
+                console.log(`⚠️ User ${userId} blocked for failed verification attempts`);
+            } else {
+                console.log(`ℹ️ Skipping block for admin user ${userId}`);
+            }
         }
     }
 
