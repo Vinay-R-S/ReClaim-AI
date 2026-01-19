@@ -253,9 +253,9 @@ export function UserLayout({ children }: UserLayoutProps) {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-        <div className="flex gap-6">
-          {/* Left Sidebar */}
-          <aside className="hidden lg:block w-80">
+        <div className="flex gap-6 min-h-[calc(100vh-8rem)]">
+          {/* Left Sidebar - Sticky */}
+          <aside className="hidden lg:block w-80 sticky top-20 h-fit">
             {/* Credits Card */}
             <div className="card p-4">
               <div className="flex items-center gap-3">
@@ -274,8 +274,10 @@ export function UserLayout({ children }: UserLayoutProps) {
             </div>
           </aside>
 
-          {/* Main Chat Area */}
-          <div className="flex-1 max-w-3xl">{children}</div>
+          {/* Main Chat Area - Scrollable */}
+          <div className="flex-1 max-w-3xl overflow-y-auto pb-6">
+            {children}
+          </div>
         </div>
       </main>
     </div>

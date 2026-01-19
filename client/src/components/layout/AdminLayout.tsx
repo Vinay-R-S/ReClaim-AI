@@ -170,7 +170,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-surface border-r border-border flex flex-col">
+      <aside className="w-64 bg-surface border-r border-border flex flex-col fixed h-screen">
         {/* Logo */}
         <div className="h-16 px-4 flex items-center gap-2 border-b border-border">
           <img
@@ -231,7 +231,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col ml-64">
         {/* Top Header */}
         <header className="h-16 bg-surface border-b border-border px-6 flex items-center justify-between">
           <h1 className="text-xl font-medium text-text-primary">Dashboard</h1>
