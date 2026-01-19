@@ -13,6 +13,7 @@ import handoverRoutes from './routes/handover.js';
 import handoversRoutes from './routes/handovers.js';
 import creditsRoutes from './routes/credits.js';
 import authRoutes from './routes/auth.js';
+import cctvRoutes from './routes/cctv.js';
 import { authLimiter, apiLimiter, errorHandler, notFoundHandler } from './middleware/index.js';
 
 const app = express();
@@ -72,6 +73,7 @@ app.use('/api/handover', handoverRoutes);
 app.use('/api/handovers', handoversRoutes);
 app.use('/api/credits', creditsRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/cctv', cctvRoutes);
 
 // ERROR HANDLING
 

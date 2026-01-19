@@ -12,34 +12,43 @@ import { authFetch } from "../../lib/authApi";
 interface AddItemModalProps {
   onClose: () => void;
   onSuccess: () => void;
+  initialData?: Partial<ItemInput>;
+  initialType?: "Lost" | "Found";
 }
 
-export function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
+export function AddItemModal({
+  onClose,
+  onSuccess,
+  initialData,
+  initialType,
+}: AddItemModalProps) {
   const [step, setStep] = useState<
     "upload" | "analyzing" | "review" | "success"
-  >("upload");
+  >(initialData ? "review" : "upload");
   const [matchResult, setMatchResult] = useState<{
     highestScore: number;
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>(
+    initialData?.imageUrl ? [initialData.imageUrl] : [],
+  );
   const [aiProvider, setAiProvider] = useState<AIProvider>("gemini");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const availableProviders = getAvailableProviders();
 
   const [formData, setFormData] = useState<Omit<ItemInput, "imageUrl">>({
-    name: "",
-    description: "",
-    type: "Found",
-    location: "",
-    date: new Date(),
-    status: "Pending",
-    tags: [],
-    color: "",
-    category: "",
-    coordinates: undefined as { lat: number; lng: number } | undefined,
+    name: initialData?.name || "",
+    description: initialData?.description || "",
+    type: initialType || "Found",
+    location: initialData?.location || "",
+    date: initialData?.date || new Date(),
+    status: (initialData?.status as any) || "Pending",
+    tags: initialData?.tags || [],
+    color: initialData?.color || "",
+    category: initialData?.category || "",
+    coordinates: initialData?.coordinates,
   });
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -3,6 +3,8 @@ node_modules
 .env
 dump
 Old files
+.venv
+yolov8m.pt
 
 # Logs
 logs

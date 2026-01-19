@@ -45,6 +45,7 @@ export {
     Image,
     Paperclip,
     Camera,
+    Video,
 
     // Users & Auth
     User,
@@ -62,6 +63,8 @@ export {
     TrendingUp,
     Zap,
     Sparkles,
+    Target,
+    Plus,
 
     // Settings & UI
     Settings,

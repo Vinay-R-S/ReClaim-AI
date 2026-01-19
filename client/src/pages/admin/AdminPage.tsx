@@ -7,7 +7,8 @@ import { UsersManagement } from "./UsersManagement";
 import { AdminSettings } from "./AdminSettings";
 import { AdminProfile } from "./AdminProfile";
 import { PendingApprovalsPage } from "./PendingApprovalsPage";
-import { HandoversPage } from "./HandoversPage"; // [NEW]
+import { HandoversPage } from "./HandoversPage";
+import { CCTVIntelligence } from "./CCTVIntelligence"; // [NEW]
 
 export function AdminPage() {
   return (
@@ -18,7 +19,8 @@ export function AdminPage() {
         <Route path="items" element={<AllItemsPage />} />
         <Route path="matches" element={<MatchesPage />} />
         <Route path="users" element={<UsersManagement />} />
-        <Route path="handovers" element={<HandoversPage />} /> {/* [NEW] */}
+        <Route path="handovers" element={<HandoversPage />} />
+        <Route path="cctv" element={<CCTVIntelligence />} /> {/* [NEW] */}
         <Route path="settings" element={<AdminSettings />} />
         <Route path="profile" element={<AdminProfile />} />
         <Route path="approvals" element={<PendingApprovalsPage />} />

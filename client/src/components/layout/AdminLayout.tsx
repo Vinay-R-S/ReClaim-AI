@@ -4,13 +4,13 @@ import {
   LayoutDashboard,
   Package,
   Link2,
-  MapPin,
   ArrowLeftRight,
   Users,
   UserCheck,
   Settings,
   LogOut,
   User,
+  Video,
 } from "@/lib/icons";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
@@ -134,9 +134,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       title: "MANAGEMENT",
       items: [
         {
-          name: "Collection Offices",
-          path: "/admin/offices",
-          icon: MapPin,
+          name: "CCTV Intelligence",
+          path: "/admin/cctv",
+          icon: Video,
           badge: null,
         },
         {
