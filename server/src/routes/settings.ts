@@ -11,8 +11,15 @@ const router = Router();
 
 export type AIProvider = 'groq_only' | 'gemini_only' | 'groq_with_fallback' | 'gemini_with_fallback';
 
+export interface MapCenter {
+    address: string;
+    lat: number;
+    lng: number;
+}
+
 export interface SystemSettings {
     aiProvider: AIProvider;
+    mapCenter?: MapCenter;
     updatedAt?: FirebaseFirestore.FieldValue;
 }
 
@@ -49,7 +56,7 @@ router.get('/', async (_req: Request, res: Response) => {
  */
 router.put('/', async (req: Request, res: Response) => {
     try {
-        const { aiProvider } = req.body;
+        const { aiProvider, mapCenter } = req.body;
 
         // Validate aiProvider
         const validProviders: AIProvider[] = ['groq_only', 'gemini_only', 'groq_with_fallback', 'gemini_with_fallback'];
@@ -61,6 +68,15 @@ router.put('/', async (req: Request, res: Response) => {
             aiProvider,
             updatedAt: FieldValue.serverTimestamp(),
         };
+
+        // Add mapCenter if provided
+        if (mapCenter && mapCenter.lat && mapCenter.lng) {
+            settings.mapCenter = {
+                address: mapCenter.address || '',
+                lat: mapCenter.lat,
+                lng: mapCenter.lng,
+            };
+        }
 
         await collections.settings.doc(SETTINGS_DOC_ID).set(settings, { merge: true });
 

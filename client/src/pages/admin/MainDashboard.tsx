@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { getItems, type Item } from "@/services/itemService";
 import { getAllMatchesWithHistory, type Match } from "@/services/matchService";
 import { handoverService } from "@/services/handoverService";
+import { ItemHeatmap } from "@/components/admin/ItemHeatmap";
 
 // ============================================================================
 // TYPES
@@ -52,7 +53,7 @@ interface HandoverRecord {
   lostItemId: string;
   foundItemId: string;
   itemName: string;
-  handoverTime: { seconds: number };
+  handoverTime: { seconds?: number; _seconds?: number };
   status: string;
 }
 
@@ -513,7 +514,8 @@ function HandoverTrendChart({ handovers, timeRange }: HandoverTrendChartProps) {
       const dayEnd = new Date(day.getTime() + 24 * 60 * 60 * 1000);
 
       const count = handovers.filter((h) => {
-        const secs = h.handoverTime?.seconds;
+        // Handle both Firestore timestamp formats (_seconds and seconds)
+        const secs = h.handoverTime?._seconds ?? h.handoverTime?.seconds;
         if (!secs) return false;
         const handoverDate = new Date(secs * 1000);
         return handoverDate >= day && handoverDate < dayEnd;
@@ -550,7 +552,12 @@ function HandoverTrendChart({ handovers, timeRange }: HandoverTrendChartProps) {
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 12 }} />
+          <YAxis
+            tick={{ fontSize: 12 }}
+            domain={[0, 5]}
+            allowDecimals={false}
+            tickCount={6}
+          />
           <Tooltip
             contentStyle={{
               borderRadius: "12px",
@@ -682,9 +689,13 @@ export function MainDashboard() {
     return result;
   };
 
-  // Efficiency data
-  const matchedItems = items.filter((i) => i.status === "Matched").length;
-  const unmatchedItems = items.filter((i) => i.status !== "Matched").length;
+  // Efficiency data - count both Matched AND Claimed as successful
+  const matchedItems = items.filter(
+    (i) => i.status === "Matched" || i.status === "Claimed",
+  ).length;
+  const unmatchedItems = items.filter(
+    (i) => i.status !== "Matched" && i.status !== "Claimed",
+  ).length;
 
   if (loading) {
     return (
@@ -797,6 +808,9 @@ export function MainDashboard() {
 
       {/* Charts Row 3: Handover History */}
       <HandoverTrendChart handovers={handovers} timeRange={timeRange} />
+
+      {/* Item Location Heatmap */}
+      <ItemHeatmap radiusKm={2.5} />
 
       {/* Quick Stats Section */}
       <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">

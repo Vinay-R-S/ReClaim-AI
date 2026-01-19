@@ -286,11 +286,23 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
                   {/* Menu Items */}
                   <div className="py-2">
-                    <button className="w-full flex items-center gap-3 px-4 py-2 text-text-primary hover:bg-gray-50 transition-colors">
+                    <button
+                      onClick={() => {
+                        navigate("/admin/profile");
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-text-primary hover:bg-gray-50 transition-colors"
+                    >
                       <User className="w-5 h-5 text-text-secondary" />
                       <span>Profile</span>
                     </button>
-                    <button className="w-full flex items-center gap-3 px-4 py-2 text-text-primary hover:bg-gray-50 transition-colors">
+                    <button
+                      onClick={() => {
+                        navigate("/admin/settings");
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-text-primary hover:bg-gray-50 transition-colors"
+                    >
                       <Settings className="w-5 h-5 text-text-secondary" />
                       <span>Settings</span>
                     </button>

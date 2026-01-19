@@ -1,55 +1,22 @@
 /**
- * Admin Settings Page - Configure system settings
+ * Admin Profile Page
+ * Shows admin info and office location (no credits)
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Save, Bot, Loader2, MapPin, X, Search } from "lucide-react";
+import {
+  User,
+  MapPin,
+  Mail,
+  Calendar,
+  Save,
+  Loader2,
+  Search,
+  X,
+} from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-
-type AIProvider =
-  | "groq_only"
-  | "gemini_only"
-  | "groq_with_fallback"
-  | "gemini_with_fallback";
-
-interface MapCenter {
-  address: string;
-  lat: number;
-  lng: number;
-}
-
-interface SystemSettings {
-  aiProvider: AIProvider;
-  mapCenter?: MapCenter;
-}
-
-const AI_PROVIDER_OPTIONS: {
-  value: AIProvider;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: "groq_only",
-    label: "Groq Only",
-    description: "Use Groq (LLaMA) exclusively. No fallback if Groq fails.",
-  },
-  {
-    value: "gemini_only",
-    label: "Gemini Only",
-    description: "Use Google Gemini exclusively. No fallback if Gemini fails.",
-  },
-  {
-    value: "groq_with_fallback",
-    label: "Groq (with Gemini fallback)",
-    description: "Primary: Groq. Fallback to Gemini if Groq fails.",
-  },
-  {
-    value: "gemini_with_fallback",
-    label: "Gemini (with Groq fallback)",
-    description: "Primary: Gemini. Fallback to Groq if Gemini fails.",
-  },
-];
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -71,21 +38,24 @@ interface GeocodingResult {
   lon: number;
 }
 
-export function AdminSettings() {
-  const [settings, setSettings] = useState<SystemSettings>({
-    aiProvider: "groq_only",
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">(
-    "idle",
-  );
+interface AdminLocation {
+  address: string;
+  lat: number;
+  lng: number;
+}
 
-  // Map center state
+export function AdminProfile() {
+  const { user } = useAuth();
+  const [location, setLocation] = useState<AdminLocation | null>(null);
   const [addressQuery, setAddressQuery] = useState("");
   const [suggestions, setSuggestions] = useState<GeocodingResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">(
+    "idle",
+  );
+  const [isLoading, setIsLoading] = useState(true);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -94,39 +64,37 @@ export function AdminSettings() {
 
   const apiKey = import.meta.env.VITE_GEOAPIFY_API_KEY;
 
-  // Fetch current settings
+  // Load settings on mount
   useEffect(() => {
-    const fetchSettings = async () => {
+    const loadSettings = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/settings`);
         if (response.ok) {
           const data = await response.json();
-          setSettings(data);
-          if (data.mapCenter?.address) {
-            setAddressQuery(data.mapCenter.address);
+          if (data.mapCenter) {
+            setLocation(data.mapCenter);
+            setAddressQuery(data.mapCenter.address || "");
           }
         }
       } catch (error) {
-        console.error("Failed to fetch settings:", error);
+        console.error("Failed to load settings:", error);
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchSettings();
+    loadSettings();
   }, []);
 
   // Initialize map
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
+    if (!mapContainerRef.current || mapRef.current || isLoading) return;
 
-    const defaultCenter: [number, number] = settings.mapCenter
-      ? [settings.mapCenter.lat, settings.mapCenter.lng]
-      : [12.9716, 77.5946]; // Default to Bangalore
+    const defaultCenter: [number, number] = location
+      ? [location.lat, location.lng]
+      : [12.9716, 77.5946];
 
     mapRef.current = L.map(mapContainerRef.current).setView(defaultCenter, 14);
 
-    // Add tile layer
     if (apiKey) {
       L.tileLayer(
         `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${apiKey}`,
@@ -142,19 +110,16 @@ export function AdminSettings() {
       }).addTo(mapRef.current);
     }
 
-    // Add marker if we have a saved center
-    if (settings.mapCenter) {
-      markerRef.current = L.marker(
-        [settings.mapCenter.lat, settings.mapCenter.lng],
-        { icon: defaultIcon },
-      ).addTo(mapRef.current);
+    if (location) {
+      markerRef.current = L.marker([location.lat, location.lng], {
+        icon: defaultIcon,
+      }).addTo(mapRef.current);
     }
 
-    // Click handler for map
+    // Click handler
     mapRef.current.on("click", async (e: L.LeafletMouseEvent) => {
       const { lat, lng } = e.latlng;
 
-      // Update marker
       if (markerRef.current) {
         markerRef.current.setLatLng([lat, lng]);
       } else if (mapRef.current) {
@@ -163,7 +128,6 @@ export function AdminSettings() {
         );
       }
 
-      // Reverse geocode
       if (apiKey) {
         try {
           const response = await fetch(
@@ -173,23 +137,17 @@ export function AdminSettings() {
           if (data.features?.[0]?.properties?.formatted) {
             const address = data.features[0].properties.formatted;
             setAddressQuery(address);
-            setSettings((prev) => ({
-              ...prev,
-              mapCenter: { address, lat, lng },
-            }));
+            setLocation({ address, lat, lng });
           }
         } catch (err) {
           console.error("Reverse geocoding failed:", err);
         }
       } else {
-        setSettings((prev) => ({
-          ...prev,
-          mapCenter: {
-            address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-            lat,
-            lng,
-          },
-        }));
+        setLocation({
+          address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+          lat,
+          lng,
+        });
       }
     });
 
@@ -199,40 +157,32 @@ export function AdminSettings() {
         mapRef.current = null;
       }
     };
-  }, [isLoading]); // Only run after loading completes
+  }, [isLoading, apiKey]);
 
-  // Fetch address suggestions
+  // Fetch suggestions
   const fetchSuggestions = useCallback(
-    async (searchQuery: string) => {
-      if (!apiKey || searchQuery.length < 3) {
+    async (query: string) => {
+      if (!apiKey || query.length < 3) {
         setSuggestions([]);
         return;
       }
-
       setIsSearching(true);
       try {
         const response = await fetch(
-          `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
-            searchQuery,
-          )}&apiKey=${apiKey}&limit=5`,
+          `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(query)}&apiKey=${apiKey}&limit=5`,
         );
         const data = await response.json();
-
         if (data.features) {
           setSuggestions(
-            data.features.map(
-              (f: {
-                properties: { formatted: string; lat: number; lon: number };
-              }) => ({
-                formatted: f.properties.formatted,
-                lat: f.properties.lat,
-                lon: f.properties.lon,
-              }),
-            ),
+            data.features.map((f: any) => ({
+              formatted: f.properties.formatted,
+              lat: f.properties.lat,
+              lon: f.properties.lon,
+            })),
           );
         }
-      } catch (err) {
-        console.error("Error fetching suggestions:", err);
+      } catch {
+        /* ignore */
       } finally {
         setIsSearching(false);
       }
@@ -242,42 +192,32 @@ export function AdminSettings() {
 
   // Debounced search
   useEffect(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     if (addressQuery.length >= 3) {
-      debounceRef.current = setTimeout(() => {
-        fetchSuggestions(addressQuery);
-      }, 300);
+      debounceRef.current = setTimeout(
+        () => fetchSuggestions(addressQuery),
+        300,
+      );
     } else {
       setSuggestions([]);
     }
-
     return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
+      if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [addressQuery, fetchSuggestions]);
 
-  // Handle suggestion selection
+  // Handle suggestion select
   const handleSelectSuggestion = (result: GeocodingResult) => {
     setAddressQuery(result.formatted);
-    setSettings((prev) => ({
-      ...prev,
-      mapCenter: {
-        address: result.formatted,
-        lat: result.lat,
-        lng: result.lon,
-      },
-    }));
+    setLocation({
+      address: result.formatted,
+      lat: result.lat,
+      lng: result.lon,
+    });
     setShowSuggestions(false);
 
-    // Update map
     if (mapRef.current) {
       mapRef.current.setView([result.lat, result.lon], 15);
-
       if (markerRef.current) {
         markerRef.current.setLatLng([result.lat, result.lon]);
       } else {
@@ -288,18 +228,20 @@ export function AdminSettings() {
     }
   };
 
-  // Save settings
+  // Save location
   const handleSave = async () => {
+    if (!location) return;
     setIsSaving(true);
     setSaveStatus("idle");
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/settings`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(settings),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          aiProvider: "groq_only", // Keep existing
+          mapCenter: location,
+        }),
       });
 
       if (response.ok) {
@@ -308,8 +250,7 @@ export function AdminSettings() {
       } else {
         setSaveStatus("error");
       }
-    } catch (error) {
-      console.error("Failed to save settings:", error);
+    } catch {
       setSaveStatus("error");
     } finally {
       setIsSaving(false);
@@ -327,13 +268,73 @@ export function AdminSettings() {
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold text-text-primary">Settings</h1>
+        <h1 className="text-2xl font-semibold text-text-primary">
+          Admin Profile
+        </h1>
         <p className="text-text-secondary mt-1">
-          Configure system-wide settings for ReClaim AI
+          Your admin information and office location
         </p>
       </div>
 
-      {/* Map Center Section */}
+      {/* Admin Info Card */}
+      <div className="bg-surface rounded-xl border border-border p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            <User className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-lg font-medium text-text-primary">
+              Account Info
+            </h2>
+            <p className="text-sm text-text-secondary">
+              Your admin account details
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-6">
+          {/* Avatar */}
+          <div className="w-20 h-20 rounded-full overflow-hidden bg-primary flex items-center justify-center text-white text-2xl font-bold">
+            {user?.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt={user.displayName || "Admin"}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              user?.displayName?.[0] || user?.email?.[0] || "A"
+            )}
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 space-y-3">
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-text-secondary" />
+              <span className="font-medium text-text-primary">
+                {user?.displayName || "Admin User"}
+              </span>
+              <span className="px-2 py-0.5 bg-primary text-white text-xs font-medium rounded">
+                ADMIN
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Mail className="w-4 h-4 text-text-secondary" />
+              <span className="text-text-secondary">{user?.email}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-text-secondary" />
+              <span className="text-text-secondary">
+                Member since{" "}
+                {user?.metadata?.creationTime
+                  ? new Date(user.metadata.creationTime).toLocaleDateString()
+                  : "N/A"}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Office Location Card */}
       <div className="bg-surface rounded-xl border border-border p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
@@ -341,10 +342,10 @@ export function AdminSettings() {
           </div>
           <div>
             <h2 className="text-lg font-medium text-text-primary">
-              Heatmap Center Point
+              Office Location
             </h2>
             <p className="text-sm text-text-secondary">
-              Set the center location for the item location heatmap
+              Set your admin office location (used for heatmap center)
             </p>
           </div>
         </div>
@@ -361,14 +362,14 @@ export function AdminSettings() {
                 setShowSuggestions(true);
               }}
               onFocus={() => setShowSuggestions(true)}
-              placeholder="Search for an address..."
+              placeholder="Search for your office address..."
               className="w-full pl-10 pr-10 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white"
             />
             {addressQuery && (
               <button
                 onClick={() => {
                   setAddressQuery("");
-                  setSettings((prev) => ({ ...prev, mapCenter: undefined }));
+                  setLocation(null);
                   if (markerRef.current && mapRef.current) {
                     mapRef.current.removeLayer(markerRef.current);
                     markerRef.current = null;
@@ -380,7 +381,6 @@ export function AdminSettings() {
               </button>
             )}
 
-            {/* Suggestions Dropdown */}
             {showSuggestions && suggestions.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
                 {suggestions.map((result, index) => (
@@ -398,7 +398,6 @@ export function AdminSettings() {
               </div>
             )}
 
-            {/* Loading indicator */}
             {isSearching && (
               <div className="absolute right-10 top-1/2 -translate-y-1/2 z-10">
                 <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -406,7 +405,7 @@ export function AdminSettings() {
             )}
           </div>
 
-          {/* Map Preview */}
+          {/* Map */}
           <div
             ref={mapContainerRef}
             className="w-full h-64 rounded-lg border border-border overflow-hidden"
@@ -414,73 +413,18 @@ export function AdminSettings() {
           />
 
           <p className="text-xs text-text-secondary text-center">
-            Click on the map or search for an address to set the heatmap center
+            Click on the map or search to set your office location
           </p>
 
-          {settings.mapCenter && (
+          {location && (
             <div className="bg-green-50 rounded-lg p-3 text-sm">
-              <p className="text-green-800 font-medium">Current Center:</p>
-              <p className="text-green-700 mt-1">
-                {settings.mapCenter.address}
-              </p>
+              <p className="text-green-800 font-medium">Current Location:</p>
+              <p className="text-green-700 mt-1">{location.address}</p>
               <p className="text-green-600 text-xs mt-1">
-                Coordinates: {settings.mapCenter.lat.toFixed(6)},{" "}
-                {settings.mapCenter.lng.toFixed(6)}
+                {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
               </p>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* AI Provider Section */}
-      <div className="bg-surface rounded-xl border border-border p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Bot className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-lg font-medium text-text-primary">
-              AI Provider
-            </h2>
-            <p className="text-sm text-text-secondary">
-              Choose which AI model to use for chat and matching
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {AI_PROVIDER_OPTIONS.map((option) => (
-            <label
-              key={option.value}
-              className={`flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all ${
-                settings.aiProvider === option.value
-                  ? "border-primary bg-primary/5 ring-1 ring-primary"
-                  : "border-border hover:border-gray-300"
-              }`}
-            >
-              <input
-                type="radio"
-                name="aiProvider"
-                value={option.value}
-                checked={settings.aiProvider === option.value}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    aiProvider: e.target.value as AIProvider,
-                  })
-                }
-                className="mt-1 w-4 h-4 text-primary focus:ring-primary"
-              />
-              <div>
-                <span className="font-medium text-text-primary block">
-                  {option.label}
-                </span>
-                <span className="text-sm text-text-secondary">
-                  {option.description}
-                </span>
-              </div>
-            </label>
-          ))}
         </div>
       </div>
 
@@ -488,10 +432,9 @@ export function AdminSettings() {
       <div className="flex items-center gap-4">
         <button
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || !location}
           className="inline-flex items-center gap-2 px-6 py-2.5 
-                     bg-[#4285F4]
-                     hover:bg-[#3367D6]
+                     bg-[#4285F4] hover:bg-[#3367D6]
                      text-white font-medium rounded-lg
                      shadow-md hover:shadow-lg
                      transform transition-all duration-200 
@@ -504,19 +447,19 @@ export function AdminSettings() {
           ) : (
             <Save className="w-4 h-4" />
           )}
-          {isSaving ? "Saving..." : "Save Settings"}
+          {isSaving ? "Saving..." : "Save Location"}
         </button>
 
         {saveStatus === "success" && (
           <span className="inline-flex items-center gap-1.5 text-sm text-[#34A853] font-medium bg-[#34A853]/10 px-3 py-1.5 rounded-full">
             <span className="w-2 h-2 bg-[#34A853] rounded-full animate-pulse"></span>
-            Settings saved successfully
+            Location saved successfully
           </span>
         )}
         {saveStatus === "error" && (
           <span className="inline-flex items-center gap-1.5 text-sm text-[#EA4335] font-medium bg-[#EA4335]/10 px-3 py-1.5 rounded-full">
             <span className="w-2 h-2 bg-[#EA4335] rounded-full"></span>
-            Failed to save settings
+            Failed to save location
           </span>
         )}
       </div>

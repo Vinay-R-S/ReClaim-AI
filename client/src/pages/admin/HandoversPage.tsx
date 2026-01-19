@@ -12,6 +12,7 @@ import {
   Hash,
   Percent,
   Mail,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -49,6 +50,8 @@ interface HandoverRecord {
   handoverTime: any;
   createdAt: any;
   status: string;
+  blockchainTxHash?: string;
+  blockchainRecorded?: boolean;
 }
 
 export function HandoversPage() {
@@ -467,6 +470,17 @@ export function HandoversPage() {
                         {handover.foundItemId}
                       </code>
                     </span>
+                    {handover.blockchainTxHash && (
+                      <a
+                        href={`https://sepolia.etherscan.io/tx/${handover.blockchainTxHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-primary hover:underline font-medium"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        View on Etherscan
+                      </a>
+                    )}
                   </div>
                 </div>
               )}
