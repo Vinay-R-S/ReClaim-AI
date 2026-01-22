@@ -300,6 +300,7 @@ export function AdminProfile() {
                 src={user.photoURL}
                 alt={user.displayName || "Admin"}
                 className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
               />
             ) : (
               user?.displayName?.[0] || user?.email?.[0] || "A"

@@ -248,6 +248,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     src={user.photoURL}
                     alt={user.displayName || "Admin"}
                     className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   <div className="w-full h-full bg-primary text-white flex items-center justify-center text-sm font-medium">
@@ -267,6 +268,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                           src={user.photoURL}
                           alt={user.displayName || "Admin"}
                           className="w-10 h-10 rounded-full object-cover"
+                          referrerPolicy="no-referrer"
                         />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center text-sm font-medium">

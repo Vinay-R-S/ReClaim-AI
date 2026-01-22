@@ -134,7 +134,7 @@ export function AuthPage() {
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 mb-8">
             <img
-              src="/Logo.png"
+              src="/Logo.webp"
               alt="ReClaim AI Logo"
               className="w-10 h-10 object-contain rounded-full"
             />
@@ -357,7 +357,7 @@ export function AuthPage() {
       <div className="hidden lg:flex flex-1 bg-gradient-to-br from-white via-primary-light to-blue-50 items-center justify-center p-12">
         <div className="max-w-lg text-center">
           <div className="w-24 h-24 rounded-2xl bg-white shadow-lg flex items-center justify-center mx-auto mb-8">
-            <span className="text-5xl"></span>
+            <span className="text-5xl">🔍</span>
           </div>
           <h2 className="text-3xl font-medium mb-4 text-text-primary">
             Lost Something?

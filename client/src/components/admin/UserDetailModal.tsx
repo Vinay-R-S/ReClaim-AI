@@ -24,14 +24,13 @@ export function UserDetailModal({
       try {
         setLoading(true);
         const allItems = await getItems();
-        
+
         // Filter items by user ID or email
         const filtered = allItems.filter(
           (item) =>
-            item.reportedBy === user.uid ||
-            item.reportedByEmail === user.email
+            item.reportedBy === user.uid || item.reportedByEmail === user.email,
         );
-        
+
         setUserItems(filtered);
       } catch (error) {
         console.error("Error fetching user items:", error);
@@ -71,7 +70,9 @@ export function UserDetailModal({
       <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-lg font-medium text-text-primary">User Details</h2>
+          <h2 className="text-lg font-medium text-text-primary">
+            User Details
+          </h2>
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -89,6 +90,7 @@ export function UserDetailModal({
                 src={user.photoURL}
                 alt={user.displayName || user.email}
                 className="w-16 h-16 rounded-full object-cover"
+                referrerPolicy="no-referrer"
               />
             ) : (
               <div className="w-16 h-16 rounded-full bg-primary text-white flex items-center justify-center text-xl font-medium">
@@ -113,7 +115,7 @@ export function UserDetailModal({
                 "badge px-3 py-1",
                 (user.status || "active") === "active"
                   ? "badge-active"
-                  : "badge-blocked"
+                  : "badge-blocked",
               )}
             >
               {(user.status || "active") === "active" ? "Active" : "Blocked"}
@@ -138,7 +140,7 @@ export function UserDetailModal({
                   "badge px-3 py-1",
                   (user.status || "active") === "active"
                     ? "badge-active"
-                    : "badge-blocked"
+                    : "badge-blocked",
                 )}
               >
                 {(user.status || "active") === "active" ? "Active" : "Blocked"}
@@ -165,9 +167,7 @@ export function UserDetailModal({
               <label className="text-sm text-text-secondary mb-1 block">
                 Joined On
               </label>
-              <p className="text-text-primary">
-                {formatDate(user.createdAt)}
-              </p>
+              <p className="text-text-primary">{formatDate(user.createdAt)}</p>
             </div>
 
             <div>
@@ -215,7 +215,7 @@ export function UserDetailModal({
                           "badge text-xs shrink-0",
                           item.status === "Matched" && "badge-matched",
                           item.status === "Pending" && "badge-pending",
-                          item.status === "Claimed" && "badge-claimed"
+                          item.status === "Claimed" && "badge-claimed",
                         )}
                       >
                         {item.status}

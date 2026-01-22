@@ -173,6 +173,7 @@ export function UserLayout({ children }: UserLayoutProps) {
                     src={user.photoURL}
                     alt={user.displayName || "User"}
                     className="w-9 h-9 rounded-full object-cover"
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   <div className="w-9 h-9 rounded-full bg-primary text-white flex items-center justify-center text-sm font-medium">
@@ -192,6 +193,7 @@ export function UserLayout({ children }: UserLayoutProps) {
                           src={user.photoURL}
                           alt={user.displayName || "User"}
                           className="w-10 h-10 rounded-full object-cover"
+                          referrerPolicy="no-referrer"
                         />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center text-sm font-medium">

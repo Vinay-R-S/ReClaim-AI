@@ -342,6 +342,7 @@ export function ProfilePage() {
                     src={photoPreview || user?.photoURL || ""}
                     alt={displayName}
                     className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   <div className="w-full h-full rounded-full bg-primary text-white flex items-center justify-center text-4xl font-medium">
