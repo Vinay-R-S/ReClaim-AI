@@ -19,9 +19,8 @@ services:
       - key: NODE_VERSION
         value: 20.10.0
 
-  - type: static
-    name: reclaim-ai-client
-    env: static
+staticSites:
+  - name: reclaim-ai-client
     rootDir: client
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
