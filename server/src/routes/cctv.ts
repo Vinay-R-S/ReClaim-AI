@@ -7,17 +7,32 @@ const router = Router();
 // Python YOLO service URL
 const YOLO_SERVICE_URL = process.env.YOLO_SERVICE_URL || 'http://localhost:5000';
 
+// GET /api/cctv/classes - Get all YOLO class names for dropdown
+router.get('/classes', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const response = await fetch(`${YOLO_SERVICE_URL}/classes`);
+        if (!response.ok) throw new Error(`Python service responded with ${response.status}`);
+        return res.json(await response.json());
+    } catch (connError: any) {
+        console.error('YOLO service error:', connError.message);
+        return res.status(503).json({
+            error: 'YOLO Detection Service unavailable',
+            details: 'Please ensure python app.py is running on port 5000'
+        });
+    }
+});
+
 // POST /api/cctv/detect - Proxy to Python YOLO service
 router.post('/detect', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const { image, targetClasses } = req.body;
+        const { image, targetClasses, targetClass } = req.body;
         if (!image) return res.status(400).json({ error: 'Image data is required' });
 
         try {
             const response = await fetch(`${YOLO_SERVICE_URL}/detect`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image, targetClasses })
+                body: JSON.stringify({ image, targetClasses, targetClass })
             });
 
             if (!response.ok) throw new Error(`Python service responded with ${response.status}`);

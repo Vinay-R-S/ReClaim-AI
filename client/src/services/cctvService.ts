@@ -16,17 +16,27 @@ export interface DetectionResult {
 }
 
 // Detect objects in a base64 image frame
-export async function detectObjectsInFrame(imageBase64: string, targetClasses?: string[]): Promise<DetectionResult> {
+export async function detectObjectsInFrame(imageBase64: string, targetClasses?: string[], targetClass?: string): Promise<DetectionResult> {
     const response = await authFetch("/api/cctv/detect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: imageBase64, targetClasses }),
+        body: JSON.stringify({ image: imageBase64, targetClasses, targetClass }),
     });
     if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         throw new Error(err.details || err.error || "Detection failed");
     }
     return response.json();
+}
+
+// Get all available YOLO class names for dropdown
+export async function getYoloClasses(): Promise<string[]> {
+    const response = await authFetch("/api/cctv/classes");
+    if (!response.ok) {
+        throw new Error("Failed to fetch YOLO classes");
+    }
+    const data = await response.json();
+    return data.classes || [];
 }
 
 // AI item description types

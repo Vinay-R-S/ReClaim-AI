@@ -12,13 +12,13 @@ import {
   Sparkles,
   Loader2,
 } from "../../lib/icons";
-import { getItems, type Item } from "../../services/itemService";
 import {
   detectObjectsInFrame,
   captureFrame,
   extractFramesFromVideo,
   analyzeVideoForItem,
   describeItemImage,
+  getYoloClasses,
   type Detection,
   type VideoAnalysisResult,
   type Keyframe,
@@ -27,10 +27,11 @@ import { AddItemModal } from "../../components/admin/AddItemModal";
 
 export function CCTVIntelligence() {
   const [activeTab, setActiveTab] = useState<"live" | "upload">("live");
-  const [lostItems, setLostItems] = useState<Item[]>([]);
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [yoloClasses, setYoloClasses] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [detections, setDetections] = useState<Detection[]>([]);
+  const [bestDetection, setBestDetection] = useState<Detection | null>(null); // Stable highest confidence
   const [lastScanTime, setLastScanTime] = useState<Date | null>(null);
 
   // Webcam refs
@@ -54,13 +55,11 @@ export function CCTVIntelligence() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [foundItemData, setFoundItemData] = useState<any>(null);
 
-  // 1. Fetch Lost Items
+  // 1. Fetch YOLO Classes for dropdown
   useEffect(() => {
-    getItems().then((items) => {
-      setLostItems(
-        items.filter((i) => i.type === "Lost" && i.status === "Pending"),
-      );
-    });
+    getYoloClasses()
+      .then((classes) => setYoloClasses(classes))
+      .catch((err) => console.error("Failed to fetch YOLO classes:", err));
   }, []);
 
   // 2. Webcam Handling
@@ -98,24 +97,45 @@ export function CCTVIntelligence() {
     return () => stopWebcam();
   }, [activeTab]);
 
-  // 3. Auto Detection (every 4 seconds)
+  // 3. Auto Detection (every 4 seconds) with stable confidence
   const runDetection = useCallback(async () => {
     if (!videoRef.current || isProcessing) return;
 
     try {
       setIsProcessing(true);
       const frameBase64 = captureFrame(videoRef.current);
-      const results = await detectObjectsInFrame(frameBase64);
+      // Pass selectedCategory to filter detections on server side
+      const results = await detectObjectsInFrame(
+        frameBase64,
+        undefined,
+        selectedCategory || undefined,
+      );
 
-      setDetections(results.detections);
+      // Stable detection: only update if we find a higher confidence detection
+      if (results.detections.length > 0) {
+        // Find the highest confidence detection from this scan
+        const newBest = results.detections.reduce((prev, curr) =>
+          curr.confidence > prev.confidence ? curr : prev,
+        );
+
+        // Only update bestDetection if this one is better
+        setBestDetection((prevBest) => {
+          if (!prevBest || newBest.confidence > prevBest.confidence) {
+            return newBest;
+          }
+          return prevBest;
+        });
+
+        setDetections(results.detections);
+        drawDetections(results.detections);
+      }
       setLastScanTime(new Date());
-      drawDetections(results.detections);
     } catch (err) {
       console.error("Detection failed:", err);
     } finally {
       setIsProcessing(false);
     }
-  }, [isProcessing]);
+  }, [isProcessing, selectedCategory]);
 
   // Auto-scan every 4 seconds when live tab is active
   useEffect(() => {
@@ -157,14 +177,8 @@ export function CCTVIntelligence() {
       const width = x2 - x1;
       const height = y2 - y1;
 
-      const isMatch =
-        selectedItem &&
-        det.className
-          .toLowerCase()
-          .includes(
-            selectedItem.category?.toLowerCase() ||
-              selectedItem.name.toLowerCase(),
-          );
+      // All shown detections are matches since filtering is done server-side
+      const isMatch = Boolean(selectedCategory);
 
       ctx.strokeStyle = isMatch ? "#22c55e" : "#ef4444";
       ctx.lineWidth = 3;
@@ -226,14 +240,14 @@ export function CCTVIntelligence() {
   };
 
   const handleRegisterFromKeyframe = (keyframe: Keyframe) => {
-    const bestDetection = keyframe.detections[0];
-    if (!bestDetection) return;
+    const bestDet = keyframe.detections[0];
+    if (!bestDet) return;
 
     setFoundItemData({
-      name: selectedItem?.name || `Found ${bestDetection.className}`,
+      name: `Found ${bestDet.className}`,
       description: `Detected via CCTV Video Analysis at ${keyframe.timestamp}s. ${analysisResult?.aiAnalysis?.explanation || ""}`,
-      category: bestDetection.className,
-      imageUrl: bestDetection.croppedImage || keyframe.frameImage,
+      category: bestDet.className,
+      imageUrl: bestDet.croppedImage || keyframe.frameImage,
       location: "Admin Office (CCTV)",
     });
 
@@ -252,8 +266,8 @@ export function CCTVIntelligence() {
 
   // 7. Video Analysis
   const handleAnalyzeVideo = async () => {
-    if (!uploadVideoRef.current || !selectedItem) {
-      alert("Please select a lost item to search for");
+    if (!uploadVideoRef.current || !selectedCategory) {
+      alert("Please select a category to search for");
       return;
     }
 
@@ -261,20 +275,20 @@ export function CCTVIntelligence() {
       setIsAnalyzing(true);
       setAnalysisProgress(10);
 
-      // Extract frames from video
-      const frames = await extractFramesFromVideo(uploadVideoRef.current, 1);
+      // Extract frames from video at 5-second intervals
+      const frames = await extractFramesFromVideo(uploadVideoRef.current, 5);
       setAnalysisProgress(40);
 
       if (frames.length === 0) {
         throw new Error("Could not extract frames from video");
       }
 
-      // Analyze frames
+      // Analyze frames with selected category
       const result = await analyzeVideoForItem(
         frames,
-        selectedItem.category || selectedItem.name,
-        selectedItem.name,
-        selectedItem.description,
+        selectedCategory,
+        selectedCategory,
+        `Looking for ${selectedCategory} in video footage`,
       );
 
       setAnalysisProgress(100);
@@ -329,33 +343,35 @@ export function CCTVIntelligence() {
           {/* Target Selection */}
           <div className="space-y-3">
             <label className="text-sm font-medium text-text-primary flex items-center gap-2">
-              <Target className="w-4 h-4" /> Target Lost Item
+              <Target className="w-4 h-4" /> Target Category
               {activeTab === "upload" && (
                 <span className="text-red-500">*</span>
               )}
             </label>
             <select
-              className="w-full p-2 border rounded-lg text-sm"
-              value={selectedItem?.id || ""}
-              onChange={(e) =>
-                setSelectedItem(
-                  lostItems.find((i) => i.id === e.target.value) || null,
-                )
-              }
+              className="w-full p-2 border rounded-lg text-sm capitalize"
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                // Reset bestDetection when category changes
+                setBestDetection(null);
+                setDetections([]);
+              }}
             >
-              <option value="">-- Select Lost Item --</option>
-              {lostItems.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} ({item.category})
+              <option value="">-- Select Category --</option>
+              {yoloClasses.map((cls) => (
+                <option key={cls} value={cls} className="capitalize">
+                  {cls}
                 </option>
               ))}
             </select>
 
-            {selectedItem && (
+            {selectedCategory && (
               <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-700">
-                <strong>Searching for:</strong> {selectedItem.name}
-                <p className="mt-1 text-blue-600 truncate">
-                  {selectedItem.description}
+                <strong>Searching for:</strong>{" "}
+                <span className="capitalize">{selectedCategory}</span>
+                <p className="mt-1 text-blue-600">
+                  Bounding boxes will only appear for this category
                 </p>
               </div>
             )}
@@ -389,10 +405,49 @@ export function CCTVIntelligence() {
                 </p>
               )}
 
-              <div className="max-h-[300px] overflow-y-auto space-y-2">
-                {detections.length === 0 && (
+              {/* Best Detection - Stable Highest Confidence */}
+              {bestDetection && (
+                <div className="bg-green-50 border-2 border-green-200 p-4 rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-semibold text-green-800 capitalize">
+                      Best: {bestDetection.className}
+                    </span>
+                    <span className="text-lg font-bold text-green-600">
+                      {Math.round(bestDetection.confidence * 100)}%
+                    </span>
+                  </div>
+                  {bestDetection.croppedImage && (
+                    <img
+                      src={bestDetection.croppedImage}
+                      alt={bestDetection.className}
+                      className="w-full h-24 object-contain rounded mb-2 bg-white"
+                    />
+                  )}
+                  <button
+                    onClick={() => handleRegisterFound(bestDetection)}
+                    disabled={isDescribing}
+                    className="w-full text-sm flex items-center justify-center gap-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                  >
+                    {isDescribing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />{" "}
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" /> Register as Found
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              <div className="max-h-[200px] overflow-y-auto space-y-2">
+                {detections.length === 0 && !bestDetection && (
                   <p className="text-xs text-gray-400 italic py-4 text-center">
-                    Click "Scan" to detect objects
+                    {selectedCategory
+                      ? "Auto-scanning for " + selectedCategory + "..."
+                      : "Select a category to start scanning"}
                   </p>
                 )}
 
@@ -584,7 +639,7 @@ export function CCTVIntelligence() {
           {activeTab === "upload" && videoPreview && !analysisResult && (
             <button
               onClick={handleAnalyzeVideo}
-              disabled={isAnalyzing || !selectedItem}
+              disabled={isAnalyzing || !selectedCategory}
               className="w-full flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isAnalyzing ? (

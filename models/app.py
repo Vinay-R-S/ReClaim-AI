@@ -9,10 +9,10 @@ from ultralytics import YOLO
 app = Flask(__name__)
 CORS(app)
 
-# Load YOLOv8 model
+# Load YOLOv11 model (auto-downloads on first run)
 try:
-    model = YOLO("yolov8m.pt")
-    print("YOLOv8m model loaded successfully")
+    model = YOLO("yolo11m.pt")
+    print("YOLOv11m model loaded successfully")
 except Exception as e:
     print(f"Failed to load YOLO model: {e}")
     model = None
@@ -32,7 +32,14 @@ def image_to_base64(image):
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"status": "ok", "model": "yolov8m"})
+    return jsonify({"status": "ok", "model": "yolo11m"})
+
+@app.route('/classes', methods=['GET'])
+def get_classes():
+    """Return all available YOLO class names for dropdown"""
+    if not model:
+        return jsonify({"error": "Model not loaded"}), 500
+    return jsonify({"success": True, "classes": list(model.names.values())})
 
 @app.route('/detect', methods=['POST'])
 def detect():
@@ -48,6 +55,7 @@ def detect():
             
         image_b64 = data['image']
         target_classes = data.get('targetClasses', [])
+        target_class = data.get('targetClass', '').lower()  # Single class filter
         
         frame = base64_to_image(image_b64)
         if frame is None:
@@ -62,7 +70,12 @@ def detect():
                 class_name = model.names[cls_id]
                 confidence = float(box.conf[0])
                 
-                if target_classes and class_name not in target_classes:
+                # Filter by targetClass (single) or targetClasses (array)
+                if target_class:
+                    # Case-insensitive partial match
+                    if target_class not in class_name.lower() and class_name.lower() not in target_class:
+                        continue
+                elif target_classes and class_name not in target_classes:
                     continue
                 if confidence < 0.3:
                     continue
