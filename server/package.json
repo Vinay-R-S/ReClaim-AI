@@ -18,6 +18,10 @@
         "@langchain/langgraph": "^1.0.7",
         "@opentelemetry/api": "^1.9.0",
         "@types/compression": "^1.8.1",
+        "@types/cors": "^2.8.19",
+        "@types/express": "^4.17.21",
+        "@types/node": "^20.10.0",
+        "@types/nodemailer": "^7.0.5",
         "cloudinary": "^2.0.0",
         "compression": "^1.8.1",
         "cors": "^2.8.5",
@@ -32,10 +36,6 @@
         "zod": "^3.25.76"
     },
     "devDependencies": {
-        "@types/cors": "^2.8.19",
-        "@types/express": "^4.17.21",
-        "@types/node": "^20.10.0",
-        "@types/nodemailer": "^7.0.5",
         "tsx": "^4.7.0",
         "typescript": "^5.3.0",
         "vitest": "^3.2.4"
