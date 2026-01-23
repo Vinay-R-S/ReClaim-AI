@@ -24,7 +24,7 @@ interface HandoverRecord {
     userId: string;
     displayName: string;
   };
-  handoverTime: { seconds: number } | Date;
+  handoverTime: { seconds: number } | Date | string | number;
   blockchainTxHash?: string;
   blockchainRecorded?: boolean;
 }
@@ -50,11 +50,35 @@ export function HandoversPage() {
       .finally(() => setLoading(false));
   }, [user?.uid]);
 
-  const formatDate = (date: { seconds: number } | Date) => {
-    const d =
-      typeof date === "object" && "seconds" in date
-        ? new Date(date.seconds * 1000)
-        : new Date(date);
+  const formatDate = (
+    date: { seconds: number } | Date | string | number | undefined | null,
+  ) => {
+    if (!date) return "Date not available";
+
+    let d: Date;
+
+    // Handle Firestore Timestamp object
+    if (typeof date === "object" && "seconds" in date) {
+      d = new Date(date.seconds * 1000);
+    }
+    // Handle ISO string or other string formats
+    else if (typeof date === "string") {
+      d = new Date(date);
+    }
+    // Handle numeric timestamp (milliseconds)
+    else if (typeof date === "number") {
+      d = new Date(date);
+    }
+    // Handle Date object
+    else {
+      d = new Date(date);
+    }
+
+    // Check for invalid date
+    if (isNaN(d.getTime())) {
+      return "Date not available";
+    }
+
     return d.toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
@@ -119,7 +143,9 @@ export function HandoversPage() {
 interface HandoverCardProps {
   handover: HandoverRecord;
   currentUserId: string;
-  formatDate: (date: { seconds: number } | Date) => string;
+  formatDate: (
+    date: { seconds: number } | Date | string | number | undefined | null,
+  ) => string;
 }
 
 function HandoverCard({

@@ -9,9 +9,24 @@ from ultralytics import YOLO
 app = Flask(__name__)
 CORS(app)
 
-# Load YOLOv11 model (auto-downloads on first run)
+# Get the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_NAME = "yolo11m.pt"
+MODEL_PATH = os.path.join(SCRIPT_DIR, MODEL_NAME)
+
+# Load YOLOv11 model
 try:
-    model = YOLO("yolo11m.pt")
+    # Check if model already exists in models folder
+    if os.path.exists(MODEL_PATH):
+        print(f"Found existing model at: {MODEL_PATH}")
+        model = YOLO(MODEL_PATH)
+    else:
+        print(f"Model not found at {MODEL_PATH}, downloading...")
+        # Change to models directory so download saves there
+        original_dir = os.getcwd()
+        os.chdir(SCRIPT_DIR)
+        model = YOLO(MODEL_NAME)  # Downloads to current directory (models/)
+        os.chdir(original_dir)  # Restore original directory
     print("YOLOv11m model loaded successfully")
 except Exception as e:
     print(f"Failed to load YOLO model: {e}")

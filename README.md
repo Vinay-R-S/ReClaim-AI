@@ -171,6 +171,8 @@ npm run dev
 | `FROM_EMAIL`                   | Sender email address                | Your verified domain email                                        |
 | `CLIENT_URL`                   | Frontend URL                        | Default: `http://localhost:5173`                                  |
 | `PORT`                         | Server port                         | Default: `3001`                                                   |
+| `ADMIN_PRIVATE_KEY`            | Ethereum wallet private key         | See [Blockchain Setup](#blockchain-setup-ethereum-sepolia)        |
+| `CONTRACT_ADDRESS`             | Deployed smart contract address     | See [Blockchain Setup](#blockchain-setup-ethereum-sepolia)        |
 
 ---
 
@@ -251,6 +253,56 @@ npm run dev
 2. Create a free account and project
 3. Get your API key
 4. Copy to `VITE_GEOAPIFY_API_KEY`
+
+### Blockchain Setup (Ethereum Sepolia)
+
+The blockchain feature records handover transactions on the Ethereum Sepolia testnet for tamper-proof verification.
+
+**1. Create a Wallet**
+
+- Install [MetaMask](https://metamask.io/) browser extension
+- Create a new wallet or import existing
+- Switch to **Sepolia Test Network**
+- Copy your **private key** (Account → Export Private Key)
+
+> [!CAUTION]
+> Never share or commit your private key. Keep it secret!
+
+**2. Get Sepolia Test ETH**
+
+You need test ETH for gas fees (free):
+
+- [Alchemy Sepolia Faucet](https://sepoliafaucet.com/) - Requires Alchemy account
+- [Infura Sepolia Faucet](https://www.infura.io/faucet/sepolia) - Requires Infura account
+- [Google Cloud Sepolia Faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)
+
+**3. Deploy the Smart Contract**
+
+The handover contract is located at `contracts/` (if not already deployed):
+
+```bash
+# Using Hardhat or Remix to deploy
+# After deployment, copy the contract address
+```
+
+**4. Configure Environment Variables**
+
+```bash
+# In .env file
+ADMIN_PRIVATE_KEY=your_wallet_private_key_here
+CONTRACT_ADDRESS=0x_your_deployed_contract_address
+```
+
+**5. Verify Setup**
+
+When the server starts, you should see:
+
+```
+Blockchain service initialized
+   Admin wallet: 0x...
+   Contract: 0x...
+   RPC: https://ethereum-sepolia-rpc.publicnode.com
+```
 
 ---
 
