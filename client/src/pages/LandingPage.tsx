@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Search,
   Camera,
@@ -10,10 +10,23 @@ import {
   Zap,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 export function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      navigate("/");
+    } catch (err) {
+      console.error("Error signing out:", err);
+    }
+  };
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
@@ -42,7 +55,7 @@ export function LandingPage() {
           </button>
 
           {/* Logo */}
-          <div className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2">
             <img
               src="/Logo.webp"
               alt="ReClaim AI Logo"
@@ -53,7 +66,7 @@ export function LandingPage() {
             <span className="font-medium text-xl text-text-primary">
               ReClaim AI
             </span>
-          </div>
+          </Link>
 
           {/* Nav Links - Hidden on mobile */}
           <nav className="hidden md:flex items-center gap-6">
@@ -79,18 +92,38 @@ export function LandingPage() {
 
           {/* Auth Buttons */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link
-              to="/auth"
-              className="hidden sm:inline text-text-secondary hover:text-text-primary font-medium transition-colors"
-            >
-              Sign In
-            </Link>
-            <Link
-              to="/auth?mode=signup"
-              className="btn-pill btn-primary text-sm sm:text-base px-4 sm:px-6"
-            >
-              Get Started
-            </Link>
+            {user ? (
+              <>
+                <Link
+                  to="/app"
+                  className="btn-pill btn-primary text-sm sm:text-base px-4 sm:px-6"
+                >
+                  Go to App
+                </Link>
+                <button
+                  onClick={handleSignOut}
+                  className="hidden sm:inline-flex items-center gap-2 text-google-red hover:text-red-700 font-medium transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/auth"
+                  className="hidden sm:inline text-text-secondary hover:text-text-primary font-medium transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  to="/auth?mode=signup"
+                  className="btn-pill btn-primary text-sm sm:text-base px-4 sm:px-6"
+                >
+                  Get Started
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -156,20 +189,44 @@ export function LandingPage() {
 
             {/* Auth Buttons */}
             <div className="p-4 border-t border-border space-y-3">
-              <Link
-                to="/auth"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block w-full py-3 text-center rounded-xl border border-border text-text-primary font-medium hover:bg-gray-50 transition-colors"
-              >
-                Sign In
-              </Link>
-              <Link
-                to="/auth?mode=signup"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block w-full py-3 text-center rounded-xl bg-primary text-white font-medium hover:bg-primary-hover transition-colors"
-              >
-                Get Started
-              </Link>
+              {user ? (
+                <>
+                  <Link
+                    to="/app"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block w-full py-3 text-center rounded-xl bg-primary text-white font-medium hover:bg-primary-hover transition-colors"
+                  >
+                    Go to App
+                  </Link>
+                  <button
+                    onClick={() => {
+                      handleSignOut();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="flex items-center justify-center gap-2 w-full py-3 text-center rounded-xl border border-red-200 text-google-red font-medium hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/auth"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block w-full py-3 text-center rounded-xl border border-border text-text-primary font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    to="/auth?mode=signup"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block w-full py-3 text-center rounded-xl bg-primary text-white font-medium hover:bg-primary-hover transition-colors"
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </>

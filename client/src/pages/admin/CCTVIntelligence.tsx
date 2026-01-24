@@ -11,6 +11,8 @@ import {
   CheckCircle,
   Sparkles,
   Loader2,
+  Settings,
+  VideoOff,
 } from "../../lib/icons";
 import {
   detectObjectsInFrame,
@@ -24,8 +26,15 @@ import {
   type Keyframe,
 } from "../../services/cctvService";
 import { AddItemModal } from "../../components/admin/AddItemModal";
+import { Link } from "react-router-dom";
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export function CCTVIntelligence() {
+  // Feature toggle state
+  const [cctvEnabled, setCctvEnabled] = useState(true);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+
   const [activeTab, setActiveTab] = useState<"live" | "upload">("live");
   const [yoloClasses, setYoloClasses] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
@@ -55,15 +64,39 @@ export function CCTVIntelligence() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [foundItemData, setFoundItemData] = useState<any>(null);
 
+  // 5. Register Found Item Logic with AI Description
+  const [isDescribing, setIsDescribing] = useState(false);
+
+  // Check if CCTV feature is enabled
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/settings`);
+        if (response.ok) {
+          const data = await response.json();
+          setCctvEnabled(data.cctvEnabled !== false);
+        }
+      } catch (error) {
+        console.error("Failed to fetch settings:", error);
+        // Default to enabled if we can't fetch settings
+        setCctvEnabled(true);
+      } finally {
+        setIsLoadingSettings(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+
   // 1. Fetch YOLO Classes for dropdown
   useEffect(() => {
+    if (!cctvEnabled || isLoadingSettings) return;
     getYoloClasses()
       .then((classes) => setYoloClasses(classes))
       .catch((err) => console.error("Failed to fetch YOLO classes:", err));
-  }, []);
+  }, [cctvEnabled, isLoadingSettings]);
 
   // 2. Webcam Handling
-  const startWebcam = async () => {
+  const startWebcam = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480 },
@@ -75,9 +108,9 @@ export function CCTVIntelligence() {
     } catch (err) {
       console.error("Webcam error:", err);
     }
-  };
+  }, []);
 
-  const stopWebcam = () => {
+  const stopWebcam = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -86,20 +119,51 @@ export function CCTVIntelligence() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    if (activeTab === "live") {
-      startWebcam();
-    } else {
-      stopWebcam();
-    }
-    return () => stopWebcam();
-  }, [activeTab]);
+  // 4. Drawing Bounding Boxes
+  const drawDetections = useCallback(
+    (currentDetections: Detection[]) => {
+      if (!canvasRef.current || !videoRef.current) return;
+
+      const ctx = canvasRef.current.getContext("2d");
+      if (!ctx) return;
+
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
+      canvasRef.current.width = videoRef.current.videoWidth;
+      canvasRef.current.height = videoRef.current.videoHeight;
+
+      currentDetections.forEach((det) => {
+        const [x1, y1, x2, y2] = det.bbox;
+        const width = x2 - x1;
+        const height = y2 - y1;
+
+        // All shown detections are matches since filtering is done server-side
+        const isMatch = Boolean(selectedCategory);
+
+        ctx.strokeStyle = isMatch ? "#22c55e" : "#ef4444";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x1, y1, width, height);
+
+        ctx.fillStyle = isMatch ? "#22c55e" : "#ef4444";
+        ctx.fillRect(x1, y1 - 25, width, 25);
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "16px sans-serif";
+        ctx.fillText(
+          `${det.className} ${Math.round(det.confidence * 100)}%`,
+          x1 + 5,
+          y1 - 5,
+        );
+      });
+    },
+    [selectedCategory],
+  );
 
   // 3. Auto Detection (every 4 seconds) with stable confidence
   const runDetection = useCallback(async () => {
-    if (!videoRef.current || isProcessing) return;
+    if (!videoRef.current || isProcessing || !cctvEnabled) return;
 
     try {
       setIsProcessing(true);
@@ -135,10 +199,21 @@ export function CCTVIntelligence() {
     } finally {
       setIsProcessing(false);
     }
-  }, [isProcessing, selectedCategory]);
+  }, [isProcessing, selectedCategory, cctvEnabled, drawDetections]);
+
+  useEffect(() => {
+    if (!cctvEnabled || isLoadingSettings) return;
+    if (activeTab === "live") {
+      startWebcam();
+    } else {
+      stopWebcam();
+    }
+    return () => stopWebcam();
+  }, [activeTab, cctvEnabled, isLoadingSettings, startWebcam, stopWebcam]);
 
   // Auto-scan every 4 seconds when live tab is active
   useEffect(() => {
+    if (!cctvEnabled || isLoadingSettings) return;
     if (activeTab === "live") {
       // Initial delay for camera to initialize
       const initialTimer = setTimeout(() => {
@@ -158,47 +233,42 @@ export function CCTVIntelligence() {
         }
       };
     }
-  }, [activeTab, runDetection]);
+  }, [activeTab, runDetection, cctvEnabled, isLoadingSettings]);
 
-  // 4. Drawing Bounding Boxes
-  const drawDetections = (currentDetections: Detection[]) => {
-    if (!canvasRef.current || !videoRef.current) return;
+  // Show loading while checking settings
+  if (isLoadingSettings) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
-    const ctx = canvasRef.current.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-
-    canvasRef.current.width = videoRef.current.videoWidth;
-    canvasRef.current.height = videoRef.current.videoHeight;
-
-    currentDetections.forEach((det) => {
-      const [x1, y1, x2, y2] = det.bbox;
-      const width = x2 - x1;
-      const height = y2 - y1;
-
-      // All shown detections are matches since filtering is done server-side
-      const isMatch = Boolean(selectedCategory);
-
-      ctx.strokeStyle = isMatch ? "#22c55e" : "#ef4444";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(x1, y1, width, height);
-
-      ctx.fillStyle = isMatch ? "#22c55e" : "#ef4444";
-      ctx.fillRect(x1, y1 - 25, width, 25);
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "16px sans-serif";
-      ctx.fillText(
-        `${det.className} ${Math.round(det.confidence * 100)}%`,
-        x1 + 5,
-        y1 - 5,
-      );
-    });
-  };
-
-  // 5. Register Found Item Logic with AI Description
-  const [isDescribing, setIsDescribing] = useState(false);
+  // Show disabled state if CCTV is turned off
+  if (!cctvEnabled) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
+        <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-6">
+          <VideoOff className="w-10 h-10 text-gray-400" />
+        </div>
+        <h1 className="text-2xl font-bold text-text-primary mb-2">
+          CCTV Intelligence is Disabled
+        </h1>
+        <p className="text-text-secondary max-w-md mb-6">
+          This feature has been disabled by an administrator. It requires the ML
+          models service to be running, which may not be available in the
+          current deployment.
+        </p>
+        <Link
+          to="/admin/settings"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+        >
+          <Settings className="w-4 h-4" />
+          Go to Settings
+        </Link>
+      </div>
+    );
+  }
 
   const handleRegisterFound = async (det: Detection) => {
     if (!det.croppedImage) return;

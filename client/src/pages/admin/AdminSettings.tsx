@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Save, Bot, Loader2, MapPin, X, Search } from "lucide-react";
+import { Save, Bot, Loader2, MapPin, X, Search, Video } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -22,6 +22,7 @@ interface MapCenter {
 interface SystemSettings {
   aiProvider: AIProvider;
   mapCenter?: MapCenter;
+  cctvEnabled: boolean;
 }
 
 const AI_PROVIDER_OPTIONS: {
@@ -74,6 +75,7 @@ interface GeocodingResult {
 export function AdminSettings() {
   const [settings, setSettings] = useState<SystemSettings>({
     aiProvider: "groq_only",
+    cctvEnabled: true,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -101,7 +103,11 @@ export function AdminSettings() {
         const response = await fetch(`${API_BASE_URL}/api/settings`);
         if (response.ok) {
           const data = await response.json();
-          setSettings(data);
+          // Ensure cctvEnabled is always a boolean to avoid controlled/uncontrolled input issues
+          setSettings({
+            ...data,
+            cctvEnabled: data.cctvEnabled !== false,
+          });
           if (data.mapCenter?.address) {
             setAddressQuery(data.mapCenter.address);
           }
@@ -304,7 +310,11 @@ export function AdminSettings() {
 
       if (response.ok) {
         setSaveStatus("success");
-        setTimeout(() => setSaveStatus("idle"), 3000);
+        // Reload page after short delay to update global state (like sidebar)
+        setTimeout(() => {
+          setSaveStatus("idle");
+          window.location.reload();
+        }, 1000);
       } else {
         setSaveStatus("error");
       }
@@ -429,6 +439,65 @@ export function AdminSettings() {
               </p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Feature Toggles Section */}
+      <div className="bg-surface rounded-xl border border-border p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+            <Video className="w-5 h-5 text-purple-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-medium text-text-primary">
+              Feature Toggles
+            </h2>
+            <p className="text-sm text-text-secondary">
+              Enable or disable optional features
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* CCTV Intelligence Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-lg border border-border">
+            <div className="flex-1">
+              <h3 className="font-medium text-text-primary">
+                CCTV Intelligence
+              </h3>
+              <p className="text-sm text-text-secondary mt-1">
+                AI-powered object detection using webcam or video uploads.
+                Requires the ML models service to be running.
+              </p>
+              <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                Disable this if hosting on Render without the models service
+              </p>
+            </div>
+            <div className="flex items-center gap-3 ml-4">
+              <span
+                className={`text-sm font-medium ${settings.cctvEnabled ? "text-gray-400" : "text-red-600"}`}
+              >
+                Disabled
+              </span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settings.cctvEnabled}
+                  onChange={(e) =>
+                    setSettings({ ...settings, cctvEnabled: e.target.checked })
+                  }
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+              </label>
+              <span
+                className={`text-sm font-medium ${settings.cctvEnabled ? "text-green-600" : "text-gray-400"}`}
+              >
+                Enabled
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 

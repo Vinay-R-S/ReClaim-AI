@@ -20,6 +20,7 @@ export interface MapCenter {
 export interface SystemSettings {
     aiProvider: AIProvider;
     mapCenter?: MapCenter;
+    cctvEnabled: boolean;
     updatedAt?: FirebaseFirestore.FieldValue;
 }
 
@@ -28,6 +29,7 @@ const SETTINGS_DOC_ID = 'system';
 // Default settings
 const DEFAULT_SETTINGS: SystemSettings = {
     aiProvider: 'groq_only',
+    cctvEnabled: true,
 };
 
 /**
@@ -56,7 +58,7 @@ router.get('/', async (_req: Request, res: Response) => {
  */
 router.put('/', async (req: Request, res: Response) => {
     try {
-        const { aiProvider, mapCenter } = req.body;
+        const { aiProvider, mapCenter, cctvEnabled } = req.body;
 
         // Validate aiProvider
         const validProviders: AIProvider[] = ['groq_only', 'gemini_only', 'groq_with_fallback', 'gemini_with_fallback'];
@@ -66,6 +68,7 @@ router.put('/', async (req: Request, res: Response) => {
 
         const settings: SystemSettings = {
             aiProvider,
+            cctvEnabled: cctvEnabled !== false, // Default to true if not specified
             updatedAt: FieldValue.serverTimestamp(),
         };
 

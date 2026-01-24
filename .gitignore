@@ -3,7 +3,6 @@ node_modules
 .venv
 .env
 yolov8m.pt
-yolov11m.pt
 
 # Logs
 logs

@@ -47,6 +47,7 @@ export {
     Paperclip,
     Camera,
     Video,
+    VideoOff,
 
     // Users & Auth
     User,

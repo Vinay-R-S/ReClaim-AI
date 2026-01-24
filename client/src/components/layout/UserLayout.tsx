@@ -146,7 +146,7 @@ export function UserLayout({ children }: UserLayoutProps) {
           </button>
 
           {/* Logo */}
-          <Link to="/app" className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2">
             <img
               src="/Logo.webp"
               alt="ReClaim AI Logo"

@@ -57,10 +57,17 @@ export function AuthPage() {
     }
   }, [user, navigate, location]);
 
-  // Clear errors when switching modes
+  // Clear errors and form fields when switching modes
   useEffect(() => {
     clearError();
     setFormError(null);
+    // Clear form fields when switching between login and signup
+    setFormData({
+      displayName: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+    });
   }, [isSignUp]);
 
   // Update mode based on URL

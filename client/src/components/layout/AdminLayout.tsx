@@ -29,6 +29,8 @@ interface SidebarCounts {
   pendingItems: number;
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 export function AdminLayout({ children }: AdminLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -40,6 +42,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     matches: 0,
     pendingItems: 0,
   });
+  const [cctvEnabled, setCctvEnabled] = useState(true);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Fetch real-time counts from API
@@ -70,6 +73,22 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     // Refresh counts every 30 seconds
     const interval = setInterval(fetchCounts, 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Fetch cctvEnabled setting
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/settings`);
+        if (response.ok) {
+          const data = await response.json();
+          setCctvEnabled(data.cctvEnabled !== false);
+        }
+      } catch (error) {
+        console.error("Failed to fetch settings:", error);
+      }
+    };
+    fetchSettings();
   }, []);
 
   // Close menu when clicking outside
@@ -158,6 +177,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           path: "/admin/cctv",
           icon: Video,
           badge: null,
+          disabled: !cctvEnabled,
         },
         {
           name: "Handovers",
@@ -197,7 +217,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           isMobile && "justify-between",
         )}
       >
-        <div className="flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-2">
           <img
             src="/Logo.webp"
             alt="ReClaim AI Logo"
@@ -206,10 +226,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             className="w-10 h-10 object-contain rounded-full"
           />
           <span className="font-medium text-xl text-text-primary">ReClaim</span>
-          <span className="ml-2 px-2 py-0.5 bg-primary text-white text-xs font-medium rounded">
-            ADMIN
-          </span>
-        </div>
+        </Link>
+        <span className="ml-2 px-2 py-0.5 bg-primary text-white text-xs font-medium rounded">
+          ADMIN
+        </span>
         {isMobile && (
           <button
             onClick={() => setMobileMenuOpen(false)}
@@ -231,6 +251,25 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             <div className="space-y-1">
               {section.items.map((item) => {
                 const isActive = location.pathname === item.path;
+                const isDisabled = "disabled" in item && item.disabled;
+
+                // Render disabled items as a div instead of Link
+                if (isDisabled) {
+                  return (
+                    <div
+                      key={item.path}
+                      className="sidebar-link opacity-50 cursor-not-allowed"
+                      title="Feature disabled - Enable in Settings"
+                    >
+                      <item.icon className="w-5 h-5 text-gray-400" />
+                      <span className="flex-1 text-gray-400">{item.name}</span>
+                      <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                        Off
+                      </span>
+                    </div>
+                  );
+                }
+
                 return (
                   <Link
                     key={item.path}
