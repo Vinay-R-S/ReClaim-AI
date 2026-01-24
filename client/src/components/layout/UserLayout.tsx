@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { HelpCircle, LogOut, User, Settings } from "lucide-react";
+import { HelpCircle, LogOut, User, Settings, Menu, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
 
@@ -21,6 +21,7 @@ export function UserLayout({ children }: UserLayoutProps) {
   const navigate = useNavigate();
   const { user, role, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [credits, setCredits] = useState(() => {
     // Initialize from sessionStorage if available
     const cached = sessionStorage.getItem("userCredits");
@@ -38,6 +39,23 @@ export function UserLayout({ children }: UserLayoutProps) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileMenuOpen]);
 
   // Fetch credits only once per session
   useEffect(() => {
@@ -115,11 +133,18 @@ export function UserLayout({ children }: UserLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Top Navigation Bar */}
-      <header
-        className={`${isHowItWorksPage ? "bg-white" : "bg-surface"} border-b border-border sticky top-0 z-50`}
-      >
+      {/* Top Navigation Bar - White background */}
+      <header className="bg-white border-b border-border sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="md:hidden p-2 -ml-2 rounded-lg hover:bg-gray-100 transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu className="w-6 h-6 text-text-primary" />
+          </button>
+
           {/* Logo */}
           <Link to="/app" className="flex items-center gap-2">
             <img
@@ -134,7 +159,7 @@ export function UserLayout({ children }: UserLayoutProps) {
             </span>
           </Link>
 
-          {/* Navigation Tabs */}
+          {/* Navigation Tabs - Hidden on mobile */}
           <nav className="hidden md:flex items-center gap-1 bg-gray-100 p-1 rounded-pill">
             {navTabs.map((tab) => (
               <Link
@@ -153,7 +178,7 @@ export function UserLayout({ children }: UserLayoutProps) {
           </nav>
 
           {/* Right Side Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Link
               to="/app/how-it-works"
               className="p-2 rounded-full hover:bg-gray-100 transition-colors"
@@ -253,10 +278,152 @@ export function UserLayout({ children }: UserLayoutProps) {
         </div>
       </header>
 
+      {/* Mobile Slide-out Drawer */}
+      {mobileMenuOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 md:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+
+          {/* Drawer */}
+          <div className="fixed inset-y-0 left-0 w-80 max-w-[85vw] bg-white shadow-xl z-50 md:hidden animate-slide-in-left">
+            {/* Drawer Header */}
+            <div className="h-16 px-4 flex items-center justify-between border-b border-border">
+              <div className="flex items-center gap-2">
+                <img
+                  src="/Logo.webp"
+                  alt="ReClaim AI Logo"
+                  width={40}
+                  height={40}
+                  className="w-10 h-10 object-contain rounded-full"
+                />
+                <span className="font-medium text-xl text-text-primary">
+                  ReClaim AI
+                </span>
+              </div>
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                aria-label="Close menu"
+              >
+                <X className="w-6 h-6 text-text-secondary" />
+              </button>
+            </div>
+
+            {/* User Info */}
+            <div className="px-4 py-4 border-b border-border bg-gray-50">
+              <div className="flex items-center gap-3">
+                {user?.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt={user.displayName || "User"}
+                    className="w-12 h-12 rounded-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center text-lg font-medium">
+                    {getUserInitials()}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-text-primary truncate">
+                    {user?.displayName || "User"}
+                  </p>
+                  <p className="text-sm text-text-secondary truncate">
+                    {user?.email}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Credits Card */}
+            <div className="px-4 py-4 border-b border-border">
+              <div className="flex items-center gap-3 p-3 bg-google-yellow/10 rounded-xl">
+                <div className="w-10 h-10 rounded-full bg-google-yellow/20 flex items-center justify-center">
+                  <span className="text-xl">🪙</span>
+                </div>
+                <div>
+                  <p className="text-2xl font-medium text-text-primary">
+                    {credits}
+                  </p>
+                  <p className="text-xs text-text-secondary">Credits earned</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Navigation Links */}
+            <nav className="px-2 py-4">
+              <p className="px-4 mb-2 text-xs font-medium text-text-secondary uppercase tracking-wider">
+                Navigation
+              </p>
+              {navTabs.map((tab) => (
+                <Link
+                  key={tab.path}
+                  to={tab.path}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors",
+                    location.pathname === tab.path
+                      ? "bg-primary/10 text-primary"
+                      : "text-text-primary hover:bg-gray-100",
+                  )}
+                >
+                  {tab.name}
+                </Link>
+              ))}
+              <Link
+                to="/app/how-it-works"
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors",
+                  isHowItWorksPage
+                    ? "bg-primary/10 text-primary"
+                    : "text-text-primary hover:bg-gray-100",
+                )}
+              >
+                <HelpCircle className="w-5 h-5" />
+                How it Works
+              </Link>
+            </nav>
+
+            {/* Admin Link (if admin) */}
+            {role === "admin" && (
+              <div className="px-2 py-2 border-t border-border">
+                <Link
+                  to="/admin"
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-google-blue hover:bg-blue-50 transition-colors"
+                >
+                  <Settings className="w-5 h-5" />
+                  Admin Dashboard
+                </Link>
+              </div>
+            )}
+
+            {/* Bottom Actions */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border bg-white">
+              <Link
+                to="/app/profile"
+                className="flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-text-primary hover:bg-gray-100 transition-colors"
+              >
+                <User className="w-5 h-5" />
+                Profile
+              </Link>
+              <button
+                onClick={handleSignOut}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-google-red hover:bg-red-50 transition-colors"
+              >
+                <LogOut className="w-5 h-5" />
+                Sign out
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex gap-6 min-h-[calc(100vh-8rem)]">
-          {/* Left Sidebar - Sticky */}
+          {/* Left Sidebar - Sticky (Hidden on mobile/tablet) */}
           <aside className="hidden lg:block w-80 sticky top-20 h-fit">
             {/* Credits Card */}
             <div className="card p-4">
@@ -277,7 +444,7 @@ export function UserLayout({ children }: UserLayoutProps) {
           </aside>
 
           {/* Main Chat Area - Scrollable */}
-          <div className="flex-1 max-w-3xl overflow-y-auto pb-6">
+          <div className="flex-1 max-w-3xl mx-auto lg:mx-0 overflow-y-auto pb-6">
             {children}
           </div>
         </div>

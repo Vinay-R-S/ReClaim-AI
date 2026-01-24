@@ -614,24 +614,28 @@ export function MainDashboard() {
   const itemsMap = new Map(items.map((item) => [item.id, item]));
 
   // Calculate KPI data
+  // Note: Claimed/Matched should only count LOST items (owners claim, finders hand over)
+  const lostItems = items.filter((i) => i.type === "Lost");
+  const foundItems = items.filter((i) => i.type === "Found");
+
   const kpiData: KPIData = {
     totalItems: items.length,
-    activeLost: items.filter((i) => i.type === "Lost" && i.status === "Pending")
-      .length,
-    activeFound: items.filter(
-      (i) => i.type === "Found" && i.status === "Pending",
-    ).length,
-    totalMatches: matches.length,
+    activeLost: lostItems.filter((i) => i.status === "Pending").length,
+    activeFound: foundItems.filter((i) => i.status === "Pending").length,
+    totalMatches: matches.length, // Match pairs from AI matching
     pendingReview: items.filter((i) => i.status === "Pending").length,
-    claimed: items.filter((i) => i.status === "Claimed").length,
-    matched: items.filter((i) => i.status === "Matched").length,
+    // Only Lost items can be "Claimed" (owner claims their item)
+    claimed: lostItems.filter((i) => i.status === "Claimed").length,
+    // Count Lost items that are matched (awaiting handover)
+    matched: lostItems.filter((i) => i.status === "Matched").length,
+    // Success rate based on Lost items (how many lost items were reunited)
     matchSuccessRate:
-      items.length > 0
+      lostItems.length > 0
         ? Math.round(
-            (items.filter(
+            (lostItems.filter(
               (i) => i.status === "Matched" || i.status === "Claimed",
             ).length /
-              items.length) *
+              lostItems.length) *
               100,
           )
         : 0,
@@ -689,11 +693,13 @@ export function MainDashboard() {
     return result;
   };
 
-  // Efficiency data - count both Matched AND Claimed as successful
-  const matchedItems = items.filter(
+  // Efficiency data - count only LOST items for success metrics
+  // (Lost items get matched/claimed when they are successfully reunited)
+  const lostItemsForEfficiency = items.filter((i) => i.type === "Lost");
+  const matchedLostItems = lostItemsForEfficiency.filter(
     (i) => i.status === "Matched" || i.status === "Claimed",
   ).length;
-  const unmatchedItems = items.filter(
+  const unmatchedLostItems = lostItemsForEfficiency.filter(
     (i) => i.status !== "Matched" && i.status !== "Claimed",
   ).length;
 
@@ -701,13 +707,13 @@ export function MainDashboard() {
     return (
       <div className="space-y-6">
         {/* Skeleton KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
           {[1, 2, 3, 4, 5].map((i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
         {/* Skeleton Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <SkeletonChart />
           <SkeletonChart />
         </div>
@@ -741,8 +747,8 @@ export function MainDashboard() {
         </div>
       </div>
 
-      {/* KPI Cards Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+      {/* KPI Cards Row - 3 cols below 1536px, 6 cols above */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
         <KPICard
           title="Total Items"
           value={kpiData.totalItems}
@@ -788,8 +794,8 @@ export function MainDashboard() {
         />
       </div>
 
-      {/* Charts Row 1: Score Distribution + Trend */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Charts Row 1: Score Distribution + Trend - Stack below 1280px */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <MatchScoreChart data={scoreDistribution} />
         <MatchTrendChart
           data={getTrendData()}
@@ -798,10 +804,13 @@ export function MainDashboard() {
         />
       </div>
 
-      {/* Charts Row 2: Efficiency + Recent Matches */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <EfficiencyDonut matched={matchedItems} unmatched={unmatchedItems} />
-        <div className="lg:col-span-2">
+      {/* Charts Row 2: Efficiency + Recent Matches - Stack below 1280px */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <EfficiencyDonut
+          matched={matchedLostItems}
+          unmatched={unmatchedLostItems}
+        />
+        <div className="xl:col-span-2">
           <RecentMatchesPanel matches={matches} itemsMap={itemsMap} />
         </div>
       </div>
@@ -818,7 +827,7 @@ export function MainDashboard() {
           <Users className="w-5 h-5 text-primary" />
           <h3 className="font-semibold text-text-primary">Quick Statistics</h3>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
           <div className="text-center p-4 bg-red-50 rounded-xl">
             <p className="text-2xl font-bold text-red-600">
               {items.filter((i) => i.type === "Lost").length}
@@ -832,7 +841,9 @@ export function MainDashboard() {
             <p className="text-sm text-text-secondary">Found</p>
           </div>
           <div className="text-center p-4 bg-green-50 rounded-xl">
-            <p className="text-2xl font-bold text-green-600">{matchedItems}</p>
+            <p className="text-2xl font-bold text-green-600">
+              {kpiData.matched}
+            </p>
             <p className="text-sm text-text-secondary">Matched</p>
           </div>
           <div className="text-center p-4 bg-purple-50 rounded-xl">

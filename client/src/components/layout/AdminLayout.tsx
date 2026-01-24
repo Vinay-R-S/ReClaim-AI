@@ -11,6 +11,8 @@ import {
   LogOut,
   User,
   Video,
+  Menu,
+  X,
 } from "@/lib/icons";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
@@ -32,6 +34,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [counts, setCounts] = useState<SidebarCounts>({
     allItems: 0,
     matches: 0,
@@ -79,6 +82,23 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileMenuOpen]);
 
   const handleSignOut = async () => {
     try {
@@ -167,12 +187,17 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     },
   ];
 
-  return (
-    <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-surface border-r border-border flex flex-col fixed h-screen">
-        {/* Logo */}
-        <div className="h-16 px-4 flex items-center gap-2 border-b border-border">
+  // Sidebar content component (reused in both desktop and mobile)
+  const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => (
+    <>
+      {/* Logo */}
+      <div
+        className={cn(
+          "h-16 px-4 flex items-center gap-2 border-b border-border",
+          isMobile && "justify-between",
+        )}
+      >
+        <div className="flex items-center gap-2">
           <img
             src="/Logo.webp"
             alt="ReClaim AI Logo"
@@ -185,56 +210,114 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             ADMIN
           </span>
         </div>
+        {isMobile && (
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-6 h-6 text-text-secondary" />
+          </button>
+        )}
+      </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
-          {sidebarSections.map((section) => (
-            <div key={section.title}>
-              <h3 className="px-3 mb-2 text-xs font-medium text-text-secondary tracking-wider">
-                {section.title}
-              </h3>
-              <div className="space-y-1">
-                {section.items.map((item) => {
-                  const isActive = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      className={cn(
-                        "sidebar-link",
-                        isActive
-                          ? "sidebar-link-active"
-                          : "sidebar-link-inactive",
-                      )}
-                    >
-                      <item.icon className="w-5 h-5" />
-                      <span className="flex-1">{item.name}</span>
-                      {item.badge !== null && item.badge > 0 && (
-                        <span
-                          className={cn(
-                            "px-2 py-0.5 rounded-full text-xs font-medium",
-                            isActive
-                              ? "bg-primary text-white"
-                              : "bg-gray-200 text-text-secondary",
-                          )}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
+        {sidebarSections.map((section) => (
+          <div key={section.title}>
+            <h3 className="px-3 mb-2 text-xs font-medium text-text-secondary tracking-wider">
+              {section.title}
+            </h3>
+            <div className="space-y-1">
+              {section.items.map((item) => {
+                const isActive = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={cn(
+                      "sidebar-link",
+                      isActive
+                        ? "sidebar-link-active"
+                        : "sidebar-link-inactive",
+                    )}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    <span className="flex-1">{item.name}</span>
+                    {item.badge !== null && item.badge > 0 && (
+                      <span
+                        className={cn(
+                          "px-2 py-0.5 rounded-full text-xs font-medium",
+                          isActive
+                            ? "bg-primary text-white"
+                            : "bg-gray-200 text-text-secondary",
+                        )}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
-          ))}
-        </nav>
+          </div>
+        ))}
+      </nav>
+
+      {/* Mobile: Sign out button at bottom */}
+      {isMobile && (
+        <div className="p-4 border-t border-border">
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-google-red hover:bg-red-50 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            Sign out
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <div className="min-h-screen bg-background flex">
+      {/* Desktop Sidebar - Hidden below 1024px (lg) */}
+      <aside className="hidden lg:flex w-64 bg-white border-r border-border flex-col fixed h-screen">
+        <SidebarContent />
       </aside>
 
+      {/* Mobile Slide-out Drawer */}
+      {mobileMenuOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 lg:hidden animate-fade-in"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+
+          {/* Drawer */}
+          <aside className="fixed inset-y-0 left-0 w-80 max-w-[85vw] bg-white shadow-xl z-50 lg:hidden flex flex-col animate-slide-in-left">
+            <SidebarContent isMobile />
+          </aside>
+        </>
+      )}
+
       {/* Main Content */}
-      <div className="flex-1 flex flex-col ml-64">
-        {/* Top Header */}
-        <header className="h-16 bg-surface border-b border-border px-6 flex items-center justify-between">
-          <h1 className="text-xl font-medium text-text-primary">Dashboard</h1>
+      <div className="flex-1 flex flex-col lg:ml-64">
+        {/* Top Header - White background */}
+        <header className="h-16 bg-white border-b border-border px-4 lg:px-6 flex items-center justify-between sticky top-0 z-40">
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-gray-100 transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu className="w-6 h-6 text-text-primary" />
+          </button>
+
+          <h1 className="text-lg lg:text-xl font-medium text-text-primary">
+            Dashboard
+          </h1>
 
           <div className="flex items-center gap-4">
             {/* User Avatar & Menu */}
@@ -327,7 +410,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+        <main className="flex-1 p-4 md:p-6 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

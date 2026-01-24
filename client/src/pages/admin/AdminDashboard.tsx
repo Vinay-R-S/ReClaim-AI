@@ -106,8 +106,8 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stats Row - Responsive: 1 col mobile, 2 cols sm, 4 cols md */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <StatsCard title="Total Lost Items" value={totalLost} />
         <StatsCard title="Total Found Items" value={totalFound} />
         <StatsCard title="Successful Matches" value={totalMatched} />

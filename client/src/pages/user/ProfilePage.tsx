@@ -415,7 +415,7 @@ export function ProfilePage() {
           <h2 className="text-xl font-semibold text-text-primary mb-4">
             Statistics
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Total Reports */}
             <div className="card p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">

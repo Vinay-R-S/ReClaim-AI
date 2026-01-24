@@ -17,7 +17,7 @@ export function HowItWorksPage() {
         </div>
 
         {/* Main Steps */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           <StepCard
             icon={<Package className="w-8 h-8" />}
             number={1}

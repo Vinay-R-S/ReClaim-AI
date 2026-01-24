@@ -26,6 +26,7 @@ export {
     ChevronLeft,
     ChevronRight,
     X,
+    Menu,
 
     // Actions
     Search,

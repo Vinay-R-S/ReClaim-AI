@@ -236,7 +236,7 @@ export function HandoversPage() {
               {/* Expanded Details */}
               {expandedId === handover.id && (
                 <div className="border-t border-gray-100 p-6 bg-gray-50">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Lost Item Details */}
                     <div className="bg-white rounded-lg p-4 border border-gray-200">
                       <h4 className="font-semibold text-red-600 flex items-center gap-2 mb-3">

@@ -336,8 +336,8 @@ export function CCTVIntelligence() {
         </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Main Grid - Responsive: 1 col on mobile/tablet, 3 cols on lg */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Left Panel: Controls */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
           {/* Target Selection */}
@@ -561,7 +561,7 @@ export function CCTVIntelligence() {
         </div>
 
         {/* Right Panel: Video Feed */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="md:col-span-2 space-y-4">
           {/* Tabs */}
           <div className="flex gap-4 border-b border-gray-200">
             <button

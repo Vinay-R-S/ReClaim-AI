@@ -1,10 +1,9 @@
 # Project specific files
 node_modules
-.env
-dump
-Old files
 .venv
+.env
 yolov8m.pt
+yolov11m.pt
 
 # Logs
 logs

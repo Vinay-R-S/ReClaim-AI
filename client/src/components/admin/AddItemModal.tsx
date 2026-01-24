@@ -1,5 +1,12 @@
 import { useState, useRef } from "react";
-import { X, Upload, Image as ImageIcon, Loader2, Sparkles } from "lucide-react";
+import {
+  X,
+  Upload,
+  Image as ImageIcon,
+  Loader2,
+  Sparkles,
+  Camera,
+} from "lucide-react";
 import { uploadItemImage, type ItemInput } from "../../services/itemService";
 import {
   analyzeItemImage,
@@ -35,6 +42,7 @@ export function AddItemModal({
   );
   const [aiProvider, setAiProvider] = useState<AIProvider>("gemini");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const availableProviders = getAvailableProviders();
 
@@ -262,11 +270,37 @@ export function AddItemModal({
                     </>
                   )}
                 </div>
+
+                {/* Camera Capture Button - Shows on mobile for quick back camera access */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    cameraInputRef.current?.click();
+                  }}
+                  className="mt-3 w-full py-3 px-4 border-2 border-dashed border-primary/50 rounded-xl flex items-center justify-center gap-2 text-primary hover:bg-primary/5 hover:border-primary transition-all"
+                >
+                  <Camera className="w-5 h-5" />
+                  <span className="text-sm font-medium">
+                    Take Photo with Camera
+                  </span>
+                </button>
+
+                {/* Gallery file input */}
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
                   multiple
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+                {/* Camera capture input - uses back camera on mobile */}
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
                   onChange={handleImageChange}
                   className="hidden"
                 />
