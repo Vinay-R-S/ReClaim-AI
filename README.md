@@ -1,6 +1,6 @@
 # ReClaim AI - Lost & Found Management System
 
-An AI-powered lost and found management platform that uses computer vision, natural language processing, and blockchain verification to help reunite people with their lost items.
+An AI-powered lost and found management platform that uses LLM-based semantic matching and blockchain verification to help reunite people with their lost items.
 
 ## Features
 
@@ -136,8 +136,6 @@ npm run dev
 - Backend API: http://localhost:3001
 - YOLO Service: http://localhost:5000
 
----
-
 ## Environment Variables
 
 ### Client Variables (prefix: `VITE_`)
@@ -173,8 +171,6 @@ npm run dev
 | `PORT`                         | Server port                         | Default: `3001`                                                   |
 | `ADMIN_PRIVATE_KEY`            | Ethereum wallet private key         | See [Blockchain Setup](#blockchain-setup-ethereum-sepolia)        |
 | `CONTRACT_ADDRESS`             | Deployed smart contract address     | See [Blockchain Setup](#blockchain-setup-ethereum-sepolia)        |
-
----
 
 ## Detailed Setup Guides
 
@@ -304,8 +300,6 @@ Blockchain service initialized
    RPC: https://ethereum-sepolia-rpc.publicnode.com
 ```
 
----
-
 ## Firestore Indexes
 
 If you see Firestore index errors, create these composite indexes:
@@ -315,8 +309,6 @@ If you see Firestore index errors, create these composite indexes:
 
 2. **items** collection:
    - `reportedBy` (Ascending) + `createdAt` (Descending)
-
----
 
 ## Tech Stack
 
@@ -356,47 +348,51 @@ If you see Firestore index errors, create these composite indexes:
 - Ethereum Sepolia (Blockchain)
 - Geoapify (Geocoding)
 
----
-
 ## Demo
 
-### Home Page
+### Main Page
 
-<img width="1782" height="852" alt="image" src="https://github.com/user-attachments/assets/67edbff7-db66-4b5b-9799-bb55cbb66bfd" />
+![Main Page](assets/Images/MainPage.png)
 
-### Why ReClaim AI
+### Authentication
 
-<img width="1900" height="860" alt="image" src="https://github.com/user-attachments/assets/9502261d-c818-4c69-8d25-5e9c9f385939" />
+![Authentication Page](assets/Images/AuthPage.png)
 
 ### Admin Dashboard
 
-<img width="1916" height="860" alt="image" src="https://github.com/user-attachments/assets/77c6d31d-7bac-4ea4-b59b-2ea65ad4c2ca" />
+![Admin Dashboard](assets/Images/Dashboard.png)
 
-### Users Management
+### Report Page
 
-<img width="1919" height="866" alt="image" src="https://github.com/user-attachments/assets/36a6a28a-3631-4aaf-8d79-357f719c88ba" />
+![Report Page](assets/Images/ReportPage.png)
 
-### Admin Settings
+### Report Found Component
 
-<img width="1916" height="856" alt="image" src="https://github.com/user-attachments/assets/25cc0715-d41a-46f3-adfb-20f90cc09298" />
+![Report Found Component](assets/Images/ReportFoundComponent.png)
 
-### Users Home Page
+### Pending Approval Page
 
-<img width="1807" height="771" alt="image" src="https://github.com/user-attachments/assets/819fe0ef-684f-469a-93a1-4c2ee835679b" />
+![Pending Approval Page](assets/Images/PendingApprovalPage.png)
 
-### User Profile Page
+### Handover Page (Admin)
 
-<img width="1562" height="808" alt="image" src="https://github.com/user-attachments/assets/fb936e43-6b26-4e94-a4af-119c839d71ac" />
+![Handover Page](assets/Images/HandoverPage.png)
 
-### Report Lost Item
+### Handover Page (User)
 
-<img width="1492" height="850" alt="image" src="https://github.com/user-attachments/assets/a9dbbbc9-ae14-4242-ab7b-a10b18925e0f" />
+![Handover Page User](assets/Images/HandoverPageUser.png)
 
-### Report Found Item
+### Profile Page
 
-<img width="1466" height="854" alt="image" src="https://github.com/user-attachments/assets/da7acb50-cc0d-4e5c-95fa-d97425cb4fa9" />
+![Profile Page](assets/Images/ProfilePage.png)
 
----
+### Settings Page
+
+![Settings Page](assets/Images/SettingsPage.png)
+
+### CCTV Intelligence
+
+![CCTV Intelligence Page](assets/Images/CCTVPage.png)
 
 ## Contributing
 
@@ -406,16 +402,16 @@ If you see Firestore index errors, create these composite indexes:
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
----
-
 ## License
 
-This project is licensed under the MIT License.
+**All Rights Reserved** © 2025 ReClaim AI Team
+
+This project and its source code are proprietary. Unauthorized copying, modification, distribution, or use of this software is strictly prohibited without explicit written permission from the authors.
 
 ---
 
 ## Acknowledgments
 
-- GDG Open Innovation Hackathon 2025-26
+- GDG TechSprint Hackathon 2026-27
 - Uses Groq's fast inference for AI features
 - Maps powered by Geoapify & Leaflet

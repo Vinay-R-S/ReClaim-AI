@@ -19,6 +19,10 @@ import { authLimiter, apiLimiter, errorHandler, notFoundHandler } from './middle
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust proxy - Required for Render/Vercel deployment (fixes express-rate-limit X-Forwarded-For issue)
+// Set to 1 to trust the first proxy hop
+app.set('trust proxy', 1);
+
 // SECURITY MIDDLEWARE
 
 app.use(compression({
