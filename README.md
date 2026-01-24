@@ -404,7 +404,7 @@ If you see Firestore index errors, create these composite indexes:
 
 ## License
 
-**All Rights Reserved** © 2025 ReClaim AI Team
+**All Rights Reserved** © 2026 ReClaim AI Team
 
 This project and its source code are proprietary. Unauthorized copying, modification, distribution, or use of this software is strictly prohibited without explicit written permission from the authors.
 
