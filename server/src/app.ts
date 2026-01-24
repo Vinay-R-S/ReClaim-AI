@@ -37,7 +37,11 @@ app.use(helmet({
 
 // CORS configuration with credentials support
 app.use(cors({
-    origin: [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:4173'],
+    origin: [
+        'https://re-claim-ai.vercel.app',
+        process.env.CLIENT_URL || 'http://localhost:5173',
+        'http://localhost:4173'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
