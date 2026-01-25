@@ -141,9 +141,9 @@ router.post('/', authMiddleware, itemCreateLimiter, async (req: AuthRequest, res
             updatedAt: FieldValue.serverTimestamp(),
         };
 
-        // Add reporter email if provided
+        // Add reporter email if provided (stored as reportedByEmail for handover.service.ts)
         if (item.reporterEmail) {
-            newItem.reporterEmail = item.reporterEmail;
+            newItem.reportedByEmail = item.reporterEmail;
         }
 
         // Add collection location for Found items

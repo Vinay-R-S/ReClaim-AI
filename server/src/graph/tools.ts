@@ -11,6 +11,7 @@ import { findMatchesForLostItem, findMatchesForFoundItem } from '../services/mat
 import { awardFoundItemCredits } from '../services/credits.js';
 import { collections } from '../utils/firebase-admin.js';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { triggerAutoMatching } from '../services/autoMatch.service.js';
 import type { CollectedItemData, MatchResult, ConversationContext } from './types.js';
 
 /**
@@ -309,6 +310,29 @@ export const saveItemTool = tool(
             // Award credits for found items
             if (type === 'Found') {
                 await awardFoundItemCredits(userId, docRef.id);
+            }
+
+            // Trigger automatic matching (non-blocking)
+            try {
+                console.log(`[SaveItemTool] Triggering auto-match for item ${docRef.id}`);
+                const imageUrl = itemDoc.cloudinaryUrls && itemDoc.cloudinaryUrls.length > 0
+                    ? itemDoc.cloudinaryUrls[0]
+                    : undefined;
+
+                await triggerAutoMatching(docRef.id, type, {
+                    name: itemDoc.name,
+                    description: itemDoc.description,
+                    tags: itemDoc.tags,
+                    color: itemDoc.color,
+                    imageUrl,
+                    cloudinaryUrls: itemDoc.cloudinaryUrls,
+                    coordinates: itemDoc.coordinates,
+                    location: itemDoc.location,
+                    date: itemDate,
+                });
+            } catch (matchError) {
+                console.error('[SaveItemTool] Auto-match trigger failed:', matchError);
+                // Don't fail the tool execution
             }
 
             return { itemId: docRef.id, success: true };
