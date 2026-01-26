@@ -8,6 +8,7 @@ import {
   CheckCircle,
   AlertCircle,
   ExternalLink,
+  Package,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ImageCarousel } from "../ui/ImageCarousel";
@@ -516,8 +517,8 @@ export function ItemDetailModal({
                       className="w-16 h-16 rounded-lg object-cover border border-gray-100"
                     />
                   ) : (
-                    <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center text-2xl">
-                      No Image
+                    <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center">
+                      <Package className="w-6 h-6 text-gray-400" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">

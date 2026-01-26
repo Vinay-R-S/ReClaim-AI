@@ -249,8 +249,8 @@ export function LandingPage() {
             </h1>
 
             <p className="text-base sm:text-lg lg:text-xl text-text-secondary mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
-              ReClaim AI uses advanced image recognition and natural language
-              understanding to match lost items with found reports. Finding what
+              ReClaim AI uses LLM-based semantic matching and visual similarity
+              to intelligently match lost items with found reports. Finding what
               you've lost has never been easier.
             </p>
 
@@ -322,8 +322,8 @@ export function LandingPage() {
               Why Choose ReClaim AI?
             </h2>
             <p className="text-base sm:text-lg text-text-secondary max-w-2xl mx-auto">
-              Our AI-powered platform makes finding lost items faster and more
-              accurate than ever
+              Combining LLM semantic understanding with visual similarity for
+              unmatched accuracy in item matching
             </p>
           </div>
 
@@ -331,26 +331,26 @@ export function LandingPage() {
             <FeatureCard
               icon={<Camera className="w-6 h-6" />}
               iconBg="bg-google-blue"
-              title="Image Recognition"
-              description="Upload a photo and our AI will analyze visual features to find matches"
+              title="Visual Similarity"
+              description="Clarifai-powered image analysis finds visually similar items across all reports"
             />
             <FeatureCard
               icon={<Sparkles className="w-6 h-6" />}
               iconBg="bg-google-yellow"
-              title="Smart Matching"
-              description="Natural language understanding matches descriptions intelligently"
+              title="LLM Semantic Matching"
+              description="Gemini AI understands context and meaning to match item descriptions intelligently"
             />
             <FeatureCard
               icon={<Bell className="w-6 h-6" />}
               iconBg="bg-google-green"
-              title="Instant Alerts"
-              description="Get notified immediately when a potential match is found"
+              title="Email & OTP Verification"
+              description="Secure handover process with email notifications and OTP verification for safe item collection"
             />
             <FeatureCard
               icon={<Shield className="w-6 h-6" />}
               iconBg="bg-google-red"
-              title="Secure Handover"
-              description="Verified collection points ensure safe item retrieval"
+              title="Blockchain Verified"
+              description="Ethereum-based handover verification for tamper-proof records"
             />
           </div>
         </div>
@@ -372,17 +372,17 @@ export function LandingPage() {
             <StepCard
               number="1"
               title="Report Your Item"
-              description="Describe your lost or found item using text, photos, or voice. Our AI assistant will guide you through the process."
+              description="Submit your lost or found item with photos, description, location, and time. Our smart form captures all the details needed for matching."
             />
             <StepCard
               number="2"
-              title="AI Matches Items"
-              description="Our Gemini-powered AI analyzes images and descriptions to find potential matches across all reports."
+              title="Dual AI Matching"
+              description="Gemini LLM analyzes descriptions semantically while Clarifai compares images visually - double the matching power."
             />
             <StepCard
               number="3"
-              title="Secure Retrieval"
-              description="Once matched, coordinate pickup at a verified collection point and earn credits for your good deed."
+              title="Blockchain Verified Handover"
+              description="Collect your item at a verified point. Each handover is recorded on Ethereum for tamper-proof verification."
             />
           </div>
         </div>
@@ -428,9 +428,8 @@ export function LandingPage() {
                 </span>
               </div>
               <p className="text-text-secondary max-w-md text-sm sm:text-base">
-                AI-powered lost and found platform that uses image recognition
-                and natural language understanding to reunite people with their
-                belongings.
+                AI-powered lost and found platform that uses LLM-based semantic
+                matching to reunite people with their belongings.
               </p>
               <div className="flex items-center gap-2 mt-4 text-sm text-text-secondary">
                 <Zap className="w-4 h-4 text-google-yellow" />
@@ -510,11 +509,11 @@ export function LandingPage() {
           {/* Bottom Footer */}
           <div className="pt-6 sm:pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs sm:text-sm text-text-secondary text-center sm:text-left">
-              © {new Date().getFullYear()} ReClaim AI. Built for GDG Hackathon.
+              © {new Date().getFullYear()} ReClaim AI. Built for GDG TechSprint Hackathon.
             </p>
             <div className="flex items-center gap-2">
               <span className="text-xs sm:text-sm text-text-secondary">
-                Made with love using Google Cloud
+                Made with love using Google tech
               </span>
             </div>
           </div>

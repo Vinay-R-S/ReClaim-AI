@@ -47,7 +47,7 @@ export default function VerifyHandoverPage() {
       ) {
         setStatus("error");
         setMessage(
-          "Handover session not found. The verification link may be invalid or expired."
+          "Handover session not found. The verification link may be invalid or expired.",
         );
       }
     }
@@ -104,7 +104,7 @@ export default function VerifyHandoverPage() {
       if (result.success) {
         setStatus("success");
         setMessage(
-          "Handover verified successfully! Thank you for helping return the item."
+          "Handover verified successfully! Thank you for helping return the item.",
         );
       } else {
         setStatus("error");
@@ -119,7 +119,7 @@ export default function VerifyHandoverPage() {
       console.error("Verification error:", error);
       setStatus("error");
       setMessage(
-        error.response?.data?.error || "Verification failed. Please try again."
+        error.response?.data?.error || "Verification failed. Please try again.",
       );
     }
   };
@@ -135,7 +135,7 @@ export default function VerifyHandoverPage() {
       {/* Simple Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/Logo.png" alt="ReClaim" className="w-8 h-8" />
+          <img src="/Logo.webp" alt="ReClaim" className="w-8 h-8" />
           <span className="font-medium text-lg text-gray-800">ReClaim AI</span>
         </Link>
       </header>
@@ -147,7 +147,8 @@ export default function VerifyHandoverPage() {
         >
           {/* Google-style Header */}
           <div className="pt-8 pb-4 px-8 text-center border-b border-gray-100">
-            <div className="flex justify-center items-center gap-0.5 mb-4">
+            <div className="flex justify-center items-center gap-2 mb-4">
+              <img src="/Logo.webp" alt="ReClaim Logo" className="w-10 h-10" />
               <span
                 className="text-2xl font-medium"
                 style={{ fontFamily: "'Product Sans', 'Roboto', sans-serif" }}

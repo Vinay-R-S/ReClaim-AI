@@ -59,3 +59,19 @@ export const itemCreateLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
 });
+
+/**
+ * Testing mode: 400 requests per day globally
+ * Applied when testingMode is enabled in admin settings
+ * This is for public demos/sharing when you want to limit API usage
+ */
+export const testingApiLimiter = rateLimit({
+    windowMs: 24 * 60 * 60 * 1000, // 24 hours
+    max: 400,
+    message: {
+        error: 'Daily API limit reached (400 calls). This is a demo deployment. Please try again tomorrow.',
+        isRateLimited: true
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+});

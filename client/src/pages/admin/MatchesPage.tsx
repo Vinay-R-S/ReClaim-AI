@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Search, RefreshCw } from "lucide-react";
+import { Search, RefreshCw, Package } from "lucide-react";
 import { getAllMatches, type Match } from "@/services/matchService";
 import { getItems, type Item } from "@/services/itemService";
 
@@ -148,8 +148,8 @@ export function MatchesPage() {
                               className="w-10 h-10 rounded-lg object-cover"
                             />
                           ) : (
-                            <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-lg">
-                              Lost
+                            <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center">
+                              <Package className="w-5 h-5 text-red-400" />
                             </div>
                           )}
                           <span className="text-sm font-medium text-text-primary">
@@ -166,8 +166,8 @@ export function MatchesPage() {
                               className="w-10 h-10 rounded-lg object-cover"
                             />
                           ) : (
-                            <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center text-lg">
-                              Found
+                            <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center">
+                              <Package className="w-5 h-5 text-green-400" />
                             </div>
                           )}
                           <span className="text-sm font-medium text-text-primary">

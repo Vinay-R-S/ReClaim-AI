@@ -8,14 +8,25 @@ import crypto from 'crypto';
 let provider: ethers.JsonRpcProvider | null = null;
 let wallet: ethers.Wallet | null = null;
 let contract: ethers.Contract | null = null;
+let isBlockchainInitialized = false; // Flag to track successful initialization
+let currentRpcUrl: string = ''; // Track which RPC URL is currently in use
 
-// Multiple Sepolia RPC endpoints for fallback
+// Multiple Sepolia RPC endpoints for fallback (ordered by reliability)
 const SEPOLIA_RPC_URLS = [
+    // Primary reliable providers
+    'https://rpc.ankr.com/eth_sepolia',
+    'https://ethereum-sepolia.blockpi.network/v1/rpc/public',
+    'https://1rpc.io/sepolia',
+    'https://sepolia.drpc.org',
+    // Secondary public endpoints
     'https://ethereum-sepolia-rpc.publicnode.com',
     'https://sepolia.gateway.tenderly.co',
     'https://rpc2.sepolia.org',
     'https://rpc.sepolia.org',
     'https://eth-sepolia.public.blastapi.io',
+    // Additional fallbacks
+    'https://endpoints.omniatech.io/v1/eth/sepolia/public',
+    'https://ethereum-sepolia.rpc.subquery.network/public',
 ];
 
 // Contract ABI (only the functions we need)
@@ -27,10 +38,38 @@ const CONTRACT_ABI = [
 ];
 
 /**
+ * Check if an error is network-related and requires RPC reconnection
+ */
+function isNetworkError(error: any): boolean {
+    const networkErrorKeywords = [
+        'network',
+        'timeout',
+        'ECONNREFUSED',
+        'ENOTFOUND',
+        'ETIMEDOUT',
+        'socket',
+        'connection',
+        'could not detect network',
+        'missing response',
+        'bad response',
+        'rate limit',
+        '429',
+        '502',
+        '503',
+        '504'
+    ];
+    const errorMsg = error.message?.toLowerCase() || '';
+    return networkErrorKeywords.some(keyword => errorMsg.includes(keyword.toLowerCase()));
+}
+
+/**
  * Initialize blockchain connection with retry logic
  */
-async function initializeBlockchain() {
-    if (contract) return; // Already initialized
+async function initializeBlockchain(forceReconnect = false) {
+    // If already successfully initialized and not forcing reconnect, skip
+    if (isBlockchainInitialized && contract && !forceReconnect) {
+        return;
+    }
 
     const privateKey = process.env.ADMIN_PRIVATE_KEY;
     const contractAddress = process.env.CONTRACT_ADDRESS;
@@ -63,12 +102,16 @@ async function initializeBlockchain() {
             // Test the connection with a simple call
             await provider.getBlockNumber();
 
-            console.log('Blockchain service initialized');
+            // Mark as successfully initialized
+            isBlockchainInitialized = true;
+            currentRpcUrl = rpcUrl;
+
+            console.log('✓ Blockchain service initialized successfully');
             console.log('   Admin wallet:', wallet.address);
             console.log('   Contract:', contractAddress);
             console.log('   RPC:', rpcUrl);
 
-            return; // Success!
+            return; // Success - no need to try other URLs!
 
         } catch (error: any) {
             console.warn(`RPC ${rpcUrl.substring(0, 30)}... failed:`, error.message);
@@ -77,6 +120,7 @@ async function initializeBlockchain() {
             provider = null;
             wallet = null;
             contract = null;
+            isBlockchainInitialized = false;
         }
     }
 
@@ -106,18 +150,20 @@ export async function recordHandoverOnBlockchain(data: {
 }): Promise<{ success: boolean; txHash?: string; error?: string }> {
     const MAX_RETRIES = 3;
     let attempt = 0;
+    let needsReconnect = false;
 
     while (attempt < MAX_RETRIES) {
         try {
-            // Reset contract if this is a retry
-            if (attempt > 0) {
-                console.log(`Retry attempt ${attempt + 1}/${MAX_RETRIES}...`);
+            // Only force reconnect if a network error occurred previously
+            if (needsReconnect) {
+                console.log(`Retry attempt ${attempt + 1}/${MAX_RETRIES} - reconnecting to different RPC...`);
                 provider = null;
                 wallet = null;
                 contract = null;
+                isBlockchainInitialized = false;
             }
 
-            await initializeBlockchain();
+            await initializeBlockchain(needsReconnect);
 
             if (!contract) {
                 throw new Error('Contract not initialized');
@@ -148,7 +194,8 @@ export async function recordHandoverOnBlockchain(data: {
             // Wait for confirmation (1 block)
             const receipt = await tx.wait(1);
 
-            console.log(`Handover recorded! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed.toString()}`);
+            console.log(`✓ Handover recorded successfully! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed.toString()}`);
+            console.log(`✓ Transaction complete - blockchain is ready for next operation`);
 
             return {
                 success: true,
@@ -158,7 +205,17 @@ export async function recordHandoverOnBlockchain(data: {
         } catch (error: any) {
             attempt++;
 
-            console.error(`Blockchain recording failed (attempt ${attempt}/${MAX_RETRIES}):`, error.message);
+            // Check if this is a network error that warrants reconnection
+            const shouldReconnect = isNetworkError(error);
+
+            // Only log retry attempts, not success messages
+            if (shouldReconnect) {
+                console.warn(`Network error (attempt ${attempt}/${MAX_RETRIES}):`, error.message);
+                needsReconnect = true; // Mark that we need to try a different RPC
+            } else {
+                console.error(`Blockchain error (attempt ${attempt}/${MAX_RETRIES}):`, error.message);
+                needsReconnect = false; // No need to reconnect for non-network errors
+            }
 
             // If it's the last attempt or a non-retryable error, return failure
             if (attempt >= MAX_RETRIES ||

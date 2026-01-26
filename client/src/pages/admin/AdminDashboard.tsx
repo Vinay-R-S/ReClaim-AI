@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowUp, ArrowDown, Package } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { type Item, getItems } from "../../services/itemService";
 import { ItemDetailModal } from "../../components/admin/ItemDetailModal";
@@ -185,8 +185,8 @@ export function AdminDashboard() {
                             className="w-10 h-10 rounded-lg object-cover"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-xl">
-                            No Image
+                          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                            <Package className="w-5 h-5 text-gray-400" />
                           </div>
                         )}
                         <div>

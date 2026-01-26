@@ -42,6 +42,9 @@ const UnderConstruction = lazy(() =>
   })),
 );
 const VerifyHandoverPage = lazy(() => import("./pages/VerifyHandoverPage"));
+const WelcomePage = lazy(() =>
+  import("./pages/WelcomePage").then((m) => ({ default: m.WelcomePage })),
+);
 
 // Loading fallback component
 function PageLoader() {
@@ -68,6 +71,7 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
+            <Route path="/welcome" element={<WelcomePage />} />
             <Route path="/auth" element={<AuthPage />} />
             <Route
               path="/verify/:matchId"

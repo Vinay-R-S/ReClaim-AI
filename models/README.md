@@ -1,11 +1,11 @@
-# YOLOv8 Object Detection Service
+# YOLO 11m Object Detection Service
 
-A Flask-based Python service for detecting objects in CCTV video footage using YOLOv8.
+A Flask-based Python service for detecting objects in CCTV video footage using YOLO 11m.
 
 ## Features
 
 - **Video Processing**: Extracts frames from uploaded videos at configurable FPS
-- **YOLOv8 Detection**: Uses the YOLOv8n (nano) model for fast inference
+- **YOLO 11m Detection**: Uses the YOLO 11m (medium) model for balanced speed and accuracy
 - **Class Filtering**: Can filter detections to specific target classes
 - **Base64 Output**: Returns detected frames as base64 images
 
@@ -13,12 +13,13 @@ A Flask-based Python service for detecting objects in CCTV video footage using Y
 
 ### 1. Create Virtual Environment
 
+> Run from root directory
+
 ```bash
-cd yolo_service
-python -m venv venv
+python -m venv .venv
 
 # Windows
-venv\Scripts\activate
+.\.venv\Scripts\activate
 
 # Linux/Mac
 source venv/bin/activate
@@ -27,13 +28,13 @@ source venv/bin/activate
 ### 2. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install -r .\models\requirements.txt
 ```
 
 ### 3. Run the Service
 
 ```bash
-python app.py
+python .\models\app.py
 ```
 
 The service will start on `http://localhost:5000`
@@ -41,11 +42,13 @@ The service will start on `http://localhost:5000`
 ## API Endpoints
 
 ### Health Check
+
 ```
 GET /health
 ```
 
 ### Detect Objects
+
 ```
 POST /detect
 Content-Type: multipart/form-data
@@ -56,20 +59,21 @@ Body:
 ```
 
 ### Get Supported Classes
+
 ```
 GET /classes
 ```
 
 ## Supported Classes (COCO Dataset)
 
-The YOLOv8 model detects 80 classes including:
+The YOLO 11m model detects 80 classes including:
 
-| Category | Classes |
-|----------|---------|
-| Bags | backpack, handbag, suitcase |
-| Electronics | laptop, cell phone, keyboard, mouse, remote, tv |
-| Personal Items | umbrella, bottle, book, clock, scissors |
-| And more... | person, chair, couch, bed, dining table, etc. |
+| Category       | Classes                                         |
+| -------------- | ----------------------------------------------- |
+| Bags           | backpack, handbag, suitcase                     |
+| Electronics    | laptop, cell phone, keyboard, mouse, remote, tv |
+| Personal Items | umbrella, bottle, book, clock, scissors         |
+| And more...    | person, chair, couch, bed, dining table, etc.   |
 
 ## Example Response
 
@@ -94,6 +98,7 @@ The YOLOv8 model detects 80 classes including:
 
 ## Notes
 
-- The first request may be slow as the model is loaded lazily
-- For demo purposes, the Node.js backend includes a simulation mode
+- The YOLO 11m model (`yolo11m.pt`) will be auto-downloaded on first run if not present
+- The first request may be slow as the model is loaded at startup
 - GPU acceleration requires CUDA-compatible GPU and drivers
+- The service runs on port 5000 by default (configurable via `PORT` env variable)

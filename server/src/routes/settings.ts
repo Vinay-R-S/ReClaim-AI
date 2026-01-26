@@ -21,6 +21,7 @@ export interface SystemSettings {
     aiProvider: AIProvider;
     mapCenter?: MapCenter;
     cctvEnabled: boolean;
+    testingMode: boolean;  // true = Testing (400 calls/day limit), false = Dev (unlimited)
     updatedAt?: FirebaseFirestore.FieldValue;
 }
 
@@ -30,6 +31,7 @@ const SETTINGS_DOC_ID = 'system';
 const DEFAULT_SETTINGS: SystemSettings = {
     aiProvider: 'groq_only',
     cctvEnabled: true,
+    testingMode: false,  // Default to Dev mode (no rate limiting)
 };
 
 /**
@@ -58,7 +60,7 @@ router.get('/', async (_req: Request, res: Response) => {
  */
 router.put('/', async (req: Request, res: Response) => {
     try {
-        const { aiProvider, mapCenter, cctvEnabled } = req.body;
+        const { aiProvider, mapCenter, cctvEnabled, testingMode } = req.body;
 
         // Validate aiProvider
         const validProviders: AIProvider[] = ['groq_only', 'gemini_only', 'groq_with_fallback', 'gemini_with_fallback'];
@@ -69,6 +71,7 @@ router.put('/', async (req: Request, res: Response) => {
         const settings: SystemSettings = {
             aiProvider,
             cctvEnabled: cctvEnabled !== false, // Default to true if not specified
+            testingMode: testingMode === true,  // Default to false (Dev mode) if not specified
             updatedAt: FieldValue.serverTimestamp(),
         };
 
@@ -146,6 +149,68 @@ router.post('/profile-picture', async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Profile picture upload error:', error);
         return res.status(500).json({ error: 'Failed to upload profile picture' });
+    }
+});
+
+/**
+ * GET /api/settings/mode
+ * Get current mode (testing or dev) - public endpoint for welcome page logic
+ */
+router.get('/mode', async (_req: Request, res: Response) => {
+    try {
+        const doc = await collections.settings.doc(SETTINGS_DOC_ID).get();
+        const data = doc.exists ? doc.data() : DEFAULT_SETTINGS;
+
+        return res.json({
+            testingMode: data?.testingMode === true,
+            dailyLimit: data?.testingMode === true ? 400 : null
+        });
+    } catch (error) {
+        console.error('Get mode error:', error);
+        return res.json({ testingMode: false, dailyLimit: null });
+    }
+});
+
+/**
+ * POST /api/settings/visit
+ * Track a visitor - public endpoint, increments visitor count
+ */
+router.post('/visit', async (_req: Request, res: Response) => {
+    try {
+        const analyticsDoc = collections.settings.doc('analytics');
+
+        await analyticsDoc.set({
+            visitorCount: FieldValue.increment(1),
+            lastVisit: FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        return res.json({ success: true });
+    } catch (error) {
+        console.error('Track visit error:', error);
+        return res.status(500).json({ error: 'Failed to track visit' });
+    }
+});
+
+/**
+ * GET /api/settings/analytics
+ * Get visitor analytics - admin only (secret)
+ */
+router.get('/analytics', async (_req: Request, res: Response) => {
+    try {
+        const doc = await collections.settings.doc('analytics').get();
+
+        if (!doc.exists) {
+            return res.json({ visitorCount: 0 });
+        }
+
+        const data = doc.data();
+        return res.json({
+            visitorCount: data?.visitorCount || 0,
+            lastVisit: data?.lastVisit || null
+        });
+    } catch (error) {
+        console.error('Get analytics error:', error);
+        return res.status(500).json({ error: 'Failed to get analytics' });
     }
 });
 

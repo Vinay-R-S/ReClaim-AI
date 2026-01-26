@@ -3,7 +3,7 @@
  */
 
 export { authMiddleware, optionalAuthMiddleware, type AuthRequest } from './auth.middleware.js';
-export { authLimiter, apiLimiter, resetLimiter, itemCreateLimiter } from './rateLimit.middleware.js';
+export { authLimiter, apiLimiter, resetLimiter, itemCreateLimiter, testingApiLimiter } from './rateLimit.middleware.js';
 export {
     validate,
     validateQuery,

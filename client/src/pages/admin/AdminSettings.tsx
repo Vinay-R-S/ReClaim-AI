@@ -3,7 +3,17 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Save, Bot, Loader2, MapPin, X, Search, Video } from "lucide-react";
+import {
+  Save,
+  Bot,
+  Loader2,
+  MapPin,
+  X,
+  Search,
+  Video,
+  Users,
+  RefreshCw,
+} from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -23,6 +33,7 @@ interface SystemSettings {
   aiProvider: AIProvider;
   mapCenter?: MapCenter;
   cctvEnabled: boolean;
+  testingMode: boolean;
 }
 
 const AI_PROVIDER_OPTIONS: {
@@ -76,12 +87,15 @@ export function AdminSettings() {
   const [settings, setSettings] = useState<SystemSettings>({
     aiProvider: "groq_only",
     cctvEnabled: true,
+    testingMode: false,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">(
     "idle",
   );
+  const [visitorCount, setVisitorCount] = useState<number>(0);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
 
   // Map center state
   const [addressQuery, setAddressQuery] = useState("");
@@ -96,21 +110,31 @@ export function AdminSettings() {
 
   const apiKey = import.meta.env.VITE_GEOAPIFY_API_KEY;
 
-  // Fetch current settings
+  // Fetch current settings and analytics
   useEffect(() => {
     const fetchSettings = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/settings`);
         if (response.ok) {
           const data = await response.json();
-          // Ensure cctvEnabled is always a boolean to avoid controlled/uncontrolled input issues
+          // Ensure booleans are properly set to avoid controlled/uncontrolled input issues
           setSettings({
             ...data,
             cctvEnabled: data.cctvEnabled !== false,
+            testingMode: data.testingMode === true,
           });
           if (data.mapCenter?.address) {
             setAddressQuery(data.mapCenter.address);
           }
+        }
+
+        // Fetch analytics (visitor count)
+        const analyticsResponse = await fetch(
+          `${API_BASE_URL}/api/settings/analytics`,
+        );
+        if (analyticsResponse.ok) {
+          const analyticsData = await analyticsResponse.json();
+          setVisitorCount(analyticsData.visitorCount || 0);
         }
       } catch (error) {
         console.error("Failed to fetch settings:", error);
@@ -498,6 +522,113 @@ export function AdminSettings() {
               </span>
             </div>
           </div>
+
+          {/* Testing Mode Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-lg border border-border">
+            <div className="flex-1">
+              <h3 className="font-medium text-text-primary">Deployment Mode</h3>
+              <p className="text-sm text-text-secondary mt-1">
+                Switch between Dev mode (unlimited) and Testing mode (400 API
+                calls/day limit).
+              </p>
+              <div className="mt-2 flex gap-4 text-xs">
+                <span
+                  className={`flex items-center gap-1.5 ${!settings.testingMode ? "text-green-600 font-medium" : "text-gray-400"}`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${!settings.testingMode ? "bg-green-500" : "bg-gray-300"}`}
+                  ></span>
+                  Dev Mode - No limits
+                </span>
+                <span
+                  className={`flex items-center gap-1.5 ${settings.testingMode ? "text-blue-600 font-medium" : "text-gray-400"}`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${settings.testingMode ? "bg-blue-500" : "bg-gray-300"}`}
+                  ></span>
+                  Testing Mode - 400/day limit
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 ml-4">
+              <span
+                className={`text-sm font-medium ${settings.testingMode ? "text-gray-400" : "text-green-600"}`}
+              >
+                Dev
+              </span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settings.testingMode}
+                  onChange={(e) =>
+                    setSettings({ ...settings, testingMode: e.target.checked })
+                  }
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+              </label>
+              <span
+                className={`text-sm font-medium ${settings.testingMode ? "text-blue-600" : "text-gray-400"}`}
+              >
+                Testing
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Site Analytics Section (Admin Secret) */}
+      <div className="bg-surface rounded-xl border border-border p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+            <Users className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-medium text-text-primary">
+              Site Analytics
+            </h2>
+            <p className="text-sm text-text-secondary">
+              Track visitor statistics (admin only)
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between p-4 rounded-lg bg-indigo-50 border border-indigo-100">
+          <div>
+            <p className="text-sm text-indigo-600 font-medium">
+              Total Visitors
+            </p>
+            <p className="text-3xl font-bold text-indigo-700 mt-1">
+              {visitorCount.toLocaleString()}
+            </p>
+            <p className="text-xs text-indigo-500 mt-1">
+              Unique visits tracked in Testing mode
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              setIsLoadingAnalytics(true);
+              try {
+                const response = await fetch(
+                  `${API_BASE_URL}/api/settings/analytics`,
+                );
+                if (response.ok) {
+                  const data = await response.json();
+                  setVisitorCount(data.visitorCount || 0);
+                }
+              } catch (error) {
+                console.error("Failed to refresh analytics:", error);
+              } finally {
+                setIsLoadingAnalytics(false);
+              }
+            }}
+            disabled={isLoadingAnalytics}
+            className="p-2 rounded-lg hover:bg-indigo-100 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`w-5 h-5 text-indigo-600 ${isLoadingAnalytics ? "animate-spin" : ""}`}
+            />
+          </button>
         </div>
       </div>
 
