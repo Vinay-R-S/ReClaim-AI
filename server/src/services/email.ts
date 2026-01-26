@@ -1,26 +1,36 @@
 /**
- * Email Service - Notifications via NodeMailer
+ * Email Service - Notifications via Resend API with NodeMailer fallback
+ * Primary: Resend HTTP API (works on cloud hosting)
+ * Fallback: NodeMailer SMTP (works locally or with allowed SMTP)
  */
 
+import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
 
-// Email configuration
+// ============ RESEND CONFIGURATION ============
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
+
+// Use Resend's test sender or your verified domain
+const RESEND_FROM_EMAIL = process.env.FROM_EMAIL || 'ReClaim AI <onboarding@resend.dev>';
+
+// ============ NODEMAILER CONFIGURATION (Fallback) ============
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587');
 const SMTP_USER = process.env.SMTP_USER || process.env.VITE_ADMIN_EMAIL;
-const SMTP_PASS = process.env.SMTP_PASS || process.env.VITE_ADMIN_PASSWORD; // You might need to add this env var
-const FROM_EMAIL = process.env.FROM_EMAIL || '"ReClaim AI" <noreply@reclaim.ai>';
+const SMTP_PASS = process.env.SMTP_PASS || process.env.VITE_ADMIN_PASSWORD;
+const NODEMAILER_FROM_EMAIL = process.env.FROM_EMAIL || '"ReClaim AI" <noreply@reclaim.ai>';
 
-// Create reusable transporter object using the default SMTP transport
-const transporter = nodemailer.createTransport({
+// Create NodeMailer transporter (only if credentials exist)
+const transporter = SMTP_USER && SMTP_PASS ? nodemailer.createTransport({
   host: SMTP_HOST,
   port: SMTP_PORT,
-  secure: SMTP_PORT === 465, // true for 465, false for other ports
+  secure: SMTP_PORT === 465,
   auth: {
     user: SMTP_USER,
     pass: SMTP_PASS,
   },
-});
+}) : null;
 
 export interface EmailOptions {
   to: string | string[];
@@ -30,34 +40,88 @@ export interface EmailOptions {
 }
 
 /**
- * Send an email notification
+ * Send email via Resend (primary method)
  */
-export async function sendEmail(options: EmailOptions): Promise<boolean> {
+async function sendViaResend(options: EmailOptions): Promise<boolean> {
+  if (!resend || !RESEND_API_KEY) {
+    return false;
+  }
+
   try {
-    if (!SMTP_USER || !SMTP_PASS) {
-      console.warn('SMTP credentials not configured, skipping email to:', options.to);
+    console.log('Attempting to send email via Resend:', { to: options.to, subject: options.subject });
+
+    const { data, error } = await resend.emails.send({
+      from: RESEND_FROM_EMAIL,
+      to: Array.isArray(options.to) ? options.to : [options.to],
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+    });
+
+    if (error) {
+      console.error('Resend error:', error);
       return false;
     }
 
-    console.log('Sending email via NodeMailer:', {
-      to: options.to,
-      subject: options.subject,
-    });
+    console.log('Email sent successfully via Resend:', data?.id);
+    return true;
+  } catch (error) {
+    console.error('Resend send failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Send email via NodeMailer (fallback method)
+ */
+async function sendViaNodeMailer(options: EmailOptions): Promise<boolean> {
+  if (!transporter || !SMTP_USER || !SMTP_PASS) {
+    console.warn('NodeMailer not configured, skipping fallback');
+    return false;
+  }
+
+  try {
+    console.log('Attempting to send email via NodeMailer (fallback):', { to: options.to, subject: options.subject });
 
     const info = await transporter.sendMail({
-      from: FROM_EMAIL,
+      from: NODEMAILER_FROM_EMAIL,
       to: options.to,
       subject: options.subject,
       html: options.html,
       text: options.text,
     });
 
-    console.log('Email sent successfully:', info.messageId);
+    console.log('Email sent successfully via NodeMailer:', info.messageId);
     return true;
   } catch (error) {
-    console.error('Email send failed:', error);
+    console.error('NodeMailer send failed:', error);
     return false;
   }
+}
+
+/**
+ * Send an email notification (tries Resend first, falls back to NodeMailer)
+ */
+export async function sendEmail(options: EmailOptions): Promise<boolean> {
+  // Try Resend first (works on cloud hosting like Render)
+  if (RESEND_API_KEY) {
+    const resendResult = await sendViaResend(options);
+    if (resendResult) {
+      return true;
+    }
+    console.log('Resend failed, trying NodeMailer fallback...');
+  }
+
+  // Fallback to NodeMailer
+  if (transporter) {
+    const nodemailerResult = await sendViaNodeMailer(options);
+    if (nodemailerResult) {
+      return true;
+    }
+  }
+
+  console.warn('All email methods failed. Email not sent to:', options.to);
+  return false;
 }
 
 /**
@@ -438,8 +502,8 @@ export async function sendHandoverLinkToFoundPerson(
 }
 
 /**
- * Check if email service is configured
+ * Check if email service is configured (either Resend or NodeMailer)
  */
 export function isEmailConfigured(): boolean {
-  return !!SMTP_USER && !!SMTP_PASS;
+  return !!RESEND_API_KEY || (!!SMTP_USER && !!SMTP_PASS);
 }
