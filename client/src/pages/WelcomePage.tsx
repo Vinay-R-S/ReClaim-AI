@@ -18,7 +18,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export function WelcomePage() {
   const [isLoading, setIsLoading] = useState(true);
-  const [testingMode, setTestingMode] = useState(false);
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -30,7 +30,6 @@ export function WelcomePage() {
       try {
         const response = await fetch(`${API_BASE_URL}/api/settings/mode`);
         const data = await response.json();
-        setTestingMode(data.testingMode);
 
         // If not in testing mode or already seen, skip to landing
         if (!data.testingMode || hasSeenWelcome) {
