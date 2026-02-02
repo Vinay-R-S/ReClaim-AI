@@ -4,6 +4,7 @@ node_modules
 .env
 yolov8m.pt
 yolo11m.pt
+markdown
 
 # Logs
 logs

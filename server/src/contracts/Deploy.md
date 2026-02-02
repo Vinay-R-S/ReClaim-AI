@@ -1,21 +1,21 @@
 # Blockchain Contract Deployment Guide
 
-## 🎯 Quick Summary
+## Quick Summary
 
 You need to deploy the smart contract to Sepolia testnet using Remix IDE (browser-based). This will take **about 5 minutes**.
 
 ---
 
-## ✅ Pre-Deployment Checklist
+## Pre-Deployment Checklist
 
-- [x] MetaMask installed in Brave browser
+- [x] MetaMask installed in your browser
 - [x] Connected to **Sepolia Test Network** in MetaMask
-- [x] Have **1.52 Sepolia ETH** (you confirmed this)
+- [x] Have **0.5 ETH**
 - [x] Private key added to `.env` file
 
 ---
 
-## 📝 Step-by-Step Deployment
+## Step-by-Step Deployment
 
 ### Step 1: Open Remix IDE
 
@@ -26,7 +26,7 @@ You need to deploy the smart contract to Sepolia testnet using Remix IDE (browse
 
 ### Step 2: Create Contract File
 
-1. In the left sidebar, click **📁 File Explorer** icon (top icon)
+1. In the left sidebar, click **File Explorer** icon (top icon)
 2. Right-click on **contracts** folder
 3. Select **"New File"**
 4. Name it: `ReclaimHandover.sol`
@@ -49,22 +49,22 @@ You need to deploy the smart contract to Sepolia testnet using Remix IDE (browse
 
 ### Step 4: Compile the Contract
 
-1. Click the **📋 Solidity Compiler** icon in left sidebar (2nd icon)
+1. Click the ** Solidity Compiler** icon in left sidebar (2nd icon)
 
 2. Settings:
    - **Compiler version**: Select `0.8.20` or newer (e.g., `0.8.27`)
    - **EVM Version**: Keep as default (usually `shanghai` or `paris`)
-   - **Auto compile**: ✅ (check this box)
+   - **Auto compile**: (check this box)
 
 3. Click the big blue button: **"Compile ReclaimHandover.sol"**
 
-4. ✅ You should see a **green checkmark** next to the contract name
+4. You should see a **green checkmark** next to the contract name
 
 ---
 
 ### Step 5: Deploy to Sepolia
 
-1. Click the **🚀 Deploy & Run Transactions** icon (3rd icon in left sidebar)
+1. Click the ** Deploy & Run Transactions** icon (3rd icon in left sidebar)
 
 2. **IMPORTANT Settings:**
    - **Environment**: Select **"Injected Provider - MetaMask"**
@@ -79,9 +79,9 @@ You need to deploy the smart contract to Sepolia testnet using Remix IDE (browse
    - Shows gas fee (should be ~0.001-0.003 ETH)
    - Click **"Confirm"**
 
-5. ⏳ Wait ~15 seconds for deployment
+5. Wait ~15 seconds for deployment
 
-6. ✅ You'll see:
+6. You'll see:
    - Green checkmark in console
    - **Deployed Contracts** section shows `RECLAIMHANDOVER AT 0x...`
 
@@ -91,7 +91,7 @@ You need to deploy the smart contract to Sepolia testnet using Remix IDE (browse
 
 1. In **Deployed Contracts**, find your contract
 
-2. Click the **📋 copy icon** next to the contract address
+2. Click the **copy icon** next to the contract address
    - It looks like: `0xAbC123...` (42 characters)
 
 3. **Paste it into your `.env` file:**
@@ -104,7 +104,7 @@ You need to deploy the smart contract to Sepolia testnet using Remix IDE (browse
 
 ---
 
-## ✅ Verification
+## Verification
 
 After deployment, verify it worked:
 
@@ -113,13 +113,13 @@ After deployment, verify it worked:
 2. Paste your contract address in the search bar
 
 3. You should see:
-   - ✅ Contract created
-   - ✅ Transaction hash
-   - ✅ Block number
+   - Contract created
+   - Transaction hash
+   - Block number
 
 ---
 
-## 🚀 Post-Deployment
+## Post-Deployment
 
 Once `CONTRACT_ADDRESS` is in your `.env`:
 
@@ -136,7 +136,7 @@ Once `CONTRACT_ADDRESS` is in your `.env`:
 
 ---
 
-## 🆘 Troubleshooting
+## Troubleshooting
 
 ### Problem: MetaMask not showing Sepolia
 
@@ -173,7 +173,7 @@ Once `CONTRACT_ADDRESS` is in your `.env`:
 
 ---
 
-## 📊 Expected Costs
+## Expected Costs
 
 - **Deployment**: ~0.001-0.003 SepoliaETH (FREE testnet)
 - **Each handover recording**: ~0.0001-0.0003 SepoliaETH
@@ -185,7 +185,7 @@ Your **1.52 ETH** can handle:
 
 ---
 
-## ⏭️ What's Next?
+## What's Next?
 
 After deployment:
 
@@ -194,4 +194,4 @@ After deployment:
 3. Test the credits system (signup + handover)
 4. Check Etherscan for blockchain transactions
 
-**Total time**: ~5 minutes 🚀
+**Total time**: ~5 minutes
