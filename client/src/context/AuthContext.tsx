@@ -165,8 +165,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           photoURL: user.photoURL,
           role: "user",
           status: "active",
-          credits: 10, // ✨ Initialize with 10 credits
-          lostItemsCount: 0, // ✨ Initialize counts
+          credits: 10, // Initialize with 10 credits
+          lostItemsCount: 0, // Initialize counts
           foundItemsCount: 0,
           totalItemsCount: 0,
           createdAt: serverTimestamp(),
@@ -175,7 +175,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await setDoc(userRef, newUser);
         setRole("user");
 
-        // ✨ Log credit transaction in backend
+        // Log credit transaction in backend
         const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
         try {
           await fetch(`${API_URL}/api/credits/signup-bonus`, {
@@ -269,8 +269,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             photoURL: result.user.photoURL,
             role: "user",
             status: "active",
-            credits: 10, // ✨ Initialize with 10 credits
-            lostItemsCount: 0, // ✨ Initialize counts
+            credits: 10, // Initialize with 10 credits
+            lostItemsCount: 0, // Initialize counts
             foundItemsCount: 0,
             totalItemsCount: 0,
             createdAt: serverTimestamp(),
@@ -279,7 +279,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           { merge: true },
         );
 
-        // ✨ Log credit transaction
+        // Log credit transaction
         const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
         try {
           await fetch(`${API_URL}/api/credits/signup-bonus`, {

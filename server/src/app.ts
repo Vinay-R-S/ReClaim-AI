@@ -3,7 +3,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import compression from 'compression';
 import helmet from 'helmet';
-import chatRoutes from './routes/chat.js';
+
 import itemsRoutes from './routes/items.js';
 import matchesRoutes from './routes/matches.js';
 import notificationsRoutes from './routes/notifications.js';
@@ -101,7 +101,7 @@ app.get('/health', (req, res) => {
 });
 
 // API ROUTES
-app.use('/api/chat', chatRoutes);
+
 app.use('/api/items', itemsRoutes);
 app.use('/api/matches', matchesRoutes);
 app.use('/api/notifications', notificationsRoutes);
