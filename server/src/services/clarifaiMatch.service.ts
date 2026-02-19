@@ -3,7 +3,7 @@
  * Uses Clarifai Visual Search API to compare image similarity
  */
 
-import fetch from 'node-fetch';
+
 
 const CLARIFAI_API_KEY = process.env.CLARIFAI_API_KEY;
 const CLARIFAI_PAT = process.env.CLARIFAI_PAT || CLARIFAI_API_KEY; // Personal Access Token

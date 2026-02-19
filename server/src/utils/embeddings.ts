@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+
 
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:embedContent";
 

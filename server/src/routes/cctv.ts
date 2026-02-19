@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/index.js';
-import fetch from 'node-fetch';
+
 
 const router = Router();
 
