@@ -20,8 +20,15 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
+      // Kept identical to server/eslint.config.js so the same line does not pass
+      // in one workspace and fail in the other.
+      eqeqeq: ['error', 'smart'],
+      'prefer-const': 'error',
+      'no-var': 'error',
+      'no-console': 'warn',
+
       // Downgraded to warn so `npm run lint` is green on a codebase that has not
-      // been through the remediation phases yet, matching server/eslint.config.js.
+      // been through the remediation phases yet.
       // Promote each back to 'error' in the phase that clears it:
       //   no-explicit-any        -> phase 13, shared domain types (ARCH-08)
       //   no-unused-vars         -> phase 18, dead code sweep (ARCH-05)

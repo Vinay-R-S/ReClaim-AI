@@ -1,0 +1,10 @@
+# Prettier resolves its config by walking up the tree, but resolves the ignore
+# file only relative to the working directory. The npm scripts in this package
+# run from client/, so the root .prettierignore is never loaded here and this
+# file is required. Without it, `npm run format` rewrites dist/ and the lockfile.
+node_modules
+dist
+dist-ssr
+coverage
+package-lock.json
+public

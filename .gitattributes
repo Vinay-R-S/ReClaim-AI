@@ -31,5 +31,8 @@
 *.woff    binary
 *.woff2   binary
 
-# Generated. Collapse in diffs and reviews.
-package-lock.json linguist-generated=true -diff
+# Generated. Collapsed in GitHub review by linguist-generated, but deliberately
+# NOT marked -diff: that would make git treat it as binary locally, hiding every
+# dependency change behind "Bin 279881 -> 311661 bytes" in `git diff` and
+# `git add -p`. Dependency changes must stay auditable.
+package-lock.json linguist-generated=true
