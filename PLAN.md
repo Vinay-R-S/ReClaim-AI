@@ -219,13 +219,21 @@ Branch: `chore/reclaim-201-hygiene-and-config`
 
 Fixes: ARCH-15, ARCH-16.
 
-- Delete `client/src/d.md` and `server/src/d.md` after confirming no importer references them.
+- Move `client/src/d.md` and `server/src/d.md` into `docs/` after confirming no importer references them. They are real structure documentation rather than scrap, so they are preserved rather than deleted, and will need regenerating once phases 14 and 15 restructure both trees.
 - De-duplicate and tidy `.gitignore`.
 - Re-encode `models/requirements.txt` as UTF-8 and verify `pip install -r models/requirements.txt` parses.
 - Add `.editorconfig` and a Prettier config aligned to the Airbnb rules already in `client/eslint.config.js`. Add an ESLint config to `server/` so both packages lint.
-- Add `server/.env.example` and `client/.env.example` listing every variable the code reads, with the client file containing no LLM keys.
+- Add `server/.env.example` and `client/.env.example` listing every variable the code reads. The client file must document `VITE_GROQ_API_KEY`, `VITE_GEMINI_API_KEY`, and `VITE_ADMIN_EMAIL` as currently required but deprecated, because they are live reads until phase 5 removes them. Omitting them produces a build with silently degraded AI paths.
 
-Exit: both builds pass, `pip install -r models/requirements.txt` parses, no behavior change.
+Added during the phase, not in the original scope:
+
+- `.gitattributes` normalizing line endings, so identical files stop diffing as fully rewritten across platforms. `package-lock.json` is marked `linguist-generated` but deliberately not `-diff`, so dependency changes stay auditable in `git diff`.
+- Per-package `.prettierignore` files. Prettier walks up the tree for its config but resolves the ignore file only against the working directory, so a root-only ignore file is not seen by scripts that run from `client/` or `server/`.
+- Both ESLint configs pinned to the same major, and their shared rules kept identical, so the same line cannot pass in one workspace and fail in the other.
+
+Exit: both builds pass, both linters exit 0, `pip install -r models/requirements.txt` parses, no behavior change.
+
+Outstanding: `npm run format:check` fails on 87 source files because the Prettier config contradicts the existing double-quoted style and no formatting pass has been run. Until that pass lands, `format:check` cannot be used as a CI gate.
 
 ### Phase 2 - Server foundation: logging, config, error model, bootstrap
 
