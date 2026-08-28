@@ -9,7 +9,12 @@
         "build": "tsc",
         "start": "node dist/index.js",
         "test": "vitest",
-        "deploy-contract": "tsx scripts/deploy-contract.ts"
+        "deploy-contract": "tsx scripts/deploy-contract.ts",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "typecheck": "tsc --noEmit"
     },
     "dependencies": {
         "@opentelemetry/api": "^1.9.0",
@@ -32,8 +37,13 @@
         "zod": "^3.25.76"
     },
     "devDependencies": {
+        "@eslint/js": "^9.39.5",
+        "eslint": "^9.39.5",
+        "globals": "^16.5.0",
+        "prettier": "^3.9.6",
         "tsx": "^4.7.0",
         "typescript": "^5.3.0",
+        "typescript-eslint": "^8.68.0",
         "vitest": "^3.2.4"
     }
 }
