@@ -33,7 +33,7 @@ export async function getUsers(): Promise<User[]> {
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
   const usersRef = collection(db, USERS_COLLECTION);
 
-  let q = query(usersRef, orderBy("createdAt", "desc"));
+  const q = query(usersRef, orderBy("createdAt", "desc"));
 
   const snapshot = await getDocs(q);
   const users = snapshot.docs.map((doc) => {

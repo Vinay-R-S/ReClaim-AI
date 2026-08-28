@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-ssr
+build
+coverage
+.venv
+__pycache__
+package-lock.json
+*.pt
+docs/*.pdf
+PLAN.md
