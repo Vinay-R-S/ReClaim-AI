@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { MapPin, Search, X } from "lucide-react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { MapPin, Search, X } from 'lucide-react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 interface LocationPickerProps {
   value: string;
@@ -18,10 +18,9 @@ interface GeocodingResult {
 
 // Fix Leaflet default marker icon issue
 const defaultIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
@@ -32,7 +31,7 @@ export function LocationPicker({
   value,
   onChange,
   onLocationSelect,
-  placeholder = "Search for a location...",
+  placeholder = 'Search for a location...',
 }: LocationPickerProps) {
   const [query, setQuery] = useState(value);
   const [suggestions, setSuggestions] = useState<GeocodingResult[]>([]);
@@ -67,22 +66,19 @@ export function LocationPicker({
 
     // Add Geoapify or OpenStreetMap tiles
     if (apiKey) {
-      L.tileLayer(
-        `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${apiKey}`,
-        {
-          maxZoom: 20,
-          attribution: "© Geoapify © OpenMapTiles © OpenStreetMap",
-        }
-      ).addTo(mapRef.current);
+      L.tileLayer(`https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${apiKey}`, {
+        maxZoom: 20,
+        attribution: '© Geoapify © OpenMapTiles © OpenStreetMap',
+      }).addTo(mapRef.current);
     } else {
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: "© OpenStreetMap",
+        attribution: '© OpenStreetMap',
       }).addTo(mapRef.current);
     }
 
     // Click handler for map
-    mapRef.current.on("click", async (e: L.LeafletMouseEvent) => {
+    mapRef.current.on('click', async (e: L.LeafletMouseEvent) => {
       const { lat, lng } = e.latlng;
       setSelectedLocation({ lat, lon: lng });
 
@@ -90,7 +86,7 @@ export function LocationPicker({
       if (apiKey) {
         try {
           const response = await fetch(
-            `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lng}&apiKey=${apiKey}`
+            `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lng}&apiKey=${apiKey}`,
           );
           const data = await response.json();
           if (data.features?.[0]?.properties?.formatted) {
@@ -102,7 +98,7 @@ export function LocationPicker({
             }
           }
         } catch (err) {
-          console.error("Reverse geocoding failed:", err);
+          console.error('Reverse geocoding failed:', err);
         }
       }
 
@@ -110,9 +106,7 @@ export function LocationPicker({
       if (markerRef.current) {
         markerRef.current.setLatLng([lat, lng]);
       } else if (mapRef.current) {
-        markerRef.current = L.marker([lat, lng], { icon: defaultIcon }).addTo(
-          mapRef.current
-        );
+        markerRef.current = L.marker([lat, lng], { icon: defaultIcon }).addTo(mapRef.current);
       }
     });
 
@@ -132,9 +126,7 @@ export function LocationPicker({
       if (markerRef.current) {
         markerRef.current.setLatLng([lat, lon]);
       } else {
-        markerRef.current = L.marker([lat, lon], { icon: defaultIcon }).addTo(
-          mapRef.current
-        );
+        markerRef.current = L.marker([lat, lon], { icon: defaultIcon }).addTo(mapRef.current);
       }
 
       mapRef.current.setView([lat, lon], 16);
@@ -153,31 +145,29 @@ export function LocationPicker({
       try {
         const response = await fetch(
           `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
-            searchQuery
-          )}&apiKey=${apiKey}&limit=5`
+            searchQuery,
+          )}&apiKey=${apiKey}&limit=5`,
         );
         const data = await response.json();
 
         if (data.features) {
           setSuggestions(
             data.features.map(
-              (f: {
-                properties: { formatted: string; lat: number; lon: number };
-              }) => ({
+              (f: { properties: { formatted: string; lat: number; lon: number } }) => ({
                 formatted: f.properties.formatted,
                 lat: f.properties.lat,
                 lon: f.properties.lon,
-              })
-            )
+              }),
+            ),
           );
         }
       } catch (err) {
-        console.error("Error fetching suggestions:", err);
+        console.error('Error fetching suggestions:', err);
       } finally {
         setIsLoading(false);
       }
     },
-    [apiKey]
+    [apiKey],
   );
 
   // Debounced search
@@ -231,8 +221,8 @@ export function LocationPicker({
         {query && (
           <button
             onClick={() => {
-              setQuery("");
-              onChange("");
+              setQuery('');
+              onChange('');
               setSelectedLocation(null);
               setSuggestions([]);
               if (markerRef.current && mapRef.current) {
@@ -256,9 +246,7 @@ export function LocationPicker({
                 className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-start gap-2 border-b border-border last:border-b-0"
               >
                 <MapPin className="w-4 h-4 text-google-red mt-0.5 flex-shrink-0" />
-                <span className="text-sm text-text-primary line-clamp-2">
-                  {result.formatted}
-                </span>
+                <span className="text-sm text-text-primary line-clamp-2">{result.formatted}</span>
               </button>
             ))}
           </div>

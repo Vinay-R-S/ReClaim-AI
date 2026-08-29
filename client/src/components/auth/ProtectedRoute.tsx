@@ -1,5 +1,5 @@
-import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -31,13 +31,13 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   // HARD BLOCK: Check if user is blocked
-  if (userStatus === "blocked") {
+  if (userStatus === 'blocked') {
     // This should already be handled by AuthContext, but as a safety measure
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
 
   // Redirect admin to admin dashboard
-  if (role === "admin") {
+  if (role === 'admin') {
     return <Navigate to="/admin" replace />;
   }
 

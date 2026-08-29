@@ -3,18 +3,11 @@
  * Shows rate limits, hosting info, and development status before users access the main app
  */
 
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  AlertTriangle,
-  Zap,
-  Server,
-  Code,
-  ArrowRight,
-  Loader2,
-} from "lucide-react";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, Zap, Server, Code, ArrowRight, Loader2 } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export function WelcomePage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -23,7 +16,7 @@ export function WelcomePage() {
 
   useEffect(() => {
     // Check if user has already seen the welcome page
-    const hasSeenWelcome = localStorage.getItem("hasSeenWelcome");
+    const hasSeenWelcome = localStorage.getItem('hasSeenWelcome');
 
     // Check if testing mode is enabled
     const checkMode = async () => {
@@ -33,17 +26,17 @@ export function WelcomePage() {
 
         // If not in testing mode or already seen, skip to landing
         if (!data.testingMode || hasSeenWelcome) {
-          navigate("/", { replace: true });
+          navigate('/', { replace: true });
           return;
         }
 
         // Track the visit
-        await fetch(`${API_BASE_URL}/api/settings/visit`, { method: "POST" });
+        await fetch(`${API_BASE_URL}/api/settings/visit`, { method: 'POST' });
 
         setIsLoading(false);
       } catch (error) {
-        console.error("Failed to check mode:", error);
-        navigate("/", { replace: true });
+        console.error('Failed to check mode:', error);
+        navigate('/', { replace: true });
       }
     };
 
@@ -51,8 +44,8 @@ export function WelcomePage() {
   }, [navigate]);
 
   const handleContinue = () => {
-    localStorage.setItem("hasSeenWelcome", "true");
-    navigate("/");
+    localStorage.setItem('hasSeenWelcome', 'true');
+    navigate('/');
   };
 
   if (isLoading) {
@@ -68,11 +61,7 @@ export function WelcomePage() {
       {/* Header */}
       <header className="p-6 flex items-center justify-center">
         <div className="flex items-center gap-3">
-          <img
-            src="/Logo.webp"
-            alt="ReClaim AI Logo"
-            className="w-12 h-12 rounded-full"
-          />
+          <img src="/Logo.webp" alt="ReClaim AI Logo" className="w-12 h-12 rounded-full" />
           <span className="text-2xl font-medium text-gray-800">ReClaim AI</span>
         </div>
       </header>
@@ -92,8 +81,7 @@ export function WelcomePage() {
           </h1>
 
           <p className="text-lg text-gray-600">
-            Thanks for checking out ReClaim AI! Please note the following before
-            you proceed:
+            Thanks for checking out ReClaim AI! Please note the following before you proceed:
           </p>
 
           {/* Info Cards */}
@@ -105,10 +93,8 @@ export function WelcomePage() {
               </div>
               <h3 className="font-medium text-gray-800 mb-2">Rate Limited</h3>
               <p className="text-sm text-gray-600">
-                <span className="font-semibold text-[#4285F4]">
-                  400 API calls/day
-                </span>{" "}
-                limit is active to manage server costs during testing.
+                <span className="font-semibold text-[#4285F4]">400 API calls/day</span> limit is
+                active to manage server costs during testing.
               </p>
             </div>
 
@@ -119,9 +105,9 @@ export function WelcomePage() {
               </div>
               <h3 className="font-medium text-gray-800 mb-2">Free Hosting</h3>
               <p className="text-sm text-gray-600">
-                Running on <span className="font-semibold">Vercel</span> +{" "}
-                <span className="font-semibold">Render</span>. Backend may take
-                30-60s to wake from sleep.
+                Running on <span className="font-semibold">Vercel</span> +{' '}
+                <span className="font-semibold">Render</span>. Backend may take 30-60s to wake from
+                sleep.
               </p>
             </div>
 
@@ -132,8 +118,7 @@ export function WelcomePage() {
               </div>
               <h3 className="font-medium text-gray-800 mb-2">In Development</h3>
               <p className="text-sm text-gray-600">
-                Some features may not work perfectly. We're actively improving
-                the app.
+                Some features may not work perfectly. We're actively improving the app.
               </p>
             </div>
           </div>
@@ -142,8 +127,7 @@ export function WelcomePage() {
           <div className="flex items-center justify-center gap-2 text-amber-600 bg-amber-50 rounded-lg py-3 px-4">
             <AlertTriangle className="w-5 h-5 flex-shrink-0" />
             <span className="text-sm">
-              If you see a 404 or loading error, the backend is warming up.
-              Please wait and refresh.
+              If you see a 404 or loading error, the backend is warming up. Please wait and refresh.
             </span>
           </div>
 

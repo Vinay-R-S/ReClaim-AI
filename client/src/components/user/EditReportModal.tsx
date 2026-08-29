@@ -1,21 +1,13 @@
-import { useState, useEffect, useRef } from "react";
-import {
-  X,
-  Save,
-  Loader2,
-  CheckCircle,
-  AlertCircle,
-  Upload,
-  Trash2,
-} from "lucide-react";
-import { cn } from "../../lib/utils";
+import { useState, useEffect, useRef } from 'react';
+import { X, Save, Loader2, CheckCircle, AlertCircle, Upload, Trash2 } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import {
   type Item,
   type ItemInput,
   updateItemViaApi,
   uploadItemImage,
-} from "../../services/itemService";
-import { Timestamp } from "firebase/firestore";
+} from '../../services/itemService';
+import { Timestamp } from 'firebase/firestore';
 
 interface EditReportModalProps {
   item: Item;
@@ -23,14 +15,10 @@ interface EditReportModalProps {
   onUpdate: () => void;
 }
 
-export function EditReportModal({
-  item,
-  onClose,
-  onUpdate,
-}: EditReportModalProps) {
+export function EditReportModal({ item, onClose, onUpdate }: EditReportModalProps) {
   const [loading, setSaving] = useState(false);
   const [toast, setToast] = useState<{
-    type: "success" | "error";
+    type: 'success' | 'error';
     message: string;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,44 +26,44 @@ export function EditReportModal({
   // Helper to parse date from various formats
   const parseDateToString = (date: unknown): string => {
     try {
-      if (!date) return new Date().toISOString().split("T")[0];
+      if (!date) return new Date().toISOString().split('T')[0];
 
       // Handle Firestore Timestamp instance
       if (date instanceof Timestamp) {
-        return date.toDate().toISOString().split("T")[0];
+        return date.toDate().toISOString().split('T')[0];
       }
 
       // Handle serialized Timestamp from API (has seconds or _seconds)
-      if (typeof date === "object" && date !== null) {
+      if (typeof date === 'object' && date !== null) {
         const dateObj = date as { seconds?: number; _seconds?: number };
         if (dateObj.seconds !== undefined || dateObj._seconds !== undefined) {
           const seconds = dateObj.seconds ?? dateObj._seconds ?? 0;
-          return new Date(seconds * 1000).toISOString().split("T")[0];
+          return new Date(seconds * 1000).toISOString().split('T')[0];
         }
       }
 
       // Handle Date object
       if (date instanceof Date) {
-        return date.toISOString().split("T")[0];
+        return date.toISOString().split('T')[0];
       }
 
       // Handle ISO string
-      if (typeof date === "string") {
-        return new Date(date).toISOString().split("T")[0];
+      if (typeof date === 'string') {
+        return new Date(date).toISOString().split('T')[0];
       }
 
       // Fallback
-      return new Date().toISOString().split("T")[0];
+      return new Date().toISOString().split('T')[0];
     } catch {
-      return new Date().toISOString().split("T")[0];
+      return new Date().toISOString().split('T')[0];
     }
   };
 
   // Form state
   const [formData, setFormData] = useState({
-    name: item.name || "",
-    description: item.description || "",
-    location: item.location || "",
+    name: item.name || '',
+    description: item.description || '',
+    location: item.location || '',
     date: parseDateToString(item.date),
     tags: item.tags || [],
   });
@@ -94,17 +82,17 @@ export function EditReportModal({
 
   // New images to upload (base64)
   const [newImages, setNewImages] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState("");
+  const [tagInput, setTagInput] = useState('');
 
   // Close on Escape key
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !loading) {
+      if (e.key === 'Escape' && !loading) {
         onClose();
       }
     };
-    window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
   }, [onClose, loading]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,8 +105,8 @@ export function EditReportModal({
 
     if (maxNewImages <= 0) {
       setToast({
-        type: "error",
-        message: "Maximum 5 images allowed. Please remove some images first.",
+        type: 'error',
+        message: 'Maximum 5 images allowed. Please remove some images first.',
       });
       setTimeout(() => setToast(null), 3000);
       return;
@@ -130,17 +118,17 @@ export function EditReportModal({
       const base64Images = await Promise.all(uploadPromises);
       setNewImages((prev) => [...prev, ...base64Images]);
     } catch (error) {
-      console.error("Error uploading images:", error);
+      console.error('Error uploading images:', error);
       setToast({
-        type: "error",
-        message: "Failed to process images. Please try again.",
+        type: 'error',
+        message: 'Failed to process images. Please try again.',
       });
       setTimeout(() => setToast(null), 3000);
     }
 
     // Reset file input
     if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      fileInputRef.current.value = '';
     }
   };
 
@@ -156,7 +144,7 @@ export function EditReportModal({
     const tag = tagInput.trim();
     if (tag && !formData.tags.includes(tag)) {
       setFormData((prev) => ({ ...prev, tags: [...prev.tags, tag] }));
-      setTagInput("");
+      setTagInput('');
     }
   };
 
@@ -169,7 +157,7 @@ export function EditReportModal({
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      setToast({ type: "error", message: "Item name is required." });
+      setToast({ type: 'error', message: 'Item name is required.' });
       setTimeout(() => setToast(null), 3000);
       return;
     }
@@ -186,31 +174,24 @@ export function EditReportModal({
       };
 
       // If images were removed, update cloudinaryUrls
-      if (
-        existingImages.length !==
-        (item.cloudinaryUrls?.length || 0) + (item.imageUrl ? 1 : 0)
-      ) {
+      if (existingImages.length !== (item.cloudinaryUrls?.length || 0) + (item.imageUrl ? 1 : 0)) {
         // Images were removed - need to update cloudinaryUrls
         (updates as Record<string, unknown>).cloudinaryUrls = existingImages;
       }
 
-      await updateItemViaApi(
-        item.id,
-        updates,
-        newImages.length > 0 ? newImages : undefined,
-      );
+      await updateItemViaApi(item.id, updates, newImages.length > 0 ? newImages : undefined);
 
-      setToast({ type: "success", message: "Report updated successfully!" });
+      setToast({ type: 'success', message: 'Report updated successfully!' });
       setTimeout(() => {
         setToast(null);
         onUpdate();
         onClose();
       }, 1500);
     } catch (error) {
-      console.error("Error updating report:", error);
+      console.error('Error updating report:', error);
       setToast({
-        type: "error",
-        message: "Failed to update report. Please try again.",
+        type: 'error',
+        message: 'Failed to update report. Please try again.',
       });
       setTimeout(() => setToast(null), 3000);
     } finally {
@@ -244,13 +225,13 @@ export function EditReportModal({
           {toast && (
             <div
               className={cn(
-                "p-3 rounded-lg flex items-center gap-2 text-sm",
-                toast.type === "success"
-                  ? "bg-green-50 text-green-700 border border-green-200"
-                  : "bg-red-50 text-red-700 border border-red-200",
+                'p-3 rounded-lg flex items-center gap-2 text-sm',
+                toast.type === 'success'
+                  ? 'bg-green-50 text-green-700 border border-green-200'
+                  : 'bg-red-50 text-red-700 border border-red-200',
               )}
             >
-              {toast.type === "success" ? (
+              {toast.type === 'success' ? (
                 <CheckCircle className="w-4 h-4 flex-shrink-0" />
               ) : (
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -261,9 +242,7 @@ export function EditReportModal({
 
           {/* Images Section */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Images
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Images</label>
             <div className="grid grid-cols-3 gap-2 mb-3">
               {/* Existing Images */}
               {existingImages.map((img, idx) => (
@@ -320,15 +299,11 @@ export function EditReportModal({
 
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Item Name *
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Item Name *</label>
             <input
               type="text"
               value={formData.name}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, name: e.target.value }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="e.g., Blue Wallet"
             />
@@ -336,9 +311,7 @@ export function EditReportModal({
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea
               value={formData.description}
               onChange={(e) =>
@@ -355,15 +328,11 @@ export function EditReportModal({
 
           {/* Location */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Location
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
             <input
               type="text"
               value={formData.location}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, location: e.target.value }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, location: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Where was it lost/found?"
             />
@@ -371,24 +340,18 @@ export function EditReportModal({
 
           {/* Date */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <input
               type="date"
               value={formData.date}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, date: e.target.value }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
           {/* Tags */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tags
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
             <div className="flex flex-wrap gap-2 mb-2">
               {formData.tags.map((tag) => (
                 <span
@@ -411,9 +374,7 @@ export function EditReportModal({
                 type="text"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === "Enter" && (e.preventDefault(), addTag())
-                }
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 placeholder="Add a tag..."
               />

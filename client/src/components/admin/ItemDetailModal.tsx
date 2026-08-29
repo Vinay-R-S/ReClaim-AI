@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 import {
   X,
   Edit2,
@@ -9,17 +9,17 @@ import {
   AlertCircle,
   ExternalLink,
   Package,
-} from "lucide-react";
-import { cn } from "../../lib/utils";
-import { ImageCarousel } from "../ui/ImageCarousel";
+} from 'lucide-react';
+import { cn } from '../../lib/utils';
+import { ImageCarousel } from '../ui/ImageCarousel';
 import {
   type Item,
   type ItemInput,
   updateItemViaApi,
   deleteItemViaApi,
   getItemById,
-} from "../../services/itemService";
-import { Timestamp } from "firebase/firestore";
+} from '../../services/itemService';
+import { Timestamp } from 'firebase/firestore';
 
 interface ItemDetailModalProps {
   item: Item;
@@ -28,17 +28,12 @@ interface ItemDetailModalProps {
   onDelete: () => void;
 }
 
-export function ItemDetailModal({
-  item,
-  onClose,
-  onUpdate,
-  onDelete,
-}: ItemDetailModalProps) {
+export function ItemDetailModal({ item, onClose, onUpdate, onDelete }: ItemDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [matchedItem, setMatchedItem] = useState<Item | null>(null);
   const [toast, setToast] = useState<{
-    type: "success" | "error";
+    type: 'success' | 'error';
     message: string;
   } | null>(null);
   const [formData, setFormData] = useState<ItemInput>({
@@ -47,8 +42,7 @@ export function ItemDetailModal({
     imageUrl: item.imageUrl,
     type: item.type,
     location: item.location,
-    date:
-      item.date instanceof Timestamp ? item.date.toDate() : new Date(item.date),
+    date: item.date instanceof Timestamp ? item.date.toDate() : new Date(item.date),
     status: item.status,
     matchScore: item.matchScore,
     tags: item.tags || [],
@@ -57,12 +51,12 @@ export function ItemDetailModal({
   // Close on Escape key
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
-    window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
   }, [onClose]);
 
   // Fetch matched item details
@@ -73,7 +67,7 @@ export function ItemDetailModal({
           const matched = await getItemById(item.matchedItemId);
           setMatchedItem(matched);
         } catch (err) {
-          console.error("Error fetching matched item:", err);
+          console.error('Error fetching matched item:', err);
         }
       } else {
         setMatchedItem(null);
@@ -86,17 +80,17 @@ export function ItemDetailModal({
     try {
       setLoading(true);
       await updateItemViaApi(item.id, formData);
-      setToast({ type: "success", message: "Item updated successfully!" });
+      setToast({ type: 'success', message: 'Item updated successfully!' });
       setIsEditing(false);
       setTimeout(() => {
         setToast(null);
         onUpdate();
       }, 1500);
     } catch (err) {
-      console.error("Error updating item:", err);
+      console.error('Error updating item:', err);
       setToast({
-        type: "error",
-        message: "Failed to update item. Please try again.",
+        type: 'error',
+        message: 'Failed to update item. Please try again.',
       });
       setTimeout(() => setToast(null), 3000);
     } finally {
@@ -105,21 +99,21 @@ export function ItemDetailModal({
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this item?")) return;
+    if (!confirm('Are you sure you want to delete this item?')) return;
 
     try {
       setLoading(true);
       await deleteItemViaApi(item.id);
-      setToast({ type: "success", message: "Item deleted successfully!" });
+      setToast({ type: 'success', message: 'Item deleted successfully!' });
       setTimeout(() => {
         onDelete();
         onClose();
       }, 1000);
     } catch (err) {
-      console.error("Error deleting item:", err);
+      console.error('Error deleting item:', err);
       setToast({
-        type: "error",
-        message: "Failed to delete item. Please try again.",
+        type: 'error',
+        message: 'Failed to delete item. Please try again.',
       });
       setTimeout(() => setToast(null), 3000);
     } finally {
@@ -129,10 +123,10 @@ export function ItemDetailModal({
 
   const formatDate = (date: Timestamp | Date) => {
     const d = date instanceof Timestamp ? date.toDate() : new Date(date);
-    return d.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
+    return d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
     });
   };
 
@@ -159,7 +153,7 @@ export function ItemDetailModal({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h2 className="text-lg font-medium text-text-primary">
-            {isEditing ? "Edit Item" : "Item Details"}
+            {isEditing ? 'Edit Item' : 'Item Details'}
           </h2>
           <div className="flex items-center gap-2">
             {!isEditing ? (
@@ -188,7 +182,7 @@ export function ItemDetailModal({
                   className="flex items-center gap-2 px-3 py-1.5 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors text-sm"
                 >
                   <Save className="w-4 h-4" />
-                  {loading ? "Saving..." : "Save"}
+                  {loading ? 'Saving...' : 'Save'}
                 </button>
                 <button
                   onClick={() => setIsEditing(false)}
@@ -214,13 +208,13 @@ export function ItemDetailModal({
           {toast && (
             <div
               className={cn(
-                "mb-4 p-3 rounded-lg flex items-center gap-2 text-sm",
-                toast.type === "success"
-                  ? "bg-green-50 text-green-700 border border-green-200"
-                  : "bg-red-50 text-red-700 border border-red-200",
+                'mb-4 p-3 rounded-lg flex items-center gap-2 text-sm',
+                toast.type === 'success'
+                  ? 'bg-green-50 text-green-700 border border-green-200'
+                  : 'bg-red-50 text-red-700 border border-red-200',
               )}
             >
-              {toast.type === "success" ? (
+              {toast.type === 'success' ? (
                 <CheckCircle className="w-4 h-4" />
               ) : (
                 <AlertCircle className="w-4 h-4" />
@@ -243,16 +237,12 @@ export function ItemDetailModal({
           <div className="grid grid-cols-2 gap-4">
             {/* Name */}
             <div className="col-span-2">
-              <label className="text-sm text-text-secondary mb-1 block">
-                Item Name
-              </label>
+              <label className="text-sm text-text-secondary mb-1 block">Item Name</label>
               {isEditing ? (
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               ) : (
@@ -262,15 +252,11 @@ export function ItemDetailModal({
 
             {/* Description */}
             <div className="col-span-2">
-              <label className="text-sm text-text-secondary mb-1 block">
-                Description
-              </label>
+              <label className="text-sm text-text-secondary mb-1 block">Description</label>
               {isEditing ? (
                 <textarea
                   value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 />
@@ -281,16 +267,14 @@ export function ItemDetailModal({
 
             {/* Type */}
             <div>
-              <label className="text-sm text-text-secondary mb-1 block">
-                Type
-              </label>
+              <label className="text-sm text-text-secondary mb-1 block">Type</label>
               {isEditing ? (
                 <select
                   value={formData.type}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      type: e.target.value as "Lost" | "Found",
+                      type: e.target.value as 'Lost' | 'Found',
                     })
                   }
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -301,10 +285,10 @@ export function ItemDetailModal({
               ) : (
                 <span
                   className={cn(
-                    "inline-block px-3 py-1 rounded-full text-sm font-medium",
-                    item.type === "Lost"
-                      ? "bg-google-red/10 text-google-red"
-                      : "bg-google-green/10 text-google-green",
+                    'inline-block px-3 py-1 rounded-full text-sm font-medium',
+                    item.type === 'Lost'
+                      ? 'bg-google-red/10 text-google-red'
+                      : 'bg-google-green/10 text-google-green',
                   )}
                 >
                   {item.type}
@@ -314,20 +298,14 @@ export function ItemDetailModal({
 
             {/* Status */}
             <div>
-              <label className="text-sm text-text-secondary mb-1 block">
-                Status
-              </label>
+              <label className="text-sm text-text-secondary mb-1 block">Status</label>
               {isEditing ? (
                 <select
                   value={formData.status}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      status: e.target.value as
-                        | "Pending"
-                        | "Matched"
-                        | "Claimed"
-                        | "Resolved",
+                      status: e.target.value as 'Pending' | 'Matched' | 'Claimed' | 'Resolved',
                     })
                   }
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -340,10 +318,10 @@ export function ItemDetailModal({
               ) : (
                 <span
                   className={cn(
-                    "badge",
-                    item.status === "Matched" && "badge-matched",
-                    item.status === "Pending" && "badge-pending",
-                    item.status === "Claimed" && "badge-claimed",
+                    'badge',
+                    item.status === 'Matched' && 'badge-matched',
+                    item.status === 'Pending' && 'badge-pending',
+                    item.status === 'Claimed' && 'badge-claimed',
                   )}
                 >
                   {item.status}
@@ -353,16 +331,12 @@ export function ItemDetailModal({
 
             {/* Location */}
             <div>
-              <label className="text-sm text-text-secondary mb-1 block">
-                Location
-              </label>
+              <label className="text-sm text-text-secondary mb-1 block">Location</label>
               {isEditing ? (
                 <input
                   type="text"
                   value={formData.location}
-                  onChange={(e) =>
-                    setFormData({ ...formData, location: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               ) : (
@@ -372,13 +346,11 @@ export function ItemDetailModal({
 
             {/* Date */}
             <div>
-              <label className="text-sm text-text-secondary mb-1 block">
-                Date
-              </label>
+              <label className="text-sm text-text-secondary mb-1 block">Date</label>
               {isEditing ? (
                 <input
                   type="date"
-                  value={formData.date.toISOString().split("T")[0]}
+                  value={formData.date.toISOString().split('T')[0]}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
@@ -395,9 +367,7 @@ export function ItemDetailModal({
             {/* Tags */}
             {(item.tags?.length || isEditing) && (
               <div className="col-span-2">
-                <label className="text-sm text-text-secondary mb-2 block">
-                  Tags
-                </label>
+                <label className="text-sm text-text-secondary mb-2 block">Tags</label>
                 {isEditing ? (
                   <div>
                     <div className="flex flex-wrap gap-2 mb-2">
@@ -425,7 +395,7 @@ export function ItemDetailModal({
                       type="text"
                       placeholder="Add tag (press Enter)"
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") {
+                        if (e.key === 'Enter') {
                           e.preventDefault();
                           const input = e.target as HTMLInputElement;
                           const newTag = input.value.trim();
@@ -434,7 +404,7 @@ export function ItemDetailModal({
                               ...formData,
                               tags: [...(formData.tags || []), newTag],
                             });
-                            input.value = "";
+                            input.value = '';
                           }
                         }
                       }}
@@ -459,21 +429,17 @@ export function ItemDetailModal({
             {/* Match Score */}
             {(item.matchScore !== undefined || isEditing) && (
               <div className="col-span-2">
-                <label className="text-sm text-text-secondary mb-1 block">
-                  Match Score
-                </label>
+                <label className="text-sm text-text-secondary mb-1 block">Match Score</label>
                 {isEditing ? (
                   <input
                     type="number"
                     min="0"
                     max="100"
-                    value={formData.matchScore || ""}
+                    value={formData.matchScore || ''}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        matchScore: e.target.value
-                          ? parseInt(e.target.value)
-                          : undefined,
+                        matchScore: e.target.value ? parseInt(e.target.value) : undefined,
                       })
                     }
                     className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -484,17 +450,13 @@ export function ItemDetailModal({
                     <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
                       <div
                         className={cn(
-                          "h-full rounded-full",
-                          (item.matchScore || 0) >= 90
-                            ? "bg-google-green"
-                            : "bg-google-blue",
+                          'h-full rounded-full',
+                          (item.matchScore || 0) >= 90 ? 'bg-google-green' : 'bg-google-blue',
                         )}
                         style={{ width: `${item.matchScore}%` }}
                       />
                     </div>
-                    <span className="text-text-primary font-medium">
-                      {item.matchScore}%
-                    </span>
+                    <span className="text-text-primary font-medium">{item.matchScore}%</span>
                   </div>
                 )}
               </div>
@@ -510,9 +472,7 @@ export function ItemDetailModal({
                 <div className="flex items-center gap-4 bg-white p-3 rounded-lg border border-blue-50">
                   {matchedItem.imageUrl || matchedItem.cloudinaryUrls?.[0] ? (
                     <img
-                      src={
-                        matchedItem.imageUrl || matchedItem.cloudinaryUrls?.[0]
-                      }
+                      src={matchedItem.imageUrl || matchedItem.cloudinaryUrls?.[0]}
                       alt={matchedItem.name}
                       className="w-16 h-16 rounded-lg object-cover border border-gray-100"
                     />
@@ -531,10 +491,10 @@ export function ItemDetailModal({
                     <div className="flex items-center gap-2 mt-2">
                       <span
                         className={cn(
-                          "text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded",
-                          matchedItem.type === "Lost"
-                            ? "bg-red-100 text-red-600"
-                            : "bg-green-100 text-green-600",
+                          'text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded',
+                          matchedItem.type === 'Lost'
+                            ? 'bg-red-100 text-red-600'
+                            : 'bg-green-100 text-green-600',
                         )}
                       >
                         {matchedItem.type}

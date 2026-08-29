@@ -2,9 +2,9 @@
  * Location Modal - Wraps LocationPicker in a modal for chat use
  */
 
-import { useState } from "react";
-import { X, MapPin } from "lucide-react";
-import { LazyLocationPicker } from "./LazyLocationPicker";
+import { useState } from 'react';
+import { X, MapPin } from 'lucide-react';
+import { LazyLocationPicker } from './LazyLocationPicker';
 
 interface LocationModalProps {
   isOpen: boolean;
@@ -12,18 +12,14 @@ interface LocationModalProps {
   onSelectLocation: (locationName: string) => void;
 }
 
-export function LocationModal({
-  isOpen,
-  onClose,
-  onSelectLocation,
-}: LocationModalProps) {
-  const [selectedLocation, setSelectedLocation] = useState("");
+export function LocationModal({ isOpen, onClose, onSelectLocation }: LocationModalProps) {
+  const [selectedLocation, setSelectedLocation] = useState('');
 
   const handleConfirm = () => {
     if (selectedLocation.trim()) {
       onSelectLocation(selectedLocation.trim());
       onClose();
-      setSelectedLocation("");
+      setSelectedLocation('');
     }
   };
 
@@ -32,10 +28,7 @@ export function LocationModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">

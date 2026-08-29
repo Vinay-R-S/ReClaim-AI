@@ -1,20 +1,7 @@
-import { useState, useEffect } from "react";
-import {
-  Link,
-  useNavigate,
-  useSearchParams,
-  useLocation,
-} from "react-router-dom";
-import {
-  Eye,
-  EyeOff,
-  Mail,
-  Lock,
-  User,
-  AlertCircle,
-  Loader2,
-} from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Loader2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export function AuthPage() {
   const [searchParams] = useSearchParams();
@@ -31,15 +18,13 @@ export function AuthPage() {
     clearBlockedError,
   } = useAuth();
 
-  const [isSignUp, setIsSignUp] = useState(
-    searchParams.get("mode") === "signup",
-  );
+  const [isSignUp, setIsSignUp] = useState(searchParams.get('mode') === 'signup');
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
-    displayName: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
+    displayName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,7 +37,7 @@ export function AuthPage() {
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
-      const from = (location.state as any)?.from?.pathname || "/app";
+      const from = (location.state as any)?.from?.pathname || '/app';
       navigate(from, { replace: true });
     }
   }, [user, navigate, location]);
@@ -63,16 +48,16 @@ export function AuthPage() {
     setFormError(null);
     // Clear form fields when switching between login and signup
     setFormData({
-      displayName: "",
-      email: "",
-      password: "",
-      confirmPassword: "",
+      displayName: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
     });
   }, [isSignUp]);
 
   // Update mode based on URL
   useEffect(() => {
-    setIsSignUp(searchParams.get("mode") === "signup");
+    setIsSignUp(searchParams.get('mode') === 'signup');
   }, [searchParams]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,17 +67,17 @@ export function AuthPage() {
 
   const validateForm = (): boolean => {
     if (!formData.email || !formData.password) {
-      setFormError("Please fill in all required fields");
+      setFormError('Please fill in all required fields');
       return false;
     }
 
     if (isSignUp) {
       if (formData.password !== formData.confirmPassword) {
-        setFormError("Passwords do not match");
+        setFormError('Passwords do not match');
         return false;
       }
       if (formData.password.length < 6) {
-        setFormError("Password must be at least 6 characters");
+        setFormError('Password must be at least 6 characters');
         return false;
       }
     }
@@ -107,11 +92,7 @@ export function AuthPage() {
     setIsSubmitting(true);
     try {
       if (isSignUp) {
-        await signUpWithEmail(
-          formData.email,
-          formData.password,
-          formData.displayName,
-        );
+        await signUpWithEmail(formData.email, formData.password, formData.displayName);
       } else {
         await signInWithEmail(formData.email, formData.password);
       }
@@ -145,19 +126,17 @@ export function AuthPage() {
               alt="ReClaim AI Logo"
               className="w-10 h-10 object-contain rounded-full"
             />
-            <span className="font-medium text-xl text-text-primary">
-              ReClaim AI
-            </span>
+            <span className="font-medium text-xl text-text-primary">ReClaim AI</span>
           </Link>
 
           {/* Header */}
           <h1 className="text-2xl lg:text-3xl font-medium text-text-primary mb-2">
-            {isSignUp ? "Create your account" : "Welcome back"}
+            {isSignUp ? 'Create your account' : 'Welcome back'}
           </h1>
           <p className="text-text-secondary mb-8">
             {isSignUp
-              ? "Start finding your lost items with AI"
-              : "Sign in to continue to ReClaim AI"}
+              ? 'Start finding your lost items with AI'
+              : 'Sign in to continue to ReClaim AI'}
           </p>
 
           {/* Google Sign In Button */}
@@ -188,9 +167,7 @@ export function AuthPage() {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                <span className="font-medium text-text-primary">
-                  Continue with Google
-                </span>
+                <span className="font-medium text-text-primary">Continue with Google</span>
               </>
             )}
           </button>
@@ -198,9 +175,7 @@ export function AuthPage() {
           {/* Divider */}
           <div className="flex items-center gap-4 my-6">
             <div className="flex-1 h-px bg-border"></div>
-            <span className="text-sm text-text-secondary">
-              or continue with email
-            </span>
+            <span className="text-sm text-text-secondary">or continue with email</span>
             <div className="flex-1 h-px bg-border"></div>
           </div>
 
@@ -209,9 +184,7 @@ export function AuthPage() {
             <div className="mb-4 p-4 bg-red-50 border-2 border-red-300 rounded-lg flex items-start gap-3">
               <AlertCircle className="w-6 h-6 text-google-red flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-base font-medium text-google-red mb-1">
-                  Account Blocked
-                </p>
+                <p className="text-base font-medium text-google-red mb-1">Account Blocked</p>
                 <p className="text-sm text-google-red">{blockedError}</p>
               </div>
             </div>
@@ -251,10 +224,7 @@ export function AuthPage() {
             )}
 
             <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-text-primary mb-1"
-              >
+              <label htmlFor="email" className="block text-sm font-medium text-text-primary mb-1">
                 Email
               </label>
               <div className="relative">
@@ -282,7 +252,7 @@ export function AuthPage() {
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
                 <input
-                  type={showPassword ? "text" : "password"}
+                  type={showPassword ? 'text' : 'password'}
                   id="password"
                   name="password"
                   value={formData.password}
@@ -296,11 +266,7 @@ export function AuthPage() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
@@ -316,7 +282,7 @@ export function AuthPage() {
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
                   <input
-                    type={showPassword ? "text" : "password"}
+                    type={showPassword ? 'text' : 'password'}
                     id="confirmPassword"
                     name="confirmPassword"
                     value={formData.confirmPassword}
@@ -337,24 +303,22 @@ export function AuthPage() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>
-                    {isSignUp ? "Creating account..." : "Signing in..."}
-                  </span>
+                  <span>{isSignUp ? 'Creating account...' : 'Signing in...'}</span>
                 </>
               ) : (
-                <span>{isSignUp ? "Create Account" : "Sign In"}</span>
+                <span>{isSignUp ? 'Create Account' : 'Sign In'}</span>
               )}
             </button>
           </form>
 
           {/* Toggle Sign In/Up */}
           <p className="mt-6 text-center text-text-secondary">
-            {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+            {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
             <button
               onClick={() => setIsSignUp(!isSignUp)}
               className="text-primary font-medium hover:underline"
             >
-              {isSignUp ? "Sign in" : "Sign up"}
+              {isSignUp ? 'Sign in' : 'Sign up'}
             </button>
           </p>
         </div>
@@ -366,13 +330,10 @@ export function AuthPage() {
           <div className="w-24 h-24 rounded-2xl bg-white shadow-lg flex items-center justify-center mx-auto mb-8">
             <span className="text-5xl">🔍</span>
           </div>
-          <h2 className="text-3xl font-medium mb-4 text-text-primary">
-            Lost Something?
-          </h2>
+          <h2 className="text-3xl font-medium mb-4 text-text-primary">Lost Something?</h2>
           <p className="text-lg text-text-secondary">
-            Our AI-powered platform uses image recognition and natural language
-            understanding to help you find your lost items quickly and
-            efficiently.
+            Our AI-powered platform uses image recognition and natural language understanding to
+            help you find your lost items quickly and efficiently.
           </p>
           <div className="mt-8 flex items-center justify-center gap-6">
             <div className="text-center">

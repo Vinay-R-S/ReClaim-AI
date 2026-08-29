@@ -1,23 +1,23 @@
-import { useState, useEffect } from "react";
-import { format } from "date-fns";
-import { Search, RefreshCw, Clock } from "lucide-react";
-import { getItems, type Item } from "@/services/itemService";
-import { Timestamp } from "firebase/firestore";
+import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
+import { Search, RefreshCw, Clock } from 'lucide-react';
+import { getItems, type Item } from '@/services/itemService';
+import { Timestamp } from 'firebase/firestore';
 
 export function PendingApprovalsPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
 
   const fetchPendingItems = async () => {
     try {
       setLoading(true);
       const allItems = await getItems();
       // Filter only items with "Pending" status
-      const pendingItems = allItems.filter((item) => item.status === "Pending");
+      const pendingItems = allItems.filter((item) => item.status === 'Pending');
       setItems(pendingItems);
     } catch (error) {
-      console.error("Failed to fetch pending items:", error);
+      console.error('Failed to fetch pending items:', error);
     } finally {
       setLoading(false);
     }
@@ -39,36 +39,28 @@ export function PendingApprovalsPage() {
   // Format date for display
   const formatDate = (date: Timestamp | Date | unknown) => {
     try {
-      if (!date) return "N/A";
+      if (!date) return 'N/A';
 
       let d: Date;
       if (date instanceof Timestamp) {
         d = date.toDate();
       } else if (date instanceof Date) {
         d = date;
-      } else if (
-        typeof date === "object" &&
-        date !== null &&
-        "_seconds" in date
-      ) {
+      } else if (typeof date === 'object' && date !== null && '_seconds' in date) {
         d = new Date((date as { _seconds: number })._seconds * 1000);
-      } else if (
-        typeof date === "object" &&
-        date !== null &&
-        "seconds" in date
-      ) {
+      } else if (typeof date === 'object' && date !== null && 'seconds' in date) {
         d = new Date((date as { seconds: number }).seconds * 1000);
       } else {
         d = new Date(date as string | number);
       }
 
       if (isNaN(d.getTime())) {
-        return "N/A";
+        return 'N/A';
       }
 
-      return format(d, "MMM d, yyyy");
+      return format(d, 'MMM d, yyyy');
     } catch {
-      return "N/A";
+      return 'N/A';
     }
   };
 
@@ -76,12 +68,8 @@ export function PendingApprovalsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">
-            Pending Approvals
-          </h1>
-          <p className="text-text-secondary">
-            Items awaiting review and matching
-          </p>
+          <h1 className="text-2xl font-bold text-text-primary">Pending Approvals</h1>
+          <p className="text-text-secondary">Items awaiting review and matching</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -110,9 +98,7 @@ export function PendingApprovalsPage() {
           <Clock className="w-5 h-5 text-orange-600" />
         </div>
         <div>
-          <p className="text-lg font-bold text-orange-700">
-            {items.length} Pending Items
-          </p>
+          <p className="text-lg font-bold text-orange-700">{items.length} Pending Items</p>
           <p className="text-sm text-orange-600">Awaiting match or review</p>
         </div>
       </div>
@@ -150,13 +136,10 @@ export function PendingApprovalsPage() {
               <tbody>
                 {filteredItems.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={5}
-                      className="text-center py-12 text-text-secondary"
-                    >
+                    <td colSpan={5} className="text-center py-12 text-text-secondary">
                       {searchTerm
-                        ? "No pending items matching your search"
-                        : "No pending items found"}
+                        ? 'No pending items matching your search'
+                        : 'No pending items found'}
                     </td>
                   </tr>
                 ) : (
@@ -178,24 +161,22 @@ export function PendingApprovalsPage() {
                               <Clock className="w-5 h-5 text-gray-400" />
                             </div>
                           )}
-                          <span className="text-sm font-medium text-text-primary">
-                            {item.name}
-                          </span>
+                          <span className="text-sm font-medium text-text-primary">{item.name}</span>
                         </div>
                       </td>
                       <td className="py-3 px-4">
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            item.type === "Lost"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-green-100 text-green-700"
+                            item.type === 'Lost'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-green-100 text-green-700'
                           }`}
                         >
                           {item.type}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-sm text-text-secondary">
-                        {item.location.split(",").slice(0, 2).join(", ")}
+                        {item.location.split(',').slice(0, 2).join(', ')}
                       </td>
                       <td className="py-3 px-4 text-sm text-text-secondary">
                         {formatDate(item.createdAt || item.date)}
@@ -206,7 +187,7 @@ export function PendingApprovalsPage() {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-xs font-bold text-text-primary">
-                        {item.matchScore ? `${item.matchScore}%` : "-"}
+                        {item.matchScore ? `${item.matchScore}%` : '-'}
                       </td>
                     </tr>
                   ))

@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
-import { X } from "lucide-react";
-import { type User } from "../../services/userService";
-import { type Item, getItems } from "../../services/itemService";
-import { Timestamp } from "firebase/firestore";
-import { cn } from "../../lib/utils";
+import { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
+import { type User } from '../../services/userService';
+import { type Item, getItems } from '../../services/itemService';
+import { Timestamp } from 'firebase/firestore';
+import { cn } from '../../lib/utils';
 
 interface UserDetailModalProps {
   user: User;
@@ -11,11 +11,7 @@ interface UserDetailModalProps {
   onClose: () => void;
 }
 
-export function UserDetailModal({
-  user,
-  itemsCount,
-  onClose,
-}: UserDetailModalProps) {
+export function UserDetailModal({ user, itemsCount, onClose }: UserDetailModalProps) {
   const [userItems, setUserItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -27,13 +23,12 @@ export function UserDetailModal({
 
         // Filter items by user ID or email
         const filtered = allItems.filter(
-          (item) =>
-            item.reportedBy === user.uid || item.reportedByEmail === user.email,
+          (item) => item.reportedBy === user.uid || item.reportedByEmail === user.email,
         );
 
         setUserItems(filtered);
       } catch (error) {
-        console.error("Error fetching user items:", error);
+        console.error('Error fetching user items:', error);
       } finally {
         setLoading(false);
       }
@@ -45,23 +40,23 @@ export function UserDetailModal({
   // Close on Escape key
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
-    window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
   }, [onClose]);
 
   const formatDate = (date: Timestamp | Date | undefined) => {
-    if (!date) return "N/A";
+    if (!date) return 'N/A';
     const d = date instanceof Timestamp ? date.toDate() : new Date(date);
-    return d.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+    return d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
@@ -70,13 +65,8 @@ export function UserDetailModal({
       <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-lg font-medium text-text-primary">
-            User Details
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
+          <h2 className="text-lg font-medium text-text-primary">User Details</h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
             <X className="w-5 h-5 text-text-secondary" />
           </button>
         </div>
@@ -96,9 +86,9 @@ export function UserDetailModal({
               <div className="w-16 h-16 rounded-full bg-primary text-white flex items-center justify-center text-xl font-medium">
                 {user.displayName
                   ? user.displayName
-                      .split(" ")
+                      .split(' ')
                       .map((n) => n[0])
-                      .join("")
+                      .join('')
                       .toUpperCase()
                       .slice(0, 2)
                   : user.email[0].toUpperCase()}
@@ -106,77 +96,57 @@ export function UserDetailModal({
             )}
             <div className="flex-1">
               <h3 className="text-lg font-medium text-text-primary">
-                {user.displayName || "No Name"}
+                {user.displayName || 'No Name'}
               </h3>
               <p className="text-sm text-text-secondary">{user.email}</p>
             </div>
             <span
               className={cn(
-                "badge px-3 py-1",
-                (user.status || "active") === "active"
-                  ? "badge-active"
-                  : "badge-blocked",
+                'badge px-3 py-1',
+                (user.status || 'active') === 'active' ? 'badge-active' : 'badge-blocked',
               )}
             >
-              {(user.status || "active") === "active" ? "Active" : "Blocked"}
+              {(user.status || 'active') === 'active' ? 'Active' : 'Blocked'}
             </span>
           </div>
 
           {/* Details Grid */}
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div>
-              <label className="text-sm text-text-secondary mb-1 block">
-                Email
-              </label>
+              <label className="text-sm text-text-secondary mb-1 block">Email</label>
               <p className="text-text-primary">{user.email}</p>
             </div>
 
             <div>
-              <label className="text-sm text-text-secondary mb-1 block">
-                Status
-              </label>
+              <label className="text-sm text-text-secondary mb-1 block">Status</label>
               <span
                 className={cn(
-                  "badge px-3 py-1",
-                  (user.status || "active") === "active"
-                    ? "badge-active"
-                    : "badge-blocked",
+                  'badge px-3 py-1',
+                  (user.status || 'active') === 'active' ? 'badge-active' : 'badge-blocked',
                 )}
               >
-                {(user.status || "active") === "active" ? "Active" : "Blocked"}
+                {(user.status || 'active') === 'active' ? 'Active' : 'Blocked'}
               </span>
             </div>
 
             <div>
-              <label className="text-sm text-text-secondary mb-1 block">
-                Role
-              </label>
-              <p className="text-text-primary capitalize">
-                {user.role || "user"}
-              </p>
+              <label className="text-sm text-text-secondary mb-1 block">Role</label>
+              <p className="text-text-primary capitalize">{user.role || 'user'}</p>
             </div>
 
             <div>
-              <label className="text-sm text-text-secondary mb-1 block">
-                Items Submitted
-              </label>
+              <label className="text-sm text-text-secondary mb-1 block">Items Submitted</label>
               <p className="text-text-primary">{itemsCount}</p>
             </div>
 
             <div>
-              <label className="text-sm text-text-secondary mb-1 block">
-                Joined On
-              </label>
+              <label className="text-sm text-text-secondary mb-1 block">Joined On</label>
               <p className="text-text-primary">{formatDate(user.createdAt)}</p>
             </div>
 
             <div>
-              <label className="text-sm text-text-secondary mb-1 block">
-                Last Login
-              </label>
-              <p className="text-text-primary">
-                {formatDate(user.lastLoginAt)}
-              </p>
+              <label className="text-sm text-text-secondary mb-1 block">Last Login</label>
+              <p className="text-text-primary">{formatDate(user.lastLoginAt)}</p>
             </div>
           </div>
 
@@ -207,15 +177,15 @@ export function UserDetailModal({
                           {item.name}
                         </p>
                         <p className="text-xs text-text-secondary mt-1">
-                          {item.type} · {item.location.split(",")[0]}
+                          {item.type} · {item.location.split(',')[0]}
                         </p>
                       </div>
                       <span
                         className={cn(
-                          "badge text-xs shrink-0",
-                          item.status === "Matched" && "badge-matched",
-                          item.status === "Pending" && "badge-pending",
-                          item.status === "Claimed" && "badge-claimed",
+                          'badge text-xs shrink-0',
+                          item.status === 'Matched' && 'badge-matched',
+                          item.status === 'Pending' && 'badge-pending',
+                          item.status === 'Claimed' && 'badge-claimed',
                         )}
                       >
                         {item.status}

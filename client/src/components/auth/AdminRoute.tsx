@@ -1,5 +1,5 @@
-import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 interface AdminRouteProps {
   children: React.ReactNode;
@@ -24,15 +24,9 @@ export function AdminRoute({ children }: AdminRouteProps) {
   }
 
   // Check if user is authenticated and has admin role
-  if (!user || role !== "admin") {
+  if (!user || role !== 'admin') {
     // Redirect non-admins to app or auth
-    return (
-      <Navigate
-        to={user ? "/app" : "/auth"}
-        state={{ from: location }}
-        replace
-      />
-    );
+    return <Navigate to={user ? '/app' : '/auth'} state={{ from: location }} replace />;
   }
 
   return <>{children}</>;

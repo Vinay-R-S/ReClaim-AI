@@ -1,10 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
   type User,
   signInWithPopup,
@@ -14,20 +8,20 @@ import {
   onAuthStateChanged,
   updateProfile,
   sendPasswordResetEmail,
-} from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
-import { auth, googleProvider, db } from "../lib/firebase";
+} from 'firebase/auth';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, googleProvider, db } from '../lib/firebase';
 
 // Helper function to send login notification
 const sendLoginNotification = async (userId: string) => {
   try {
-    console.log("Attempting to send login notification for user:", userId);
-    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+    console.log('Attempting to send login notification for user:', userId);
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
     const response = await fetch(`${API_URL}/api/auth/login-notification`, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         userId,
@@ -36,33 +30,29 @@ const sendLoginNotification = async (userId: string) => {
     });
 
     const result = await response.json();
-    console.log("Login notification response:", result);
+    console.log('Login notification response:', result);
 
     if (!response.ok) {
-      console.error("Failed to send login notification:", result);
+      console.error('Failed to send login notification:', result);
     } else {
-      console.log("Login notification sent successfully:", result);
+      console.log('Login notification sent successfully:', result);
     }
   } catch (error) {
-    console.error("Error sending login notification:", error);
+    console.error('Error sending login notification:', error);
   }
 };
 
 // Types
 interface AuthContextType {
   user: User | null;
-  role: "user" | "admin" | null;
-  userStatus: "active" | "blocked" | null;
+  role: 'user' | 'admin' | null;
+  userStatus: 'active' | 'blocked' | null;
   loading: boolean;
   error: string | null;
   blockedError: string | null;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (
-    email: string,
-    password: string,
-    displayName?: string,
-  ) => Promise<void>;
+  signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   clearError: () => void;
@@ -79,10 +69,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Provider component
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<"user" | "admin" | null>(null);
-  const [userStatus, setUserStatus] = useState<"active" | "blocked" | null>(
-    null,
-  );
+  const [role, setRole] = useState<'user' | 'admin' | null>(null);
+  const [userStatus, setUserStatus] = useState<'active' | 'blocked' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [blockedError, setBlockedError] = useState<string | null>(null);
@@ -109,18 +97,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Fetch user role and status
   const fetchUserRole = async (uid: string) => {
     try {
-      const userDoc = await getDoc(doc(db, "users", uid));
+      const userDoc = await getDoc(doc(db, 'users', uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        const status = userData.status || "active";
-        setRole(userData.role || "user");
+        const status = userData.status || 'active';
+        setRole(userData.role || 'user');
         setUserStatus(status);
 
         // Check if user is blocked - HARD BLOCK
-        if (status === "blocked") {
-          setBlockedError(
-            "Your account has been blocked due to policy violations.",
-          );
+        if (status === 'blocked') {
+          setBlockedError('Your account has been blocked due to policy violations.');
           // Immediately sign out the blocked user
           await firebaseSignOut(auth);
           setUser(null);
@@ -131,20 +117,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         // Update last login only for active users
-        await setDoc(
-          doc(db, "users", uid),
-          { lastLoginAt: serverTimestamp() },
-          { merge: true },
-        );
+        await setDoc(doc(db, 'users', uid), { lastLoginAt: serverTimestamp() }, { merge: true });
       } else {
         // New user - handled by saveUserToFirestore
         await saveUserToFirestore(auth.currentUser!);
-        setUserStatus("active"); // New users are active by default
+        setUserStatus('active'); // New users are active by default
       }
     } catch (err) {
-      console.error("Error fetching user role:", err);
-      setRole("user"); // Default to user on error
-      setUserStatus("active"); // Default to active on error
+      console.error('Error fetching user role:', err);
+      setRole('user'); // Default to user on error
+      setUserStatus('active'); // Default to active on error
     } finally {
       setLoading(false);
     }
@@ -153,7 +135,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Save user data to Firestore
   const saveUserToFirestore = async (user: User) => {
     try {
-      const userRef = doc(db, "users", user.uid);
+      const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
 
       if (!userSnap.exists()) {
@@ -163,8 +145,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           email: user.email,
           displayName: user.displayName,
           photoURL: user.photoURL,
-          role: "user",
-          status: "active",
+          role: 'user',
+          status: 'active',
           credits: 10, // Initialize with 10 credits
           lostItemsCount: 0, // Initialize counts
           foundItemsCount: 0,
@@ -173,18 +155,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
           lastLoginAt: serverTimestamp(),
         };
         await setDoc(userRef, newUser);
-        setRole("user");
+        setRole('user');
 
         // Log credit transaction in backend
-        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
         try {
           await fetch(`${API_URL}/api/credits/signup-bonus`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId: user.uid }),
           });
         } catch (err) {
-          console.error("Failed to log signup bonus:", err);
+          console.error('Failed to log signup bonus:', err);
         }
       } else {
         // Existing user - update last login
@@ -198,7 +180,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Role is set in fetchUserRole
       }
     } catch (err) {
-      console.error("Error saving user to Firestore:", err);
+      console.error('Error saving user to Firestore:', err);
     }
   };
 
@@ -213,7 +195,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       });
     } catch (err: any) {
-      setError(err.message || "Failed to sign in with Google");
+      setError(err.message || 'Failed to sign in with Google');
       throw err;
     } finally {
       setLoading(false);
@@ -239,19 +221,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   // Sign up with email and password
-  const signUpWithEmail = async (
-    email: string,
-    password: string,
-    displayName?: string,
-  ) => {
+  const signUpWithEmail = async (email: string, password: string, displayName?: string) => {
     try {
       setError(null);
       setLoading(true);
-      const result = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password,
-      );
+      const result = await createUserWithEmailAndPassword(auth, email, password);
 
       if (displayName && result.user) {
         // Update Firebase Auth profile with displayName
@@ -259,7 +233,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         // Also update Firestore directly with the displayName
         // (since onAuthStateChanged might fire before updateProfile completes)
-        const userRef = doc(db, "users", result.user.uid);
+        const userRef = doc(db, 'users', result.user.uid);
         await setDoc(
           userRef,
           {
@@ -267,8 +241,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             email: result.user.email,
             displayName: displayName,
             photoURL: result.user.photoURL,
-            role: "user",
-            status: "active",
+            role: 'user',
+            status: 'active',
             credits: 10, // Initialize with 10 credits
             lostItemsCount: 0, // Initialize counts
             foundItemsCount: 0,
@@ -280,15 +254,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         );
 
         // Log credit transaction
-        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
         try {
           await fetch(`${API_URL}/api/credits/signup-bonus`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId: result.user.uid }),
           });
         } catch (err) {
-          console.error("Failed to log signup bonus:", err);
+          console.error('Failed to log signup bonus:', err);
         }
       }
 
@@ -310,7 +284,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setError(null);
       await firebaseSignOut(auth);
     } catch (err: any) {
-      setError(err.message || "Failed to sign out");
+      setError(err.message || 'Failed to sign out');
       throw err;
     }
   };
@@ -354,7 +328,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 }
@@ -362,25 +336,25 @@ export function useAuth() {
 // Helper function to get user-friendly error messages
 function getAuthErrorMessage(errorCode: string): string {
   switch (errorCode) {
-    case "auth/email-already-in-use":
-      return "This email is already registered. Please sign in instead.";
-    case "auth/invalid-email":
-      return "Please enter a valid email address.";
-    case "auth/operation-not-allowed":
-      return "This sign-in method is not enabled.";
-    case "auth/weak-password":
-      return "Password should be at least 6 characters.";
-    case "auth/user-disabled":
-      return "This account has been disabled.";
-    case "auth/user-not-found":
-      return "No account found with this email.";
-    case "auth/wrong-password":
-      return "Incorrect password. Please try again.";
-    case "auth/too-many-requests":
-      return "Too many failed attempts. Please try again later.";
-    case "auth/popup-closed-by-user":
-      return "Sign-in popup was closed. Please try again.";
+    case 'auth/email-already-in-use':
+      return 'This email is already registered. Please sign in instead.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/operation-not-allowed':
+      return 'This sign-in method is not enabled.';
+    case 'auth/weak-password':
+      return 'Password should be at least 6 characters.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled.';
+    case 'auth/user-not-found':
+      return 'No account found with this email.';
+    case 'auth/wrong-password':
+      return 'Incorrect password. Please try again.';
+    case 'auth/too-many-requests':
+      return 'Too many failed attempts. Please try again later.';
+    case 'auth/popup-closed-by-user':
+      return 'Sign-in popup was closed. Please try again.';
     default:
-      return "An error occurred. Please try again.";
+      return 'An error occurred. Please try again.';
   }
 }

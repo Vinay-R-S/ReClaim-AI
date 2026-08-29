@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef } from 'react';
 import {
   X,
   Upload,
@@ -9,35 +9,29 @@ import {
   Calendar,
   Clock,
   Camera,
-} from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
-import { ImageCarousel } from "../ui/ImageCarousel";
+} from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { ImageCarousel } from '../ui/ImageCarousel';
 import {
   analyzeItemImage,
   analyzeMultipleImages,
   enhanceTextDescription,
   getAvailableProviders,
   type AIProvider,
-} from "../../services/aiService";
-import { LazyLocationPicker } from "../ui/LazyLocationPicker";
+} from '../../services/aiService';
+import { LazyLocationPicker } from '../ui/LazyLocationPicker';
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface ReportItemModalProps {
-  type: "Lost" | "Found";
+  type: 'Lost' | 'Found';
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function ReportItemModal({
-  type,
-  onClose,
-  onSuccess,
-}: ReportItemModalProps) {
+export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalProps) {
   const { user } = useAuth();
-  const [step, setStep] = useState<
-    "upload" | "analyzing" | "review" | "success"
-  >("upload");
+  const [step, setStep] = useState<'upload' | 'analyzing' | 'review' | 'success'>('upload');
   const [matchResult, setMatchResult] = useState<{
     highestScore: number;
     bestMatchId?: string;
@@ -45,30 +39,28 @@ export function ReportItemModal({
   const [loading, setLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [aiProvider, setAiProvider] = useState<AIProvider>("gemini");
+  const [aiProvider, setAiProvider] = useState<AIProvider>('gemini');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const availableProviders = getAvailableProviders();
 
   const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    location: "",
-    collectionLocation: "", // For Found items only
-    date: new Date().toISOString().split("T")[0],
+    name: '',
+    description: '',
+    location: '',
+    collectionLocation: '', // For Found items only
+    date: new Date().toISOString().split('T')[0],
     time: new Date().toTimeString().slice(0, 5),
     tags: [] as string[],
-    color: "",
-    category: "",
+    color: '',
+    category: '',
     coordinates: undefined as { lat: number; lng: number } | undefined,
-    collectionCoordinates: undefined as
-      | { lat: number; lng: number }
-      | undefined,
+    collectionCoordinates: undefined as { lat: number; lng: number } | undefined,
   });
 
   // Reporter email from auth
-  const reporterEmail = user?.email || "";
+  const reporterEmail = user?.email || '';
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -93,37 +85,37 @@ export function ReportItemModal({
       });
 
       // Reset input so same file can be re-selected
-      e.target.value = "";
+      e.target.value = '';
     }
   };
 
   const handleAnalyze = async () => {
     // For Found: image is mandatory
-    if (type === "Found" && imageFiles.length === 0) {
-      alert("Image is required for Found items");
+    if (type === 'Found' && imageFiles.length === 0) {
+      alert('Image is required for Found items');
       return;
     }
 
     if (!formData.location) {
-      alert("Please enter a location");
+      alert('Please enter a location');
       return;
     }
 
     // For Found: collection location is mandatory
-    if (type === "Found" && !formData.collectionLocation) {
-      alert("Please enter a collection location for the found item");
+    if (type === 'Found' && !formData.collectionLocation) {
+      alert('Please enter a collection location for the found item');
       return;
     }
 
     // For Lost without image: use AI to enhance description and generate tags
-    if (type === "Lost" && imageFiles.length === 0) {
+    if (type === 'Lost' && imageFiles.length === 0) {
       if (!formData.name || !formData.description) {
-        alert("Without an image, please provide item name and description");
+        alert('Without an image, please provide item name and description');
         return;
       }
 
       try {
-        setStep("analyzing");
+        setStep('analyzing');
         setLoading(true);
 
         // Use AI to enhance description and generate tags
@@ -138,14 +130,14 @@ export function ReportItemModal({
           name: enhanced.name,
           description: enhanced.description,
           tags: enhanced.tags,
-          color: enhanced.color || "",
+          color: enhanced.color || '',
         }));
 
-        setStep("review");
+        setStep('review');
       } catch (err) {
-        console.error("Text enhancement failed:", err);
+        console.error('Text enhancement failed:', err);
         // Continue with original data if enhancement fails
-        setStep("review");
+        setStep('review');
       } finally {
         setLoading(false);
       }
@@ -153,13 +145,13 @@ export function ReportItemModal({
     }
 
     try {
-      setStep("analyzing");
+      setStep('analyzing');
       setLoading(true);
 
       // Analyze image(s) with AI - use multi-image if more than one
       const analysis =
         imageFiles.length > 1
-          ? await analyzeMultipleImages(imageFiles, "groq")
+          ? await analyzeMultipleImages(imageFiles, 'groq')
           : await analyzeItemImage(imageFiles[0], aiProvider);
 
       // Update form with AI results
@@ -168,19 +160,15 @@ export function ReportItemModal({
         name: analysis.name,
         description: analysis.description,
         tags: analysis.tags,
-        color: analysis.color || "",
-        category: analysis.category || "",
+        color: analysis.color || '',
+        category: analysis.category || '',
       }));
 
-      setStep("review");
+      setStep('review');
     } catch (err) {
-      console.error("Error analyzing image:", err);
-      alert(
-        `Analysis failed: ${
-          err instanceof Error ? err.message : "Unknown error"
-        }`,
-      );
-      setStep("upload");
+      console.error('Error analyzing image:', err);
+      alert(`Analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setStep('upload');
     } finally {
       setLoading(false);
     }
@@ -188,18 +176,18 @@ export function ReportItemModal({
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.location) {
-      alert("Please fill in required fields");
+      alert('Please fill in required fields');
       return;
     }
 
     // For Found: collection location is mandatory
-    if (type === "Found" && !formData.collectionLocation) {
-      alert("Please enter a collection location");
+    if (type === 'Found' && !formData.collectionLocation) {
+      alert('Please enter a collection location');
       return;
     }
 
     if (!user?.uid) {
-      alert("You must be logged in to report an item");
+      alert('You must be logged in to report an item');
       return;
     }
 
@@ -231,7 +219,7 @@ export function ReportItemModal({
       };
 
       // Add collection location for Found items
-      if (type === "Found" && formData.collectionLocation) {
+      if (type === 'Found' && formData.collectionLocation) {
         itemData.collectionLocation = formData.collectionLocation;
         if (formData.collectionCoordinates) {
           itemData.collectionCoordinates = formData.collectionCoordinates;
@@ -243,9 +231,9 @@ export function ReportItemModal({
 
       // Submit to API
       const response = await fetch(`${API_URL}/api/items`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
@@ -257,20 +245,16 @@ export function ReportItemModal({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to create item");
+        throw new Error(errorData.error || 'Failed to create item');
       }
 
       const data = await response.json();
       setMatchResult(data.matchResult);
-      setStep("success");
+      setStep('success');
       onSuccess();
     } catch (err) {
-      console.error("Error submitting item:", err);
-      alert(
-        `Failed to submit: ${
-          err instanceof Error ? err.message : "Unknown error"
-        }`,
-      );
+      console.error('Error submitting item:', err);
+      alert(`Failed to submit: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -293,7 +277,7 @@ export function ReportItemModal({
   };
 
   const handleTagAdd = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
+    if (e.key === 'Enter') {
       e.preventDefault();
       const input = e.target as HTMLInputElement;
       const newTag = input.value.trim();
@@ -302,7 +286,7 @@ export function ReportItemModal({
           ...prev,
           tags: [...prev.tags, newTag],
         }));
-        input.value = "";
+        input.value = '';
       }
     }
   };
@@ -313,12 +297,12 @@ export function ReportItemModal({
         {/* Header */}
         <div
           className={`flex items-center justify-between p-4 border-b border-border flex-shrink-0 ${
-            type === "Lost" ? "bg-red-50" : "bg-green-50"
+            type === 'Lost' ? 'bg-red-50' : 'bg-green-50'
           }`}
         >
           <h2
             className={`text-lg font-semibold ${
-              type === "Lost" ? "text-red-700" : "text-green-700"
+              type === 'Lost' ? 'text-red-700' : 'text-green-700'
             }`}
           >
             Report {type} Item
@@ -336,17 +320,15 @@ export function ReportItemModal({
         {/* Content - Scrollable */}
         <div className="p-6 flex-1 overflow-y-auto">
           {/* Step 1: Upload */}
-          {step === "upload" && (
+          {step === 'upload' && (
             <>
               {/* Image Upload */}
               <div className="mb-6">
                 <label className="text-sm text-text-secondary mb-2 block font-medium">
-                  Item Image{imageFiles.length > 1 ? "s" : ""}{" "}
-                  {type === "Found" && <span className="text-red-500">*</span>}
-                  {type === "Lost" && (
-                    <span className="text-gray-400 text-xs ml-1">
-                      (optional)
-                    </span>
+                  Item Image{imageFiles.length > 1 ? 's' : ''}{' '}
+                  {type === 'Found' && <span className="text-red-500">*</span>}
+                  {type === 'Lost' && (
+                    <span className="text-gray-400 text-xs ml-1">(optional)</span>
                   )}
                   <span className="text-gray-400 text-xs ml-2">
                     (Upload up to 5 images for better analysis)
@@ -392,25 +374,23 @@ export function ReportItemModal({
                           <div className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50 hover:bg-gray-100">
                             <div className="text-center">
                               <Upload className="w-6 h-6 text-gray-400 mx-auto mb-1" />
-                              <span className="text-xs text-gray-500">
-                                Add more
-                              </span>
+                              <span className="text-xs text-gray-500">Add more</span>
                             </div>
                           </div>
                         )}
                       </div>
                       <p className="text-xs text-gray-500 text-center mt-2">
                         {imagePreviews.length} image
-                        {imagePreviews.length > 1 ? "s" : ""} selected
+                        {imagePreviews.length > 1 ? 's' : ''} selected
                       </p>
                     </div>
                   ) : (
                     <>
                       <ImageIcon className="w-10 h-10 text-text-secondary mb-2" />
                       <p className="text-sm text-text-secondary">
-                        {type === "Found"
-                          ? "Click to upload image(s) (required)"
-                          : "Click to upload image(s) (optional)"}
+                        {type === 'Found'
+                          ? 'Click to upload image(s) (required)'
+                          : 'Click to upload image(s) (optional)'}
                       </p>
                       <p className="text-xs text-gray-400 mt-1">
                         Multiple images help AI analyze better
@@ -429,9 +409,7 @@ export function ReportItemModal({
                   className="mt-3 w-full py-3 px-4 border-2 border-dashed border-primary/50 rounded-xl flex items-center justify-center gap-2 text-primary hover:bg-primary/5 hover:border-primary transition-all"
                 >
                   <Camera className="w-5 h-5" />
-                  <span className="text-sm font-medium">
-                    Take Photo with Camera
-                  </span>
+                  <span className="text-sm font-medium">Take Photo with Camera</span>
                 </button>
 
                 {/* Gallery file input */}
@@ -455,7 +433,7 @@ export function ReportItemModal({
               </div>
 
               {/* Manual fields for Lost without image */}
-              {type === "Lost" && imageFiles.length === 0 && (
+              {type === 'Lost' && imageFiles.length === 0 && (
                 <>
                   <div className="mb-4">
                     <label className="text-sm text-text-secondary mb-1 block font-medium">
@@ -464,9 +442,7 @@ export function ReportItemModal({
                     <input
                       type="text"
                       value={formData.name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, name: e.target.value })
-                      }
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="e.g., Blue Backpack, iPhone 15, etc."
                       className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                     />
@@ -495,29 +471,25 @@ export function ReportItemModal({
               <div className="mb-4">
                 <label className="text-sm text-text-secondary mb-1 block font-medium">
                   <MapPin className="w-4 h-4 inline mr-1" />
-                  {type === "Lost"
-                    ? "Last Seen Location"
-                    : "Found Location"}{" "}
+                  {type === 'Lost' ? 'Last Seen Location' : 'Found Location'}{' '}
                   <span className="text-red-500">*</span>
                 </label>
                 <LazyLocationPicker
                   value={formData.location}
-                  onChange={(location) =>
-                    setFormData({ ...formData, location })
-                  }
+                  onChange={(location) => setFormData({ ...formData, location })}
                   onLocationSelect={(location, coordinates) =>
                     setFormData((prev) => ({ ...prev, location, coordinates }))
                   }
                   placeholder={
-                    type === "Lost"
-                      ? "Where did you last see this item?"
-                      : "Where did you find this item?"
+                    type === 'Lost'
+                      ? 'Where did you last see this item?'
+                      : 'Where did you find this item?'
                   }
                 />
               </div>
 
               {/* Collection Location - Only for Found */}
-              {type === "Found" && (
+              {type === 'Found' && (
                 <div className="mb-4">
                   <label className="text-sm text-text-secondary mb-1 block font-medium">
                     <MapPin className="w-4 h-4 inline mr-1" />
@@ -553,9 +525,7 @@ export function ReportItemModal({
                   <input
                     type="date"
                     value={formData.date}
-                    onChange={(e) =>
-                      setFormData({ ...formData, date: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                     className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
@@ -567,9 +537,7 @@ export function ReportItemModal({
                   <input
                     type="time"
                     value={formData.time}
-                    onChange={(e) =>
-                      setFormData({ ...formData, time: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                     className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
@@ -582,27 +550,27 @@ export function ReportItemModal({
                     AI Provider
                   </label>
                   <div className="flex gap-2">
-                    {availableProviders.includes("gemini") && (
+                    {availableProviders.includes('gemini') && (
                       <button
                         type="button"
-                        onClick={() => setAiProvider("gemini")}
+                        onClick={() => setAiProvider('gemini')}
                         className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === "gemini"
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:bg-gray-50"
+                          aiProvider === 'gemini'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border hover:bg-gray-50'
                         }`}
                       >
                         Gemini
                       </button>
                     )}
-                    {availableProviders.includes("groq") && (
+                    {availableProviders.includes('groq') && (
                       <button
                         type="button"
-                        onClick={() => setAiProvider("groq")}
+                        onClick={() => setAiProvider('groq')}
                         className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === "groq"
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:bg-gray-50"
+                          aiProvider === 'groq'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border hover:bg-gray-50'
                         }`}
                       >
                         Groq
@@ -617,34 +585,30 @@ export function ReportItemModal({
                 onClick={handleAnalyze}
                 disabled={
                   !formData.location ||
-                  (type === "Found" &&
-                    (imageFiles.length === 0 ||
-                      !formData.collectionLocation)) ||
-                  (type === "Lost" &&
+                  (type === 'Found' && (imageFiles.length === 0 || !formData.collectionLocation)) ||
+                  (type === 'Lost' &&
                     imageFiles.length === 0 &&
                     (!formData.name || !formData.description))
                 }
                 className={`w-full mt-4 py-4 text-white rounded-xl font-semibold text-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg ${
-                  type === "Lost"
-                    ? "bg-red-500 hover:bg-red-600"
-                    : "bg-green-500 hover:bg-green-600"
+                  type === 'Lost'
+                    ? 'bg-red-500 hover:bg-red-600'
+                    : 'bg-green-500 hover:bg-green-600'
                 }`}
               >
                 <Sparkles className="w-5 h-5" />
-                {type === "Lost" && imageFiles.length === 0
-                  ? "Continue"
-                  : "Analyze & Generate Details"}
+                {type === 'Lost' && imageFiles.length === 0
+                  ? 'Continue'
+                  : 'Analyze & Generate Details'}
               </button>
             </>
           )}
 
           {/* Step 2: Analyzing */}
-          {step === "analyzing" && (
+          {step === 'analyzing' && (
             <div className="py-12 text-center">
               <Loader2 className="w-16 h-16 text-primary mx-auto mb-4 animate-spin" />
-              <h3 className="text-lg font-medium text-text-primary mb-2">
-                Analyzing Image...
-              </h3>
+              <h3 className="text-lg font-medium text-text-primary mb-2">Analyzing Image...</h3>
               <p className="text-text-secondary">
                 AI is identifying the item and extracting details
               </p>
@@ -652,7 +616,7 @@ export function ReportItemModal({
           )}
 
           {/* Step 3: Review */}
-          {step === "review" && (
+          {step === 'review' && (
             <>
               {/* Image Preview Carousel */}
               {imagePreviews.length > 0 && (
@@ -674,9 +638,7 @@ export function ReportItemModal({
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
@@ -688,9 +650,7 @@ export function ReportItemModal({
                 </label>
                 <textarea
                   value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 />
@@ -704,9 +664,7 @@ export function ReportItemModal({
                 <input
                   type="text"
                   value={formData.color}
-                  onChange={(e) =>
-                    setFormData({ ...formData, color: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
@@ -719,18 +677,14 @@ export function ReportItemModal({
                 <input
                   type="text"
                   value={formData.category}
-                  onChange={(e) =>
-                    setFormData({ ...formData, category: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
 
               {/* Tags */}
               <div className="mb-4">
-                <label className="text-sm text-text-secondary mb-2 block font-medium">
-                  Tags
-                </label>
+                <label className="text-sm text-text-secondary mb-2 block font-medium">Tags</label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {formData.tags.map((tag) => (
                     <span
@@ -763,7 +717,7 @@ export function ReportItemModal({
                     <p className="text-text-secondary">Type</p>
                     <p
                       className={`font-medium ${
-                        type === "Lost" ? "text-red-600" : "text-green-600"
+                        type === 'Lost' ? 'text-red-600' : 'text-green-600'
                       }`}
                     >
                       {type}
@@ -771,21 +725,15 @@ export function ReportItemModal({
                   </div>
                   <div>
                     <p className="text-text-secondary">Location</p>
-                    <p className="font-medium text-text-primary truncate">
-                      {formData.location}
-                    </p>
+                    <p className="font-medium text-text-primary truncate">{formData.location}</p>
                   </div>
                   <div>
                     <p className="text-text-secondary">Date</p>
-                    <p className="font-medium text-text-primary">
-                      {formData.date}
-                    </p>
+                    <p className="font-medium text-text-primary">{formData.date}</p>
                   </div>
                   <div>
                     <p className="text-text-secondary">Time</p>
-                    <p className="font-medium text-text-primary">
-                      {formData.time}
-                    </p>
+                    <p className="font-medium text-text-primary">{formData.time}</p>
                   </div>
                 </div>
               </div>
@@ -793,7 +741,7 @@ export function ReportItemModal({
               {/* Actions */}
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep("upload")}
+                  onClick={() => setStep('upload')}
                   className="flex-1 py-3 border border-gray-300 rounded-xl font-medium hover:bg-gray-50 transition-colors"
                 >
                   Back
@@ -802,9 +750,9 @@ export function ReportItemModal({
                   onClick={handleSubmit}
                   disabled={loading}
                   className={`flex-1 py-3 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
-                    type === "Lost"
-                      ? "bg-red-500 hover:bg-red-600"
-                      : "bg-green-500 hover:bg-green-600"
+                    type === 'Lost'
+                      ? 'bg-red-500 hover:bg-red-600'
+                      : 'bg-green-500 hover:bg-green-600'
                   }`}
                 >
                   {loading ? (
@@ -823,38 +771,31 @@ export function ReportItemModal({
             </>
           )}
           {/* Step 4: Success */}
-          {step === "success" && (
+          {step === 'success' && (
             <div className="py-8 text-center">
               <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Sparkles className="w-8 h-8" />
               </div>
-              <h3 className="text-2xl font-bold text-text-primary mb-2">
-                Report Submitted!
-              </h3>
+              <h3 className="text-2xl font-bold text-text-primary mb-2">Report Submitted!</h3>
               <p className="text-text-secondary mb-6">
-                Your {type.toLowerCase()} item report has been successfully
-                recorded.
+                Your {type.toLowerCase()} item report has been successfully recorded.
               </p>
 
               {matchResult && matchResult.highestScore > 0 && (
                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-6">
                   <div className="flex items-center justify-center gap-2 text-blue-700 mb-2">
                     <Sparkles className="w-5 h-5" />
-                    <span className="font-semibold text-lg">
-                      AI Match Found!
-                    </span>
+                    <span className="font-semibold text-lg">AI Match Found!</span>
                   </div>
                   <div className="text-4xl font-bold text-blue-600 mb-2">
                     {matchResult.highestScore}%
                   </div>
                   <p className="text-sm text-blue-600">
-                    Match confidence score based on your description, location,
-                    and details.
+                    Match confidence score based on your description, location, and details.
                   </p>
                   {matchResult.highestScore >= 75 && (
                     <div className="mt-4 p-2 bg-white/50 rounded-lg text-xs text-blue-800 font-medium">
-                      High confidence match detected! You can review details in
-                      the matches section.
+                      High confidence match detected! You can review details in the matches section.
                     </div>
                   )}
                 </div>

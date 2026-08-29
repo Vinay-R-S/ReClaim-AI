@@ -1,5 +1,5 @@
-import { UserLayout } from "../../components/layout/UserLayout";
-import { Package, Users, Shield, Zap, CheckCircle, Award } from "lucide-react";
+import { UserLayout } from '../../components/layout/UserLayout';
+import { Package, Users, Shield, Zap, CheckCircle, Award } from 'lucide-react';
 
 export function HowItWorksPage() {
   return (
@@ -7,12 +7,10 @@ export function HowItWorksPage() {
       <div className="space-y-8">
         {/* Header */}
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-text-primary mb-4">
-            How ReClaim AI Works
-          </h1>
+          <h1 className="text-4xl font-bold text-text-primary mb-4">How ReClaim AI Works</h1>
           <p className="text-lg text-text-secondary max-w-2xl mx-auto">
-            Our AI-powered platform makes reuniting lost items with their owners
-            simple, secure, and rewarding.
+            Our AI-powered platform makes reuniting lost items with their owners simple, secure, and
+            rewarding.
           </p>
         </div>
 
@@ -69,34 +67,22 @@ export function HowItWorksPage() {
 
         {/* Credit System */}
         <div className="card p-8 bg-gradient-to-br from-yellow-50 to-yellow-100">
-          <h2 className="text-2xl font-semibold text-text-primary mb-4">
-            🪙 Credit System
-          </h2>
+          <h2 className="text-2xl font-semibold text-text-primary mb-4">🪙 Credit System</h2>
           <div className="space-y-3">
             <CreditItem amount={10} reason="New user signup bonus" />
-            <CreditItem
-              amount={20}
-              reason="Item successfully returned (finder)"
-            />
-            <CreditItem
-              amount={10}
-              reason="Item successfully claimed (owner)"
-            />
+            <CreditItem amount={20} reason="Item successfully returned (finder)" />
+            <CreditItem amount={10} reason="Item successfully claimed (owner)" />
           </div>
           <p className="text-sm text-text-secondary mt-4">
-            Credits are tracked in your profile and serve as a reputation score
-            in the community.
+            Credits are tracked in your profile and serve as a reputation score in the community.
           </p>
         </div>
 
         {/* Getting Started */}
         <div className="card p-8 text-center">
-          <h2 className="text-2xl font-semibold text-text-primary mb-4">
-            Ready to Get Started?
-          </h2>
+          <h2 className="text-2xl font-semibold text-text-primary mb-4">Ready to Get Started?</h2>
           <p className="text-text-secondary mb-6">
-            Start reporting lost or found items and help reunite people with
-            their belongings!
+            Start reporting lost or found items and help reunite people with their belongings!
           </p>
           <a
             href="/app"

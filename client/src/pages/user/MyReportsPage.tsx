@@ -1,14 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
-import { Timestamp } from "firebase/firestore";
-import { UserLayout } from "../../components/layout/UserLayout";
-import { useAuth } from "../../context/AuthContext";
-import { type Item } from "../../services/itemService";
-import { EditReportModal } from "../../components/user/EditReportModal";
-import { ImageCarousel } from "../../components/ui/ImageCarousel";
-import { Package, MapPin, Calendar, Edit2, Eye } from "lucide-react";
-import { cn } from "../../lib/utils";
+import { useState, useEffect, useCallback } from 'react';
+import { Timestamp } from 'firebase/firestore';
+import { UserLayout } from '../../components/layout/UserLayout';
+import { useAuth } from '../../context/AuthContext';
+import { type Item } from '../../services/itemService';
+import { EditReportModal } from '../../components/user/EditReportModal';
+import { ImageCarousel } from '../../components/ui/ImageCarousel';
+import { Package, MapPin, Calendar, Edit2, Eye } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export function MyReportsPage() {
   const { user } = useAuth();
@@ -29,7 +29,7 @@ export function MyReportsPage() {
         setItems(data.items || []);
       }
     } catch (error) {
-      console.error("Error fetching my reports:", error);
+      console.error('Error fetching my reports:', error);
     } finally {
       setLoading(false);
     }
@@ -41,7 +41,7 @@ export function MyReportsPage() {
 
   const formatDate = (date: Timestamp | Date | unknown) => {
     try {
-      if (!date) return "Date not available";
+      if (!date) return 'Date not available';
 
       let d: Date;
       if (date instanceof Timestamp) {
@@ -49,16 +49,16 @@ export function MyReportsPage() {
       } else if (date instanceof Date) {
         d = date;
       } else if (
-        typeof date === "object" &&
+        typeof date === 'object' &&
         date !== null &&
-        ("seconds" in date || "_seconds" in date)
+        ('seconds' in date || '_seconds' in date)
       ) {
         // Handle Firestore Timestamp-like object (both seconds and _seconds formats)
         const seconds =
           (date as { seconds?: number; _seconds?: number }).seconds ??
           (date as { _seconds: number })._seconds;
         d = new Date(seconds * 1000);
-      } else if (typeof date === "string") {
+      } else if (typeof date === 'string') {
         // Handle ISO string
         d = new Date(date);
       } else {
@@ -67,18 +67,18 @@ export function MyReportsPage() {
 
       // Check if date is valid
       if (isNaN(d.getTime())) {
-        return "Date not available";
+        return 'Date not available';
       }
 
-      return d.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
+      return d.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
       });
     } catch {
-      return "Date not available";
+      return 'Date not available';
     }
   };
 
@@ -108,9 +108,7 @@ export function MyReportsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-text-primary">My Reports</h1>
-            <p className="text-text-secondary mt-1">
-              View and manage items you've reported
-            </p>
+            <p className="text-text-secondary mt-1">View and manage items you've reported</p>
           </div>
         </div>
 
@@ -122,9 +120,7 @@ export function MyReportsPage() {
         ) : items.length === 0 ? (
           <div className="card p-8 text-center">
             <Package className="w-12 h-12 text-text-secondary mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-text-primary mb-2">
-              No reports yet
-            </h3>
+            <h3 className="text-lg font-medium text-text-primary mb-2">No reports yet</h3>
             <p className="text-text-secondary">
               When you report a lost or found item, it will appear here.
             </p>
@@ -153,10 +149,10 @@ export function MyReportsPage() {
                   {/* Type Badge */}
                   <span
                     className={cn(
-                      "absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-medium",
-                      item.type === "Lost"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-green-100 text-green-700",
+                      'absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-medium',
+                      item.type === 'Lost'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-green-100 text-green-700',
                     )}
                   >
                     {item.type}
@@ -165,9 +161,7 @@ export function MyReportsPage() {
 
                 {/* Content */}
                 <div className="p-4">
-                  <h3 className="font-semibold text-text-primary truncate">
-                    {item.name}
-                  </h3>
+                  <h3 className="font-semibold text-text-primary truncate">{item.name}</h3>
                   <p className="text-sm text-text-secondary line-clamp-2 mt-1">
                     {item.description}
                   </p>
@@ -187,13 +181,11 @@ export function MyReportsPage() {
                   <div className="mt-3 flex items-center justify-between">
                     <span
                       className={cn(
-                        "px-2 py-1 rounded-full text-xs font-medium border",
-                        item.status === "Matched" &&
-                          "bg-blue-50 text-blue-700 border-blue-200",
-                        item.status === "Pending" &&
-                          "bg-yellow-50 text-yellow-700 border-yellow-200",
-                        item.status === "Claimed" &&
-                          "bg-green-50 text-green-700 border-green-200",
+                        'px-2 py-1 rounded-full text-xs font-medium border',
+                        item.status === 'Matched' && 'bg-blue-50 text-blue-700 border-blue-200',
+                        item.status === 'Pending' &&
+                          'bg-yellow-50 text-yellow-700 border-yellow-200',
+                        item.status === 'Claimed' && 'bg-green-50 text-green-700 border-green-200',
                       )}
                     >
                       {item.status}
@@ -212,10 +204,7 @@ export function MyReportsPage() {
         {/* Detail Modal */}
         {selectedItem && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setSelectedItem(null)}
-            />
+            <div className="absolute inset-0 bg-black/50" onClick={() => setSelectedItem(null)} />
             <div className="relative bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
               {/* Image Carousel */}
               <ImageCarousel
@@ -230,17 +219,15 @@ export function MyReportsPage() {
                   <div>
                     <span
                       className={cn(
-                        "badge mb-2",
-                        selectedItem.type === "Lost"
-                          ? "bg-red-100 text-red-700"
-                          : "bg-green-100 text-green-700",
+                        'badge mb-2',
+                        selectedItem.type === 'Lost'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-green-100 text-green-700',
                       )}
                     >
                       {selectedItem.type}
                     </span>
-                    <h2 className="text-xl font-bold text-text-primary">
-                      {selectedItem.name}
-                    </h2>
+                    <h2 className="text-xl font-bold text-text-primary">{selectedItem.name}</h2>
                   </div>
                   <button
                     onClick={() => setSelectedItem(null)}
@@ -251,22 +238,16 @@ export function MyReportsPage() {
                   </button>
                 </div>
 
-                <p className="text-text-secondary mt-3">
-                  {selectedItem.description}
-                </p>
+                <p className="text-text-secondary mt-3">{selectedItem.description}</p>
 
                 <div className="mt-4 space-y-2">
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-text-secondary" />
-                    <span className="text-text-primary">
-                      {selectedItem.location}
-                    </span>
+                    <span className="text-text-primary">{selectedItem.location}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-text-secondary" />
-                    <span className="text-text-primary">
-                      {formatDate(selectedItem.date)}
-                    </span>
+                    <span className="text-text-primary">{formatDate(selectedItem.date)}</span>
                   </div>
                 </div>
 

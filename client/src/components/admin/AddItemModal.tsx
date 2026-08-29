@@ -1,37 +1,21 @@
-import { useState, useRef } from "react";
-import {
-  X,
-  Upload,
-  Image as ImageIcon,
-  Loader2,
-  Sparkles,
-  Camera,
-} from "lucide-react";
-import { uploadItemImage, type ItemInput } from "../../services/itemService";
-import {
-  analyzeItemImage,
-  getAvailableProviders,
-  type AIProvider,
-} from "../../services/aiService";
-import { LazyLocationPicker } from "../ui/LazyLocationPicker";
-import { authFetch } from "../../lib/authApi";
+import { useState, useRef } from 'react';
+import { X, Upload, Image as ImageIcon, Loader2, Sparkles, Camera } from 'lucide-react';
+import { uploadItemImage, type ItemInput } from '../../services/itemService';
+import { analyzeItemImage, getAvailableProviders, type AIProvider } from '../../services/aiService';
+import { LazyLocationPicker } from '../ui/LazyLocationPicker';
+import { authFetch } from '../../lib/authApi';
 
 interface AddItemModalProps {
   onClose: () => void;
   onSuccess: () => void;
   initialData?: Partial<ItemInput>;
-  initialType?: "Lost" | "Found";
+  initialType?: 'Lost' | 'Found';
 }
 
-export function AddItemModal({
-  onClose,
-  onSuccess,
-  initialData,
-  initialType,
-}: AddItemModalProps) {
-  const [step, setStep] = useState<
-    "upload" | "analyzing" | "review" | "success"
-  >(initialData ? "review" : "upload");
+export function AddItemModal({ onClose, onSuccess, initialData, initialType }: AddItemModalProps) {
+  const [step, setStep] = useState<'upload' | 'analyzing' | 'review' | 'success'>(
+    initialData ? 'review' : 'upload',
+  );
   const [matchResult, setMatchResult] = useState<{
     highestScore: number;
   } | null>(null);
@@ -40,22 +24,22 @@ export function AddItemModal({
   const [imagePreviews, setImagePreviews] = useState<string[]>(
     initialData?.imageUrl ? [initialData.imageUrl] : [],
   );
-  const [aiProvider, setAiProvider] = useState<AIProvider>("gemini");
+  const [aiProvider, setAiProvider] = useState<AIProvider>('gemini');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const availableProviders = getAvailableProviders();
 
-  const [formData, setFormData] = useState<Omit<ItemInput, "imageUrl">>({
-    name: initialData?.name || "",
-    description: initialData?.description || "",
-    type: initialType || "Found",
-    location: initialData?.location || "",
+  const [formData, setFormData] = useState<Omit<ItemInput, 'imageUrl'>>({
+    name: initialData?.name || '',
+    description: initialData?.description || '',
+    type: initialType || 'Found',
+    location: initialData?.location || '',
     date: initialData?.date || new Date(),
-    status: (initialData?.status as any) || "Pending",
+    status: (initialData?.status as any) || 'Pending',
     tags: initialData?.tags || [],
-    color: initialData?.color || "",
-    category: initialData?.category || "",
+    color: initialData?.color || '',
+    category: initialData?.category || '',
     coordinates: initialData?.coordinates,
   });
 
@@ -81,17 +65,17 @@ export function AddItemModal({
 
   const handleAnalyze = async () => {
     if (imageFiles.length === 0) {
-      alert("Please upload an image first");
+      alert('Please upload an image first');
       return;
     }
 
     if (!formData.location) {
-      alert("Please enter a location");
+      alert('Please enter a location');
       return;
     }
 
     try {
-      setStep("analyzing");
+      setStep('analyzing');
       setLoading(true);
 
       // Analyze image with AI (Use first image)
@@ -103,19 +87,15 @@ export function AddItemModal({
         name: analysis.name,
         description: analysis.description,
         tags: analysis.tags,
-        color: analysis.color || "",
-        category: analysis.category || "",
+        color: analysis.color || '',
+        category: analysis.category || '',
       }));
 
-      setStep("review");
+      setStep('review');
     } catch (err) {
-      console.error("Error analyzing image:", err);
-      alert(
-        `Analysis failed: ${
-          err instanceof Error ? err.message : "Unknown error"
-        }`,
-      );
-      setStep("upload");
+      console.error('Error analyzing image:', err);
+      alert(`Analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setStep('upload');
     } finally {
       setLoading(false);
     }
@@ -123,7 +103,7 @@ export function AddItemModal({
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.location) {
-      alert("Please fill in required fields");
+      alert('Please fill in required fields');
       return;
     }
 
@@ -133,21 +113,15 @@ export function AddItemModal({
       let uploadedImages: string[] = [];
       if (imageFiles.length > 0) {
         // Convert images to base64
-        uploadedImages = await Promise.all(
-          imageFiles.map((file) => uploadItemImage(file)),
-        );
+        uploadedImages = await Promise.all(imageFiles.map((file) => uploadItemImage(file)));
       }
 
       // Call backend API to trigger automatic matching
       // Note: authFetch automatically adds the Firebase auth token
-      console.log(
-        "[ADMIN-MODAL] Creating item via API with",
-        uploadedImages.length,
-        "images",
-      );
+      console.log('[ADMIN-MODAL] Creating item via API with', uploadedImages.length, 'images');
 
-      const response = await authFetch("/api/items", {
-        method: "POST",
+      const response = await authFetch('/api/items', {
+        method: 'POST',
         body: JSON.stringify({
           item: {
             name: formData.name,
@@ -166,21 +140,17 @@ export function AddItemModal({
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Failed to create item");
+        throw new Error(error.error || 'Failed to create item');
       }
 
-      console.log("[ADMIN-MODAL] Item created successfully");
+      console.log('[ADMIN-MODAL] Item created successfully');
       const result = await response.json();
       setMatchResult(result.matchResult);
-      setStep("success");
+      setStep('success');
       onSuccess();
     } catch (err) {
-      console.error("Error adding item:", err);
-      alert(
-        `Failed to publish item: ${
-          err instanceof Error ? err.message : "Unknown error"
-        }`,
-      );
+      console.error('Error adding item:', err);
+      alert(`Failed to publish item: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -194,7 +164,7 @@ export function AddItemModal({
   };
 
   const handleTagAdd = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
+    if (e.key === 'Enter') {
       e.preventDefault();
       const input = e.target as HTMLInputElement;
       const newTag = input.value.trim();
@@ -203,7 +173,7 @@ export function AddItemModal({
           ...prev,
           tags: [...(prev.tags || []), newTag],
         }));
-        input.value = "";
+        input.value = '';
       }
     }
   };
@@ -214,10 +184,10 @@ export function AddItemModal({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <h2 className="text-lg font-medium text-text-primary">
-            {step === "upload" && "Add New Item"}
-            {step === "analyzing" && "Analyzing Image..."}
-            {step === "review" && "Review Item Details"}
-            {step === "success" && "Success!"}
+            {step === 'upload' && 'Add New Item'}
+            {step === 'analyzing' && 'Analyzing Image...'}
+            {step === 'review' && 'Review Item Details'}
+            {step === 'success' && 'Success!'}
           </h2>
           <button
             onClick={onClose}
@@ -231,7 +201,7 @@ export function AddItemModal({
         {/* Content - Scrollable */}
         <div className="p-6 flex-1 overflow-y-auto">
           {/* Step 1: Upload */}
-          {step === "upload" && (
+          {step === 'upload' && (
             <>
               {/* Image Upload */}
               <div className="mb-6">
@@ -264,9 +234,7 @@ export function AddItemModal({
                   ) : (
                     <>
                       <ImageIcon className="w-12 h-12 text-text-secondary mb-2" />
-                      <p className="text-sm text-text-secondary">
-                        Click to upload image
-                      </p>
+                      <p className="text-sm text-text-secondary">Click to upload image</p>
                     </>
                   )}
                 </div>
@@ -281,9 +249,7 @@ export function AddItemModal({
                   className="mt-3 w-full py-3 px-4 border-2 border-dashed border-primary/50 rounded-xl flex items-center justify-center gap-2 text-primary hover:bg-primary/5 hover:border-primary transition-all"
                 >
                   <Camera className="w-5 h-5" />
-                  <span className="text-sm font-medium">
-                    Take Photo with Camera
-                  </span>
+                  <span className="text-sm font-medium">Take Photo with Camera</span>
                 </button>
 
                 {/* Gallery file input */}
@@ -309,15 +275,13 @@ export function AddItemModal({
               {/* Basic Info */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="text-sm text-text-secondary mb-1 block">
-                    Type
-                  </label>
+                  <label className="text-sm text-text-secondary mb-1 block">Type</label>
                   <select
                     value={formData.type}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        type: e.target.value as "Lost" | "Found",
+                        type: e.target.value as 'Lost' | 'Found',
                       })
                     }
                     className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -327,12 +291,10 @@ export function AddItemModal({
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm text-text-secondary mb-1 block">
-                    Date
-                  </label>
+                  <label className="text-sm text-text-secondary mb-1 block">Date</label>
                   <input
                     type="date"
-                    value={formData.date.toISOString().split("T")[0]}
+                    value={formData.date.toISOString().split('T')[0]}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
@@ -351,9 +313,7 @@ export function AddItemModal({
                 </label>
                 <LazyLocationPicker
                   value={formData.location}
-                  onChange={(location) =>
-                    setFormData({ ...formData, location })
-                  }
+                  onChange={(location) => setFormData({ ...formData, location })}
                   onLocationSelect={(location, coordinates) =>
                     setFormData((prev) => ({ ...prev, location, coordinates }))
                   }
@@ -364,31 +324,29 @@ export function AddItemModal({
               {/* AI Provider Selection */}
               {availableProviders.length > 0 && (
                 <div className="mb-6">
-                  <label className="text-sm text-text-secondary mb-2 block">
-                    AI Provider
-                  </label>
+                  <label className="text-sm text-text-secondary mb-2 block">AI Provider</label>
                   <div className="flex gap-2">
-                    {availableProviders.includes("gemini") && (
+                    {availableProviders.includes('gemini') && (
                       <button
                         type="button"
-                        onClick={() => setAiProvider("gemini")}
+                        onClick={() => setAiProvider('gemini')}
                         className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === "gemini"
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:bg-gray-50"
+                          aiProvider === 'gemini'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border hover:bg-gray-50'
                         }`}
                       >
                         Gemini
                       </button>
                     )}
-                    {availableProviders.includes("groq") && (
+                    {availableProviders.includes('groq') && (
                       <button
                         type="button"
-                        onClick={() => setAiProvider("groq")}
+                        onClick={() => setAiProvider('groq')}
                         className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === "groq"
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:bg-gray-50"
+                          aiProvider === 'groq'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border hover:bg-gray-50'
                         }`}
                       >
                         Groq
@@ -417,12 +375,10 @@ export function AddItemModal({
           )}
 
           {/* Step 2: Analyzing */}
-          {step === "analyzing" && (
+          {step === 'analyzing' && (
             <div className="py-12 text-center">
               <Loader2 className="w-16 h-16 text-primary mx-auto mb-4 animate-spin" />
-              <h3 className="text-lg font-medium text-text-primary mb-2">
-                Analyzing Image...
-              </h3>
+              <h3 className="text-lg font-medium text-text-primary mb-2">Analyzing Image...</h3>
               <p className="text-text-secondary">
                 AI is identifying the item and extracting details
               </p>
@@ -430,7 +386,7 @@ export function AddItemModal({
           )}
 
           {/* Step 3: Review */}
-          {step === "review" && (
+          {step === 'review' && (
             <>
               {/* Image Preview */}
               {imagePreviews.length > 0 && (
@@ -451,9 +407,7 @@ export function AddItemModal({
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
@@ -465,9 +419,7 @@ export function AddItemModal({
                 </label>
                 <textarea
                   value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 />
@@ -510,9 +462,7 @@ export function AddItemModal({
                 <input
                   type="text"
                   value={formData.color}
-                  onChange={(e) =>
-                    setFormData({ ...formData, color: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
@@ -525,9 +475,7 @@ export function AddItemModal({
                 <input
                   type="text"
                   value={formData.category}
-                  onChange={(e) =>
-                    setFormData({ ...formData, category: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
@@ -535,15 +483,13 @@ export function AddItemModal({
               {/* Type & Status */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="text-sm text-text-secondary mb-1 block">
-                    Type
-                  </label>
+                  <label className="text-sm text-text-secondary mb-1 block">Type</label>
                   <select
                     value={formData.type}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        type: e.target.value as "Lost" | "Found",
+                        type: e.target.value as 'Lost' | 'Found',
                       })
                     }
                     className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -553,18 +499,13 @@ export function AddItemModal({
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm text-text-secondary mb-1 block">
-                    Status
-                  </label>
+                  <label className="text-sm text-text-secondary mb-1 block">Status</label>
                   <select
                     value={formData.status}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        status: e.target.value as
-                          | "Pending"
-                          | "Matched"
-                          | "Claimed",
+                        status: e.target.value as 'Pending' | 'Matched' | 'Claimed',
                       })
                     }
                     className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -579,17 +520,13 @@ export function AddItemModal({
               {/* Location & Date (readonly) */}
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
-                  <label className="text-sm text-text-secondary mb-1 block">
-                    Location
-                  </label>
+                  <label className="text-sm text-text-secondary mb-1 block">Location</label>
                   <p className="px-3 py-2 bg-gray-50 rounded-lg text-text-primary">
                     {formData.location}
                   </p>
                 </div>
                 <div>
-                  <label className="text-sm text-text-secondary mb-1 block">
-                    Date
-                  </label>
+                  <label className="text-sm text-text-secondary mb-1 block">Date</label>
                   <p className="px-3 py-2 bg-gray-50 rounded-lg text-text-primary">
                     {formData.date.toLocaleDateString()}
                   </p>
@@ -599,7 +536,7 @@ export function AddItemModal({
               {/* Actions - Blue with white text */}
               <div className="flex gap-3 mt-6">
                 <button
-                  onClick={() => setStep("upload")}
+                  onClick={() => setStep('upload')}
                   className="flex-1 py-3 border border-gray-300 rounded-xl font-medium hover:bg-gray-50 transition-colors"
                 >
                   Back
@@ -626,17 +563,14 @@ export function AddItemModal({
           )}
 
           {/* Step 4: Success */}
-          {step === "success" && (
+          {step === 'success' && (
             <div className="py-8 text-center px-4">
               <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Sparkles className="w-8 h-8" />
               </div>
-              <h3 className="text-2xl font-bold text-text-primary mb-2">
-                Item Published!
-              </h3>
+              <h3 className="text-2xl font-bold text-text-primary mb-2">Item Published!</h3>
               <p className="text-text-secondary mb-6 text-sm">
-                The {formData.type.toLowerCase()} item has been added to the
-                database.
+                The {formData.type.toLowerCase()} item has been added to the database.
               </p>
 
               {matchResult && matchResult.highestScore > 0 ? (
