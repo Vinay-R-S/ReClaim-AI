@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from 'react';
 import {
   Eye,
   Ban,
@@ -9,30 +9,20 @@ import {
   Download,
   Filter,
   X,
-} from "lucide-react";
-import { cn } from "../../lib/utils";
-import {
-  type User,
-  getUsers,
-  updateUserStatus,
-} from "../../services/userService";
-import { UserDetailModal } from "../../components/admin/UserDetailModal";
-import { Timestamp } from "firebase/firestore";
+} from 'lucide-react';
+import { cn } from '../../lib/utils';
+import { type User, getUsers, updateUserStatus } from '../../services/userService';
+import { UserDetailModal } from '../../components/admin/UserDetailModal';
+import { Timestamp } from 'firebase/firestore';
 // ExcelJS is loaded dynamically on export to reduce bundle size
-import { getItems } from "../../services/itemService";
+import { getItems } from '../../services/itemService';
 
-type SortOrder = "asc" | "desc" | null;
-type StatusFilter = "all" | "active" | "blocked";
-type ItemsFilter = "all" | "0" | "1-5" | "6-10" | "11+";
-type DateRangeFilter =
-  | "all"
-  | "7days"
-  | "30days"
-  | "90days"
-  | "1year"
-  | "custom";
-type ItemTypeFilter = "all" | "lost" | "found" | "both";
-type ItemTypeSort = "lost" | "found" | null;
+type SortOrder = 'asc' | 'desc' | null;
+type StatusFilter = 'all' | 'active' | 'blocked';
+type ItemsFilter = 'all' | '0' | '1-5' | '6-10' | '11+';
+type DateRangeFilter = 'all' | '7days' | '30days' | '90days' | '1year' | 'custom';
+type ItemTypeFilter = 'all' | 'lost' | 'found' | 'both';
+type ItemTypeSort = 'lost' | 'found' | null;
 
 interface UserWithItemCounts extends User {
   itemsCount: number;
@@ -43,20 +33,17 @@ interface UserWithItemCounts extends User {
 export function UsersManagement() {
   const [users, setUsers] = useState<UserWithItemCounts[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedUser, setSelectedUser] = useState<UserWithItemCounts | null>(
-    null,
-  );
+  const [selectedUser, setSelectedUser] = useState<UserWithItemCounts | null>(null);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
   const [nameSort, setNameSort] = useState<SortOrder>(null);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [itemsFilter, setItemsFilter] = useState<ItemsFilter>("all");
-  const [dateRangeFilter, setDateRangeFilter] =
-    useState<DateRangeFilter>("all");
-  const [itemTypeFilter, setItemTypeFilter] = useState<ItemTypeFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [itemsFilter, setItemsFilter] = useState<ItemsFilter>('all');
+  const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>('all');
+  const [itemTypeFilter, setItemTypeFilter] = useState<ItemTypeFilter>('all');
   const [itemTypeSort, setItemTypeSort] = useState<ItemTypeSort>(null);
-  const [customDateFrom, setCustomDateFrom] = useState<string>("");
-  const [customDateTo, setCustomDateTo] = useState<string>("");
+  const [customDateFrom, setCustomDateFrom] = useState<string>('');
+  const [customDateTo, setCustomDateTo] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
 
   // Fetch users and their item counts
@@ -68,10 +55,10 @@ export function UsersManagement() {
 
       const usersWithCounts = fetchedUsers.map((user) => {
         const userLostItems = allItems.filter(
-          (item) => item.reportedBy === user.uid && item.type === "Lost",
+          (item) => item.reportedBy === user.uid && item.type === 'Lost',
         );
         const userFoundItems = allItems.filter(
-          (item) => item.reportedBy === user.uid && item.type === "Found",
+          (item) => item.reportedBy === user.uid && item.type === 'Found',
         );
 
         const lostCount = userLostItems.length;
@@ -88,7 +75,7 @@ export function UsersManagement() {
 
       setUsers(usersWithCounts);
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error('Error fetching users:', error);
     } finally {
       setLoading(false);
     }
@@ -101,23 +88,23 @@ export function UsersManagement() {
   // Close filter modal on Escape key
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && showFilters) {
+      if (e.key === 'Escape' && showFilters) {
         setShowFilters(false);
       }
     };
-    window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
   }, [showFilters]);
 
   // Handle block/unblock toggle
   const handleToggleStatus = async (user: UserWithItemCounts) => {
     if (!user.uid) return;
 
-    const currentStatus = user.status || "active";
-    const newStatus = currentStatus === "active" ? "blocked" : "active";
+    const currentStatus = user.status || 'active';
+    const newStatus = currentStatus === 'active' ? 'blocked' : 'active';
 
     // Confirmation dialog for blocking (fraud warning)
-    if (newStatus === "blocked") {
+    if (newStatus === 'blocked') {
       const confirmed = window.confirm(
         `WARNING: Blocking User: ${user.displayName || user.email}\n\n` +
           `This action will:\n` +
@@ -139,14 +126,12 @@ export function UsersManagement() {
       // Update local state
       setUsers((prev) =>
         prev.map((u) =>
-          u.uid === user.uid
-            ? { ...u, status: newStatus as "active" | "blocked" }
-            : u,
+          u.uid === user.uid ? { ...u, status: newStatus as 'active' | 'blocked' } : u,
         ),
       );
     } catch (error) {
-      console.error("Error updating user status:", error);
-      alert("Failed to update user status. Please try again.");
+      console.error('Error updating user status:', error);
+      alert('Failed to update user status. Please try again.');
     } finally {
       setUpdatingUserId(null);
     }
@@ -160,32 +145,32 @@ export function UsersManagement() {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
       result = result.filter((user) => {
-        const displayName = (user.displayName || "").trim().toLowerCase();
-        const email = (user.email || "").toLowerCase();
+        const displayName = (user.displayName || '').trim().toLowerCase();
+        const email = (user.email || '').toLowerCase();
         return displayName.includes(query) || email.includes(query);
       });
     }
 
     // Apply status filter
-    if (statusFilter !== "all") {
+    if (statusFilter !== 'all') {
       result = result.filter((user) => {
-        const userStatus = user.status || "active";
+        const userStatus = user.status || 'active';
         return userStatus === statusFilter;
       });
     }
 
     // Apply items count filter
-    if (itemsFilter !== "all") {
+    if (itemsFilter !== 'all') {
       result = result.filter((user) => {
         const count = user.itemsCount;
         switch (itemsFilter) {
-          case "0":
+          case '0':
             return count === 0;
-          case "1-5":
+          case '1-5':
             return count >= 1 && count <= 5;
-          case "6-10":
+          case '6-10':
             return count >= 6 && count <= 10;
-          case "11+":
+          case '11+':
             return count >= 11;
           default:
             return true;
@@ -194,24 +179,24 @@ export function UsersManagement() {
     }
 
     // Apply date range filter
-    if (dateRangeFilter !== "all") {
+    if (dateRangeFilter !== 'all') {
       const now = new Date();
       let startDate: Date | null = null;
 
       switch (dateRangeFilter) {
-        case "7days":
+        case '7days':
           startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           break;
-        case "30days":
+        case '30days':
           startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
           break;
-        case "90days":
+        case '90days':
           startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
           break;
-        case "1year":
+        case '1year':
           startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
           break;
-        case "custom":
+        case 'custom':
           if (customDateFrom) {
             startDate = new Date(customDateFrom);
           }
@@ -221,11 +206,9 @@ export function UsersManagement() {
       result = result.filter((user) => {
         if (!user.createdAt) return false;
         const userDate =
-          user.createdAt instanceof Timestamp
-            ? user.createdAt.toDate()
-            : new Date(user.createdAt);
+          user.createdAt instanceof Timestamp ? user.createdAt.toDate() : new Date(user.createdAt);
 
-        if (dateRangeFilter === "custom") {
+        if (dateRangeFilter === 'custom') {
           const fromDate = customDateFrom ? new Date(customDateFrom) : null;
           const toDate = customDateTo ? new Date(customDateTo) : null;
 
@@ -239,14 +222,14 @@ export function UsersManagement() {
     }
 
     // Apply Lost/Found item type filter
-    if (itemTypeFilter !== "all") {
+    if (itemTypeFilter !== 'all') {
       result = result.filter((user) => {
         switch (itemTypeFilter) {
-          case "lost":
+          case 'lost':
             return user.lostCount > 0;
-          case "found":
+          case 'found':
             return user.foundCount > 0;
-          case "both":
+          case 'both':
             return user.lostCount > 0 && user.foundCount > 0;
           default:
             return true;
@@ -257,9 +240,9 @@ export function UsersManagement() {
     // Apply name sorting
     if (nameSort) {
       result.sort((a, b) => {
-        const nameA = (a.displayName || a.email || "").toLowerCase();
-        const nameB = (b.displayName || b.email || "").toLowerCase();
-        if (nameSort === "asc") {
+        const nameA = (a.displayName || a.email || '').toLowerCase();
+        const nameB = (b.displayName || b.email || '').toLowerCase();
+        if (nameSort === 'asc') {
           return nameA.localeCompare(nameB);
         } else {
           return nameB.localeCompare(nameA);
@@ -270,9 +253,9 @@ export function UsersManagement() {
     // Apply Lost/Found sorting
     if (itemTypeSort) {
       result.sort((a, b) => {
-        if (itemTypeSort === "lost") {
+        if (itemTypeSort === 'lost') {
           return b.lostCount - a.lostCount; // Desc by default
-        } else if (itemTypeSort === "found") {
+        } else if (itemTypeSort === 'found') {
           return b.foundCount - a.foundCount; // Desc by default
         }
         return 0;
@@ -296,16 +279,16 @@ export function UsersManagement() {
   // Handle name sort toggle
   const handleNameSort = () => {
     if (nameSort === null) {
-      setNameSort("asc");
-    } else if (nameSort === "asc") {
-      setNameSort("desc");
+      setNameSort('asc');
+    } else if (nameSort === 'asc') {
+      setNameSort('desc');
     } else {
       setNameSort(null);
     }
   };
 
   // Handle Lost/Found sort toggle
-  const handleItemTypeSort = (type: "lost" | "found") => {
+  const handleItemTypeSort = (type: 'lost' | 'found') => {
     if (itemTypeSort === type) {
       setItemTypeSort(null);
     } else {
@@ -316,28 +299,28 @@ export function UsersManagement() {
   // Export to Excel (ExcelJS loaded dynamically to reduce initial bundle size)
   const handleExportToExcel = async () => {
     // Dynamic import - ExcelJS is only loaded when user clicks Export
-    const ExcelJS = (await import("exceljs")).default;
+    const ExcelJS = (await import('exceljs')).default;
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Users");
+    const worksheet = workbook.addWorksheet('Users');
 
     // Add header row
     worksheet.columns = [
-      { header: "User Name", key: "userName", width: 25 },
-      { header: "Email", key: "email", width: 30 },
-      { header: "Status", key: "status", width: 12 },
-      { header: "Items Submitted", key: "itemsSubmitted", width: 15 },
-      { header: "Lost Items", key: "lostItems", width: 12 },
-      { header: "Found Items", key: "foundItems", width: 12 },
-      { header: "Joined On", key: "joinedOn", width: 15 },
+      { header: 'User Name', key: 'userName', width: 25 },
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Items Submitted', key: 'itemsSubmitted', width: 15 },
+      { header: 'Lost Items', key: 'lostItems', width: 12 },
+      { header: 'Found Items', key: 'foundItems', width: 12 },
+      { header: 'Joined On', key: 'joinedOn', width: 15 },
     ];
 
     // Add data rows
     filteredAndSortedUsers.forEach((user) => {
       worksheet.addRow({
-        userName: user.displayName || "No Name",
+        userName: user.displayName || 'No Name',
         email: user.email,
-        status: (user.status || "active") === "active" ? "Active" : "Blocked",
+        status: (user.status || 'active') === 'active' ? 'Active' : 'Blocked',
         itemsSubmitted: user.itemsCount,
         lostItems: user.lostCount,
         foundItems: user.foundCount,
@@ -351,26 +334,24 @@ export function UsersManagement() {
     // Generate Excel file and download
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+    const link = document.createElement('a');
     link.href = url;
-    link.download = `users_export_${
-      new Date().toISOString().split("T")[0]
-    }.xlsx`;
+    link.download = `users_export_${new Date().toISOString().split('T')[0]}.xlsx`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
   // Format date for display
   const formatDate = (date: Timestamp | Date | undefined) => {
-    if (!date) return "N/A";
+    if (!date) return 'N/A';
     const d = date instanceof Timestamp ? date.toDate() : new Date(date);
-    return d.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
+    return d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
     });
   };
 
@@ -378,12 +359,8 @@ export function UsersManagement() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-medium text-text-primary">
-          Users Management
-        </h1>
-        <p className="text-sm text-text-secondary mt-1">
-          Manage user accounts and permissions
-        </p>
+        <h1 className="text-2xl font-medium text-text-primary">Users Management</h1>
+        <p className="text-sm text-text-secondary mt-1">Manage user accounts and permissions</p>
       </div>
 
       {/* Users Table */}
@@ -405,20 +382,20 @@ export function UsersManagement() {
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={cn(
-                "btn-pill btn-secondary text-sm flex items-center gap-2",
-                (statusFilter !== "all" ||
-                  itemsFilter !== "all" ||
-                  dateRangeFilter !== "all" ||
-                  itemTypeFilter !== "all") &&
-                  "bg-primary/10 text-primary",
+                'btn-pill btn-secondary text-sm flex items-center gap-2',
+                (statusFilter !== 'all' ||
+                  itemsFilter !== 'all' ||
+                  dateRangeFilter !== 'all' ||
+                  itemTypeFilter !== 'all') &&
+                  'bg-primary/10 text-primary',
               )}
             >
               <Filter className="w-4 h-4" />
               Filter
-              {(statusFilter !== "all" ||
-                itemsFilter !== "all" ||
-                dateRangeFilter !== "all" ||
-                itemTypeFilter !== "all") && (
+              {(statusFilter !== 'all' ||
+                itemsFilter !== 'all' ||
+                dateRangeFilter !== 'all' ||
+                itemTypeFilter !== 'all') && (
                 <span className="ml-1 w-2 h-2 bg-primary rounded-full"></span>
               )}
             </button>
@@ -446,9 +423,7 @@ export function UsersManagement() {
             <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden">
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-border">
-                <h2 className="text-lg font-medium text-text-primary">
-                  Filters
-                </h2>
+                <h2 className="text-lg font-medium text-text-primary">Filters</h2>
                 <button
                   onClick={() => setShowFilters(false)}
                   className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -467,9 +442,7 @@ export function UsersManagement() {
                     </label>
                     <select
                       value={statusFilter}
-                      onChange={(e) =>
-                        setStatusFilter(e.target.value as StatusFilter)
-                      }
+                      onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
                       className="w-full px-3 py-2 rounded-lg border border-border bg-white text-sm 
                                focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     >
@@ -486,9 +459,7 @@ export function UsersManagement() {
                     </label>
                     <select
                       value={itemsFilter}
-                      onChange={(e) =>
-                        setItemsFilter(e.target.value as ItemsFilter)
-                      }
+                      onChange={(e) => setItemsFilter(e.target.value as ItemsFilter)}
                       className="w-full px-3 py-2 rounded-lg border border-border bg-white text-sm 
                                focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     >
@@ -507,9 +478,7 @@ export function UsersManagement() {
                     </label>
                     <select
                       value={dateRangeFilter}
-                      onChange={(e) =>
-                        setDateRangeFilter(e.target.value as DateRangeFilter)
-                      }
+                      onChange={(e) => setDateRangeFilter(e.target.value as DateRangeFilter)}
                       className="w-full px-3 py-2 rounded-lg border border-border bg-white text-sm 
                                focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     >
@@ -523,12 +492,10 @@ export function UsersManagement() {
                   </div>
 
                   {/* Custom Date Range */}
-                  {dateRangeFilter === "custom" && (
+                  {dateRangeFilter === 'custom' && (
                     <div className="space-y-3 pl-4 border-l-2 border-primary/20">
                       <div>
-                        <label className="block text-sm text-text-secondary mb-2">
-                          From Date
-                        </label>
+                        <label className="block text-sm text-text-secondary mb-2">From Date</label>
                         <input
                           type="date"
                           value={customDateFrom}
@@ -538,9 +505,7 @@ export function UsersManagement() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm text-text-secondary mb-2">
-                          To Date
-                        </label>
+                        <label className="block text-sm text-text-secondary mb-2">To Date</label>
                         <input
                           type="date"
                           value={customDateTo}
@@ -559,9 +524,7 @@ export function UsersManagement() {
                     </label>
                     <select
                       value={itemTypeFilter}
-                      onChange={(e) =>
-                        setItemTypeFilter(e.target.value as ItemTypeFilter)
-                      }
+                      onChange={(e) => setItemTypeFilter(e.target.value as ItemTypeFilter)}
                       className="w-full px-3 py-2 rounded-lg border border-border bg-white text-sm 
                                focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     >
@@ -576,18 +539,18 @@ export function UsersManagement() {
 
               {/* Footer */}
               <div className="flex items-center justify-between p-4 border-t border-border bg-gray-50/50">
-                {(statusFilter !== "all" ||
-                  itemsFilter !== "all" ||
-                  dateRangeFilter !== "all" ||
-                  itemTypeFilter !== "all") && (
+                {(statusFilter !== 'all' ||
+                  itemsFilter !== 'all' ||
+                  dateRangeFilter !== 'all' ||
+                  itemTypeFilter !== 'all') && (
                   <button
                     onClick={() => {
-                      setStatusFilter("all");
-                      setItemsFilter("all");
-                      setDateRangeFilter("all");
-                      setItemTypeFilter("all");
-                      setCustomDateFrom("");
-                      setCustomDateTo("");
+                      setStatusFilter('all');
+                      setItemsFilter('all');
+                      setDateRangeFilter('all');
+                      setItemTypeFilter('all');
+                      setCustomDateFrom('');
+                      setCustomDateTo('');
                     }}
                     className="text-sm text-primary hover:underline font-medium"
                   >
@@ -619,9 +582,7 @@ export function UsersManagement() {
             </div>
           ) : filteredAndSortedUsers.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-text-secondary">
-                No users match the current filters
-              </p>
+              <p className="text-text-secondary">No users match the current filters</p>
             </div>
           ) : (
             <table className="w-full">
@@ -633,8 +594,8 @@ export function UsersManagement() {
                       className="flex items-center gap-2 hover:text-text-primary transition-colors"
                     >
                       User Name
-                      {nameSort === "asc" && <ArrowUp className="w-4 h-4" />}
-                      {nameSort === "desc" && <ArrowDown className="w-4 h-4" />}
+                      {nameSort === 'asc' && <ArrowUp className="w-4 h-4" />}
+                      {nameSort === 'desc' && <ArrowDown className="w-4 h-4" />}
                     </button>
                   </th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">
@@ -648,24 +609,20 @@ export function UsersManagement() {
                   </th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">
                     <button
-                      onClick={() => handleItemTypeSort("lost")}
+                      onClick={() => handleItemTypeSort('lost')}
                       className="flex items-center gap-2 hover:text-text-primary transition-colors"
                     >
                       Lost Items
-                      {itemTypeSort === "lost" && (
-                        <ArrowDown className="w-4 h-4" />
-                      )}
+                      {itemTypeSort === 'lost' && <ArrowDown className="w-4 h-4" />}
                     </button>
                   </th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">
                     <button
-                      onClick={() => handleItemTypeSort("found")}
+                      onClick={() => handleItemTypeSort('found')}
                       className="flex items-center gap-2 hover:text-text-primary transition-colors"
                     >
                       Found Items
-                      {itemTypeSort === "found" && (
-                        <ArrowDown className="w-4 h-4" />
-                      )}
+                      {itemTypeSort === 'found' && <ArrowDown className="w-4 h-4" />}
                     </button>
                   </th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">
@@ -681,10 +638,10 @@ export function UsersManagement() {
                   <tr
                     key={user.uid}
                     className={cn(
-                      "border-b border-border transition-colors",
-                      (user.status || "active") === "blocked"
-                        ? "bg-gray-50/50 opacity-75"
-                        : "hover:bg-gray-50",
+                      'border-b border-border transition-colors',
+                      (user.status || 'active') === 'blocked'
+                        ? 'bg-gray-50/50 opacity-75'
+                        : 'hover:bg-gray-50',
                     )}
                   >
                     <td className="py-3 px-4">
@@ -700,9 +657,9 @@ export function UsersManagement() {
                           <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-medium">
                             {user.displayName
                               ? user.displayName
-                                  .split(" ")
+                                  .split(' ')
                                   .map((n) => n[0])
-                                  .join("")
+                                  .join('')
                                   .toUpperCase()
                                   .slice(0, 2)
                               : user.email[0].toUpperCase()}
@@ -710,38 +667,30 @@ export function UsersManagement() {
                         )}
                         <div>
                           <p className="text-sm font-medium text-text-primary">
-                            {user.displayName || "No Name"}
+                            {user.displayName || 'No Name'}
                           </p>
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-sm text-text-primary">
-                      {user.email}
-                    </td>
+                    <td className="py-3 px-4 text-sm text-text-primary">{user.email}</td>
                     <td className="py-3 px-4">
                       <span
                         className={cn(
-                          "badge px-3 py-1",
-                          (user.status || "active") === "active"
-                            ? "badge-active"
-                            : "badge-blocked",
+                          'badge px-3 py-1',
+                          (user.status || 'active') === 'active' ? 'badge-active' : 'badge-blocked',
                         )}
                       >
-                        {(user.status || "active") === "active"
-                          ? "Active"
-                          : "Blocked"}
+                        {(user.status || 'active') === 'active' ? 'Active' : 'Blocked'}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sm text-text-primary">
-                      {user.itemsCount}
-                    </td>
+                    <td className="py-3 px-4 text-sm text-text-primary">{user.itemsCount}</td>
                     <td className="py-3 px-4 text-sm text-text-primary">
                       <span
                         className={cn(
-                          "inline-block px-2 py-1 rounded text-xs font-medium",
+                          'inline-block px-2 py-1 rounded text-xs font-medium',
                           user.lostCount > 0
-                            ? "bg-google-red/10 text-google-red"
-                            : "text-text-secondary",
+                            ? 'bg-google-red/10 text-google-red'
+                            : 'text-text-secondary',
                         )}
                       >
                         {user.lostCount}
@@ -750,10 +699,10 @@ export function UsersManagement() {
                     <td className="py-3 px-4 text-sm text-text-primary">
                       <span
                         className={cn(
-                          "inline-block px-2 py-1 rounded text-xs font-medium",
+                          'inline-block px-2 py-1 rounded text-xs font-medium',
                           user.foundCount > 0
-                            ? "bg-google-green/10 text-google-green"
-                            : "text-text-secondary",
+                            ? 'bg-google-green/10 text-google-green'
+                            : 'text-text-secondary',
                         )}
                       >
                         {user.foundCount}
@@ -775,20 +724,17 @@ export function UsersManagement() {
                           onClick={() => handleToggleStatus(user)}
                           disabled={updatingUserId === user.uid}
                           className={cn(
-                            "p-1.5 rounded-lg transition-colors",
-                            (user.status || "active") === "active"
-                              ? "text-google-red hover:bg-red-50"
-                              : "text-google-green hover:bg-green-50",
-                            updatingUserId === user.uid &&
-                              "opacity-50 cursor-not-allowed",
+                            'p-1.5 rounded-lg transition-colors',
+                            (user.status || 'active') === 'active'
+                              ? 'text-google-red hover:bg-red-50'
+                              : 'text-google-green hover:bg-green-50',
+                            updatingUserId === user.uid && 'opacity-50 cursor-not-allowed',
                           )}
                           title={
-                            (user.status || "active") === "active"
-                              ? "Block User"
-                              : "Unblock User"
+                            (user.status || 'active') === 'active' ? 'Block User' : 'Unblock User'
                           }
                         >
-                          {(user.status || "active") === "active" ? (
+                          {(user.status || 'active') === 'active' ? (
                             <Ban className="w-4 h-4" />
                           ) : (
                             <CheckCircle className="w-4 h-4" />

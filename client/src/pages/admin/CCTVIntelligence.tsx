@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Camera,
   Upload,
@@ -13,7 +13,7 @@ import {
   Loader2,
   Settings,
   VideoOff,
-} from "../../lib/icons";
+} from '../../lib/icons';
 import {
   detectObjectsInFrame,
   captureFrame,
@@ -24,20 +24,20 @@ import {
   type Detection,
   type VideoAnalysisResult,
   type Keyframe,
-} from "../../services/cctvService";
-import { AddItemModal } from "../../components/admin/AddItemModal";
-import { Link } from "react-router-dom";
+} from '../../services/cctvService';
+import { AddItemModal } from '../../components/admin/AddItemModal';
+import { Link } from 'react-router-dom';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export function CCTVIntelligence() {
   // Feature toggle state
   const [cctvEnabled, setCctvEnabled] = useState(true);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<"live" | "upload">("live");
+  const [activeTab, setActiveTab] = useState<'live' | 'upload'>('live');
   const [yoloClasses, setYoloClasses] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [detections, setDetections] = useState<Detection[]>([]);
   const [bestDetection, setBestDetection] = useState<Detection | null>(null); // Stable highest confidence
@@ -54,11 +54,8 @@ export function CCTVIntelligence() {
   const uploadVideoRef = useRef<HTMLVideoElement>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
-  const [analysisResult, setAnalysisResult] =
-    useState<VideoAnalysisResult | null>(null);
-  const [selectedKeyframe, setSelectedKeyframe] = useState<Keyframe | null>(
-    null,
-  );
+  const [analysisResult, setAnalysisResult] = useState<VideoAnalysisResult | null>(null);
+  const [selectedKeyframe, setSelectedKeyframe] = useState<Keyframe | null>(null);
 
   // Register Found Workflow
   const [showAddModal, setShowAddModal] = useState(false);
@@ -77,7 +74,7 @@ export function CCTVIntelligence() {
           setCctvEnabled(data.cctvEnabled !== false);
         }
       } catch (error) {
-        console.error("Failed to fetch settings:", error);
+        console.error('Failed to fetch settings:', error);
         // Default to enabled if we can't fetch settings
         setCctvEnabled(true);
       } finally {
@@ -92,7 +89,7 @@ export function CCTVIntelligence() {
     if (!cctvEnabled || isLoadingSettings) return;
     getYoloClasses()
       .then((classes) => setYoloClasses(classes))
-      .catch((err) => console.error("Failed to fetch YOLO classes:", err));
+      .catch((err) => console.error('Failed to fetch YOLO classes:', err));
   }, [cctvEnabled, isLoadingSettings]);
 
   // 2. Webcam Handling
@@ -106,7 +103,7 @@ export function CCTVIntelligence() {
         streamRef.current = stream;
       }
     } catch (err) {
-      console.error("Webcam error:", err);
+      console.error('Webcam error:', err);
     }
   }, []);
 
@@ -126,7 +123,7 @@ export function CCTVIntelligence() {
     (currentDetections: Detection[]) => {
       if (!canvasRef.current || !videoRef.current) return;
 
-      const ctx = canvasRef.current.getContext("2d");
+      const ctx = canvasRef.current.getContext('2d');
       if (!ctx) return;
 
       ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -142,20 +139,16 @@ export function CCTVIntelligence() {
         // All shown detections are matches since filtering is done server-side
         const isMatch = Boolean(selectedCategory);
 
-        ctx.strokeStyle = isMatch ? "#22c55e" : "#ef4444";
+        ctx.strokeStyle = isMatch ? '#22c55e' : '#ef4444';
         ctx.lineWidth = 3;
         ctx.strokeRect(x1, y1, width, height);
 
-        ctx.fillStyle = isMatch ? "#22c55e" : "#ef4444";
+        ctx.fillStyle = isMatch ? '#22c55e' : '#ef4444';
         ctx.fillRect(x1, y1 - 25, width, 25);
 
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "16px sans-serif";
-        ctx.fillText(
-          `${det.className} ${Math.round(det.confidence * 100)}%`,
-          x1 + 5,
-          y1 - 5,
-        );
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '16px sans-serif';
+        ctx.fillText(`${det.className} ${Math.round(det.confidence * 100)}%`, x1 + 5, y1 - 5);
       });
     },
     [selectedCategory],
@@ -195,7 +188,7 @@ export function CCTVIntelligence() {
       }
       setLastScanTime(new Date());
     } catch (err) {
-      console.error("Detection failed:", err);
+      console.error('Detection failed:', err);
     } finally {
       setIsProcessing(false);
     }
@@ -203,7 +196,7 @@ export function CCTVIntelligence() {
 
   useEffect(() => {
     if (!cctvEnabled || isLoadingSettings) return;
-    if (activeTab === "live") {
+    if (activeTab === 'live') {
       startWebcam();
     } else {
       stopWebcam();
@@ -214,7 +207,7 @@ export function CCTVIntelligence() {
   // Auto-scan every 4 seconds when live tab is active
   useEffect(() => {
     if (!cctvEnabled || isLoadingSettings) return;
-    if (activeTab === "live") {
+    if (activeTab === 'live') {
       // Initial delay for camera to initialize
       const initialTimer = setTimeout(() => {
         runDetection();
@@ -251,13 +244,10 @@ export function CCTVIntelligence() {
         <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-6">
           <VideoOff className="w-10 h-10 text-gray-400" />
         </div>
-        <h1 className="text-2xl font-bold text-text-primary mb-2">
-          CCTV Intelligence is Disabled
-        </h1>
+        <h1 className="text-2xl font-bold text-text-primary mb-2">CCTV Intelligence is Disabled</h1>
         <p className="text-text-secondary max-w-md mb-6">
-          This feature has been disabled by an administrator. It requires the ML
-          models service to be running, which may not be available in the
-          current deployment.
+          This feature has been disabled by an administrator. It requires the ML models service to
+          be running, which may not be available in the current deployment.
         </p>
         <Link
           to="/admin/settings"
@@ -276,10 +266,7 @@ export function CCTVIntelligence() {
     setIsDescribing(true);
     try {
       // Call Groq AI to get detailed description
-      const aiDescription = await describeItemImage(
-        det.croppedImage,
-        det.className,
-      );
+      const aiDescription = await describeItemImage(det.croppedImage, det.className);
 
       setFoundItemData({
         name: aiDescription.name || `Found ${det.className}`,
@@ -288,19 +275,19 @@ export function CCTVIntelligence() {
           `Detected via CCTV Intelligence. Object identified as ${det.className}.`,
         category: aiDescription.category || det.className,
         tags: aiDescription.tags || [det.className.toLowerCase()],
-        color: aiDescription.color || "Unknown",
+        color: aiDescription.color || 'Unknown',
         imageUrl: det.croppedImage,
-        location: "Admin Office (CCTV)",
+        location: 'Admin Office (CCTV)',
       });
     } catch (err) {
-      console.error("AI description failed:", err);
+      console.error('AI description failed:', err);
       // Fallback to basic data
       setFoundItemData({
         name: `Found ${det.className}`,
         description: `Detected via CCTV Intelligence. Object identified as ${det.className}.`,
         category: det.className,
         imageUrl: det.croppedImage,
-        location: "Admin Office (CCTV)",
+        location: 'Admin Office (CCTV)',
       });
     } finally {
       setIsDescribing(false);
@@ -315,10 +302,10 @@ export function CCTVIntelligence() {
 
     setFoundItemData({
       name: `Found ${bestDet.className}`,
-      description: `Detected via CCTV Video Analysis at ${keyframe.timestamp}s. ${analysisResult?.aiAnalysis?.explanation || ""}`,
+      description: `Detected via CCTV Video Analysis at ${keyframe.timestamp}s. ${analysisResult?.aiAnalysis?.explanation || ''}`,
       category: bestDet.className,
       imageUrl: bestDet.croppedImage || keyframe.frameImage,
-      location: "Admin Office (CCTV)",
+      location: 'Admin Office (CCTV)',
     });
 
     setShowAddModal(true);
@@ -337,7 +324,7 @@ export function CCTVIntelligence() {
   // 7. Video Analysis
   const handleAnalyzeVideo = async () => {
     if (!uploadVideoRef.current || !selectedCategory) {
-      alert("Please select a category to search for");
+      alert('Please select a category to search for');
       return;
     }
 
@@ -350,7 +337,7 @@ export function CCTVIntelligence() {
       setAnalysisProgress(40);
 
       if (frames.length === 0) {
-        throw new Error("Could not extract frames from video");
+        throw new Error('Could not extract frames from video');
       }
 
       // Analyze frames with selected category
@@ -368,10 +355,8 @@ export function CCTVIntelligence() {
         setSelectedKeyframe(result.keyframes[0]);
       }
     } catch (err) {
-      console.error("Video analysis failed:", err);
-      alert(
-        `Analysis failed: ${err instanceof Error ? err.message : "Unknown error"}`,
-      );
+      console.error('Video analysis failed:', err);
+      alert(`Analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsAnalyzing(false);
       setAnalysisProgress(0);
@@ -382,14 +367,14 @@ export function CCTVIntelligence() {
   const formatTimestamp = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   // Get confidence color
   const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 0.8) return "bg-green-500";
-    if (confidence >= 0.6) return "bg-yellow-500";
-    return "bg-red-500";
+    if (confidence >= 0.8) return 'bg-green-500';
+    if (confidence >= 0.6) return 'bg-yellow-500';
+    return 'bg-red-500';
   };
 
   return (
@@ -414,9 +399,7 @@ export function CCTVIntelligence() {
           <div className="space-y-3">
             <label className="text-sm font-medium text-text-primary flex items-center gap-2">
               <Target className="w-4 h-4" /> Target Category
-              {activeTab === "upload" && (
-                <span className="text-red-500">*</span>
-              )}
+              {activeTab === 'upload' && <span className="text-red-500">*</span>}
             </label>
             <select
               className="w-full p-2 border rounded-lg text-sm capitalize"
@@ -438,7 +421,7 @@ export function CCTVIntelligence() {
 
             {selectedCategory && (
               <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-700">
-                <strong>Searching for:</strong>{" "}
+                <strong>Searching for:</strong>{' '}
                 <span className="capitalize">{selectedCategory}</span>
                 <p className="mt-1 text-blue-600">
                   Bounding boxes will only appear for this category
@@ -450,20 +433,16 @@ export function CCTVIntelligence() {
           <hr />
 
           {/* Live Detection Panel (Static Mode) */}
-          {activeTab === "live" && (
+          {activeTab === 'live' && (
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <h3 className="text-sm font-medium text-text-primary">
-                  Detection Results
-                </h3>
+                <h3 className="text-sm font-medium text-text-primary">Detection Results</h3>
                 <button
                   onClick={runDetection}
                   disabled={isProcessing}
                   className="text-xs flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
                 >
-                  <RefreshCw
-                    className={`w-3 h-3 ${isProcessing ? "animate-spin" : ""}`}
-                  />
+                  <RefreshCw className={`w-3 h-3 ${isProcessing ? 'animate-spin' : ''}`} />
                   Scan
                 </button>
               </div>
@@ -500,8 +479,7 @@ export function CCTVIntelligence() {
                   >
                     {isDescribing ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />{" "}
-                        Analyzing...
+                        <Loader2 className="w-4 h-4 animate-spin" /> Analyzing...
                       </>
                     ) : (
                       <>
@@ -516,8 +494,8 @@ export function CCTVIntelligence() {
                 {detections.length === 0 && !bestDetection && (
                   <p className="text-xs text-gray-400 italic py-4 text-center">
                     {selectedCategory
-                      ? "Auto-scanning for " + selectedCategory + "..."
-                      : "Select a category to start scanning"}
+                      ? 'Auto-scanning for ' + selectedCategory + '...'
+                      : 'Select a category to start scanning'}
                   </p>
                 )}
 
@@ -544,8 +522,7 @@ export function CCTVIntelligence() {
                     >
                       {isDescribing ? (
                         <>
-                          <Loader2 className="w-3 h-3 animate-spin" />{" "}
-                          Analyzing...
+                          <Loader2 className="w-3 h-3 animate-spin" /> Analyzing...
                         </>
                       ) : (
                         <>
@@ -560,22 +537,18 @@ export function CCTVIntelligence() {
           )}
 
           {/* Video Analysis Results */}
-          {activeTab === "upload" && analysisResult && (
+          {activeTab === 'upload' && analysisResult && (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-5 h-5 text-green-500" />
-                <h3 className="text-sm font-medium text-text-primary">
-                  Analysis Complete
-                </h3>
+                <h3 className="text-sm font-medium text-text-primary">Analysis Complete</h3>
               </div>
 
               {/* Stats */}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="bg-gray-50 p-2 rounded">
                   <p className="text-gray-500">Frames Analyzed</p>
-                  <p className="font-bold text-lg">
-                    {analysisResult.stats.totalFramesAnalyzed}
-                  </p>
+                  <p className="font-bold text-lg">{analysisResult.stats.totalFramesAnalyzed}</p>
                 </div>
                 <div className="bg-gray-50 p-2 rounded">
                   <p className="text-gray-500">Keyframes Found</p>
@@ -588,9 +561,7 @@ export function CCTVIntelligence() {
               {/* Keyframes Gallery */}
               {analysisResult.keyframes.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-xs font-medium text-gray-500">
-                    Keyframes
-                  </h4>
+                  <h4 className="text-xs font-medium text-gray-500">Keyframes</h4>
                   <div className="flex gap-2 overflow-x-auto pb-2">
                     {analysisResult.keyframes.slice(0, 6).map((kf, idx) => (
                       <button
@@ -598,8 +569,8 @@ export function CCTVIntelligence() {
                         onClick={() => setSelectedKeyframe(kf)}
                         className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
                           selectedKeyframe === kf
-                            ? "border-primary ring-2 ring-primary/30"
-                            : "border-gray-200"
+                            ? 'border-primary ring-2 ring-primary/30'
+                            : 'border-gray-200'
                         }`}
                       >
                         <img
@@ -635,14 +606,14 @@ export function CCTVIntelligence() {
           {/* Tabs */}
           <div className="flex gap-4 border-b border-gray-200">
             <button
-              onClick={() => setActiveTab("live")}
-              className={`pb-2 text-sm font-medium transition-colors ${activeTab === "live" ? "border-b-2 border-primary text-primary" : "text-gray-500"}`}
+              onClick={() => setActiveTab('live')}
+              className={`pb-2 text-sm font-medium transition-colors ${activeTab === 'live' ? 'border-b-2 border-primary text-primary' : 'text-gray-500'}`}
             >
               <Camera className="w-4 h-4 inline mr-2" /> Live Webcam
             </button>
             <button
-              onClick={() => setActiveTab("upload")}
-              className={`pb-2 text-sm font-medium transition-colors ${activeTab === "upload" ? "border-b-2 border-primary text-primary" : "text-gray-500"}`}
+              onClick={() => setActiveTab('upload')}
+              className={`pb-2 text-sm font-medium transition-colors ${activeTab === 'upload' ? 'border-b-2 border-primary text-primary' : 'text-gray-500'}`}
             >
               <Upload className="w-4 h-4 inline mr-2" /> Video Analysis
             </button>
@@ -650,7 +621,7 @@ export function CCTVIntelligence() {
 
           {/* Viewport */}
           <div className="relative bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center group">
-            {activeTab === "live" ? (
+            {activeTab === 'live' ? (
               <>
                 <video
                   ref={videoRef}
@@ -693,20 +664,20 @@ export function CCTVIntelligence() {
             {/* Status Indicator */}
             <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/60 backdrop-blur px-3 py-1.5 rounded-full">
               <div
-                className={`w-2 h-2 rounded-full ${isProcessing || isAnalyzing ? "bg-green-500 animate-pulse" : "bg-gray-500"}`}
+                className={`w-2 h-2 rounded-full ${isProcessing || isAnalyzing ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}
               />
               <span className="text-xs text-white font-medium">
                 {isAnalyzing
                   ? `Analyzing... ${analysisProgress}%`
                   : isProcessing
-                    ? "Scanning..."
-                    : "Ready"}
+                    ? 'Scanning...'
+                    : 'Ready'}
               </span>
             </div>
           </div>
 
           {/* Video Upload: Analyze Button */}
-          {activeTab === "upload" && videoPreview && !analysisResult && (
+          {activeTab === 'upload' && videoPreview && !analysisResult && (
             <button
               onClick={handleAnalyzeVideo}
               disabled={isAnalyzing || !selectedCategory}
@@ -727,13 +698,11 @@ export function CCTVIntelligence() {
           )}
 
           {/* Analysis Results Panel */}
-          {activeTab === "upload" && analysisResult && (
+          {activeTab === 'upload' && analysisResult && (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-4">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold text-text-primary">
-                  AI Analysis Results
-                </h3>
+                <h3 className="font-semibold text-text-primary">AI Analysis Results</h3>
               </div>
 
               {/* AI Confidence */}
@@ -742,10 +711,10 @@ export function CCTVIntelligence() {
                   <div
                     className={`text-3xl font-bold ${
                       analysisResult.aiAnalysis.matchConfidence >= 70
-                        ? "text-green-600"
+                        ? 'text-green-600'
                         : analysisResult.aiAnalysis.matchConfidence >= 40
-                          ? "text-yellow-600"
-                          : "text-red-600"
+                          ? 'text-yellow-600'
+                          : 'text-red-600'
                     }`}
                   >
                     {Math.round(analysisResult.aiAnalysis.matchConfidence)}%
@@ -756,10 +725,10 @@ export function CCTVIntelligence() {
                   <div
                     className={`h-3 rounded-full transition-all ${
                       analysisResult.aiAnalysis.matchConfidence >= 70
-                        ? "bg-green-500"
+                        ? 'bg-green-500'
                         : analysisResult.aiAnalysis.matchConfidence >= 40
-                          ? "bg-yellow-500"
-                          : "bg-red-500"
+                          ? 'bg-yellow-500'
+                          : 'bg-red-500'
                     }`}
                     style={{
                       width: `${analysisResult.aiAnalysis.matchConfidence}%`,
@@ -772,25 +741,21 @@ export function CCTVIntelligence() {
               <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
                 <p className="text-sm text-blue-800">
                   {analysisResult.aiAnalysis.explanation ||
-                    "Analysis completed. Review keyframes for verification."}
+                    'Analysis completed. Review keyframes for verification.'}
                 </p>
               </div>
 
               {/* Recommendations */}
               {analysisResult.aiAnalysis.recommendations.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-gray-600">
-                    Recommendations
-                  </h4>
+                  <h4 className="text-sm font-medium text-gray-600">Recommendations</h4>
                   <ul className="text-sm text-gray-700 space-y-1">
-                    {analysisResult.aiAnalysis.recommendations.map(
-                      (rec, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                          {rec}
-                        </li>
-                      ),
-                    )}
+                    {analysisResult.aiAnalysis.recommendations.map((rec, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                        {rec}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}
@@ -813,8 +778,8 @@ export function CCTVIntelligence() {
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex gap-3">
             <AlertTriangle className="w-5 h-5 text-blue-600 shrink-0" />
             <p className="text-sm text-blue-700">
-              <strong>Admin Note:</strong>{" "}
-              {activeTab === "live"
+              <strong>Admin Note:</strong>{' '}
+              {activeTab === 'live'
                 ? "Click 'Scan' to detect objects in the current frame. Detected items can be registered as found."
                 : "Select a lost item, upload a video, and click 'Analyze' to find keyframes where the item appears."}
             </p>

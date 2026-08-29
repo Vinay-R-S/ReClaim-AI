@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
-import { UserLayout } from "../../components/layout/UserLayout";
-import { useAuth } from "../../context/AuthContext";
-import { type Item } from "../../services/itemService";
+import { useState, useEffect, useRef } from 'react';
+import { UserLayout } from '../../components/layout/UserLayout';
+import { useAuth } from '../../context/AuthContext';
+import { type Item } from '../../services/itemService';
 import {
   Mail,
   Calendar,
@@ -12,12 +12,12 @@ import {
   Camera,
   Loader2,
   Clock,
-} from "lucide-react";
-import { Timestamp, doc, getDoc, updateDoc } from "firebase/firestore";
-import { updateProfile } from "firebase/auth";
-import { db } from "../../lib/firebase";
+} from 'lucide-react';
+import { Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { updateProfile } from 'firebase/auth';
+import { db } from '../../lib/firebase';
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface UserStats {
   totalReports: number;
@@ -30,16 +30,16 @@ interface UserStats {
 
 // Extract name from email (e.g., "john.doe@example.com" -> "John Doe")
 function getNameFromEmail(email: string | null | undefined): string {
-  if (!email) return "User";
+  if (!email) return 'User';
 
   // If email has a display name format, extract it
-  const localPart = email.split("@")[0];
+  const localPart = email.split('@')[0];
 
   // Convert "john.doe" to "John Doe" or "johndoe" to "Johndoe"
   const nameParts = localPart
     .split(/[._-]/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
+    .join(' ');
 
   return nameParts || email;
 }
@@ -72,7 +72,7 @@ export function ProfilePage() {
         setLoading(true);
 
         // Fetch user document from Firestore
-        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
           const data = userDoc.data();
           setUserData({
@@ -82,22 +82,16 @@ export function ProfilePage() {
         }
 
         // Fetch user's items
-        const itemsResponse = await fetch(
-          `${API_URL}/api/items?reportedBy=${user.uid}`,
-        );
+        const itemsResponse = await fetch(`${API_URL}/api/items?reportedBy=${user.uid}`);
         if (itemsResponse.ok) {
           const itemsData = await itemsResponse.json();
           const items: Item[] = itemsData.items || [];
 
-          const lostItems = items.filter((item) => item.type === "Lost").length;
-          const foundItems = items.filter(
-            (item) => item.type === "Found",
-          ).length;
-          const matchedItems = items.filter(
-            (item) => item.status === "Matched",
-          ).length;
+          const lostItems = items.filter((item) => item.type === 'Lost').length;
+          const foundItems = items.filter((item) => item.type === 'Found').length;
+          const matchedItems = items.filter((item) => item.status === 'Matched').length;
           const claimedItems = items.filter(
-            (item) => item.status === "Claimed" || item.status === "Resolved",
+            (item) => item.status === 'Claimed' || item.status === 'Resolved',
           ).length;
 
           setStats((prev) => ({
@@ -111,9 +105,7 @@ export function ProfilePage() {
         }
 
         // Fetch credits
-        const creditsResponse = await fetch(
-          `${API_URL}/api/credits/${user.uid}`,
-        );
+        const creditsResponse = await fetch(`${API_URL}/api/credits/${user.uid}`);
         if (creditsResponse.ok) {
           const creditsData = await creditsResponse.json();
           setStats((prev) => ({
@@ -122,7 +114,7 @@ export function ProfilePage() {
           }));
         }
       } catch (error) {
-        console.error("Error fetching profile data:", error);
+        console.error('Error fetching profile data:', error);
       } finally {
         setLoading(false);
       }
@@ -136,7 +128,7 @@ export function ProfilePage() {
 
   const formatDate = (date: Timestamp | Date | unknown) => {
     try {
-      if (!date) return "Not available";
+      if (!date) return 'Not available';
 
       let d: Date;
       if (date instanceof Timestamp) {
@@ -144,47 +136,47 @@ export function ProfilePage() {
       } else if (date instanceof Date) {
         d = date;
       } else if (
-        typeof date === "object" &&
+        typeof date === 'object' &&
         date !== null &&
-        ("seconds" in date || "_seconds" in date)
+        ('seconds' in date || '_seconds' in date)
       ) {
         const seconds =
           (date as { seconds?: number; _seconds?: number }).seconds ??
           (date as { _seconds: number })._seconds;
         d = new Date(seconds * 1000);
-      } else if (typeof date === "string") {
+      } else if (typeof date === 'string') {
         d = new Date(date);
       } else {
         d = new Date(date as number);
       }
 
       if (isNaN(d.getTime())) {
-        return "Not available";
+        return 'Not available';
       }
 
-      return d.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
+      return d.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
       });
     } catch {
-      return "Not available";
+      return 'Not available';
     }
   };
 
   const getUserInitials = () => {
     if (displayName) {
       return displayName
-        .split(" ")
+        .split(' ')
         .map((n) => n[0])
-        .join("")
+        .join('')
         .toUpperCase()
         .slice(0, 2);
     }
     if (user?.email) {
       return user.email[0].toUpperCase();
     }
-    return "U";
+    return 'U';
   };
 
   const compressImage = (file: File): Promise<string> => {
@@ -195,7 +187,7 @@ export function ProfilePage() {
         const img = new Image();
         img.src = event.target?.result as string;
         img.onload = () => {
-          const canvas = document.createElement("canvas");
+          const canvas = document.createElement('canvas');
           const MAX_WIDTH = 400;
           const MAX_HEIGHT = 400;
           let width = img.width;
@@ -215,10 +207,10 @@ export function ProfilePage() {
 
           canvas.width = width;
           canvas.height = height;
-          const ctx = canvas.getContext("2d");
+          const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
 
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
           resolve(dataUrl);
         };
         img.onerror = reject;
@@ -232,14 +224,14 @@ export function ProfilePage() {
     if (!file || !user?.uid) return;
 
     // Validate file type
-    if (!file.type.startsWith("image/")) {
-      alert("Please select an image file");
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
       return;
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert("Image size must be less than 5MB");
+      alert('Image size must be less than 5MB');
       return;
     }
 
@@ -264,9 +256,9 @@ export function ProfilePage() {
 
       // Upload to server (Cloudinary)
       const response = await fetch(`${API_URL}/api/settings/profile-picture`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           userId: user.uid,
@@ -276,7 +268,7 @@ export function ProfilePage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to upload profile picture");
+        throw new Error(errorData.error || 'Failed to upload profile picture');
       }
 
       const data = await response.json();
@@ -285,7 +277,7 @@ export function ProfilePage() {
       await updateProfile(user, { photoURL: data.photoURL });
 
       // Update Firestore user document locally
-      await updateDoc(doc(db, "users", user.uid), {
+      await updateDoc(doc(db, 'users', user.uid), {
         photoURL: data.photoURL,
       });
 
@@ -293,19 +285,17 @@ export function ProfilePage() {
       setPhotoPreview(null);
 
       // Show success message
-      alert("Profile picture updated successfully!");
+      alert('Profile picture updated successfully!');
     } catch (error: any) {
-      console.error("Error uploading profile picture:", error);
-      const errorMessage = error?.message || "Unknown error occurred";
-      console.error("Full error:", error);
-      alert(
-        `Failed to upload profile picture: ${errorMessage}. Please try again.`,
-      );
+      console.error('Error uploading profile picture:', error);
+      const errorMessage = error?.message || 'Unknown error occurred';
+      console.error('Full error:', error);
+      alert(`Failed to upload profile picture: ${errorMessage}. Please try again.`);
       setPhotoPreview(null);
     } finally {
       setUploadingPhoto(false);
       if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+        fileInputRef.current.value = '';
       }
     }
   };
@@ -326,9 +316,7 @@ export function ProfilePage() {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Profile</h1>
-          <p className="text-text-secondary mt-1">
-            View your account information and statistics
-          </p>
+          <p className="text-text-secondary mt-1">View your account information and statistics</p>
         </div>
 
         {/* Profile Card */}
@@ -339,7 +327,7 @@ export function ProfilePage() {
               <div className="w-32 h-32 rounded-full bg-gradient-to-br from-primary to-primary-hover flex items-center justify-center overflow-hidden shadow-lg">
                 {photoPreview || user?.photoURL ? (
                   <img
-                    src={photoPreview || user?.photoURL || ""}
+                    src={photoPreview || user?.photoURL || ''}
                     alt={displayName}
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
@@ -375,9 +363,7 @@ export function ProfilePage() {
 
             {/* User Info */}
             <div className="flex-1 text-center md:text-left">
-              <h2 className="text-3xl font-semibold text-text-primary mb-4">
-                {displayName}
-              </h2>
+              <h2 className="text-3xl font-semibold text-text-primary mb-4">{displayName}</h2>
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-2 text-text-secondary justify-center md:justify-start">
                   <Mail className="w-5 h-5" />
@@ -387,9 +373,7 @@ export function ProfilePage() {
                   <div className="flex items-center gap-2 text-sm text-text-secondary justify-center md:justify-start">
                     <Calendar className="w-5 h-5" />
                     <span>
-                      <span className="font-semibold text-text-primary">
-                        Member since:
-                      </span>{" "}
+                      <span className="font-semibold text-text-primary">Member since:</span>{' '}
                       {formatDate(userData.createdAt)}
                     </span>
                   </div>
@@ -398,9 +382,7 @@ export function ProfilePage() {
                   <div className="flex items-center gap-2 text-sm text-text-secondary justify-center md:justify-start">
                     <Clock className="w-5 h-5" />
                     <span>
-                      <span className="font-semibold text-text-primary">
-                        Last login:
-                      </span>{" "}
+                      <span className="font-semibold text-text-primary">Last login:</span>{' '}
                       {formatDate(userData.lastLoginAt)}
                     </span>
                   </div>
@@ -412,20 +394,14 @@ export function ProfilePage() {
 
         {/* Statistics Grid */}
         <div>
-          <h2 className="text-xl font-semibold text-text-primary mb-4">
-            Statistics
-          </h2>
+          <h2 className="text-xl font-semibold text-text-primary mb-4">Statistics</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Total Reports */}
             <div className="card p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-text-secondary mb-1">
-                    Total Reports
-                  </p>
-                  <p className="text-3xl font-bold text-text-primary">
-                    {stats.totalReports}
-                  </p>
+                  <p className="text-sm text-text-secondary mb-1">Total Reports</p>
+                  <p className="text-3xl font-bold text-text-primary">{stats.totalReports}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center">
                   <Package className="w-7 h-7 text-blue-600" />
@@ -438,9 +414,7 @@ export function ProfilePage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-text-secondary mb-1">Lost Items</p>
-                  <p className="text-3xl font-bold text-text-primary">
-                    {stats.lostItems}
-                  </p>
+                  <p className="text-3xl font-bold text-text-primary">{stats.lostItems}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
                   <Search className="w-7 h-7 text-red-600" />
@@ -452,12 +426,8 @@ export function ProfilePage() {
             <div className="card p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-text-secondary mb-1">
-                    Found Items
-                  </p>
-                  <p className="text-3xl font-bold text-text-primary">
-                    {stats.foundItems}
-                  </p>
+                  <p className="text-sm text-text-secondary mb-1">Found Items</p>
+                  <p className="text-3xl font-bold text-text-primary">{stats.foundItems}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center">
                   <Package className="w-7 h-7 text-green-600" />
@@ -469,12 +439,8 @@ export function ProfilePage() {
             <div className="card p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-text-secondary mb-1">
-                    Matched Items
-                  </p>
-                  <p className="text-3xl font-bold text-text-primary">
-                    {stats.matchedItems}
-                  </p>
+                  <p className="text-sm text-text-secondary mb-1">Matched Items</p>
+                  <p className="text-3xl font-bold text-text-primary">{stats.matchedItems}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-yellow-50 flex items-center justify-center">
                   <CheckCircle className="w-7 h-7 text-yellow-600" />
@@ -486,12 +452,8 @@ export function ProfilePage() {
             <div className="card p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-text-secondary mb-1">
-                    Claimed Items
-                  </p>
-                  <p className="text-3xl font-bold text-text-primary">
-                    {stats.claimedItems}
-                  </p>
+                  <p className="text-sm text-text-secondary mb-1">Claimed Items</p>
+                  <p className="text-3xl font-bold text-text-primary">{stats.claimedItems}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-purple-50 flex items-center justify-center">
                   <Award className="w-7 h-7 text-purple-600" />
@@ -504,9 +466,7 @@ export function ProfilePage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-text-secondary mb-1">Credits</p>
-                  <p className="text-3xl font-bold text-text-primary">
-                    {stats.credits}
-                  </p>
+                  <p className="text-3xl font-bold text-text-primary">{stats.credits}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-yellow-200 flex items-center justify-center">
                   <span className="text-3xl">🪙</span>

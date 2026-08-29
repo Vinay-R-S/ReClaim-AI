@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* Google Sans Font - loaded via preload in index.html for better performance */
 /* Font-display: swap is used to prevent render-blocking */
@@ -29,7 +29,7 @@ body {
   background-color: var(--color-background);
   color: var(--color-text-primary);
   font-family:
-    "Google Sans",
+    'Google Sans',
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;

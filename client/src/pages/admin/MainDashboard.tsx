@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { format, subDays, startOfDay } from "date-fns";
+import { useState, useEffect, useCallback } from 'react';
+import { format, subDays, startOfDay } from 'date-fns';
 import {
   Package,
   Search,
@@ -11,7 +11,7 @@ import {
   RefreshCw,
   Zap,
   HandMetal,
-} from "@/lib/icons";
+} from '@/lib/icons';
 import {
   BarChart,
   Bar,
@@ -26,12 +26,12 @@ import {
   Pie,
   Cell,
   Legend,
-} from "recharts";
-import { cn } from "@/lib/utils";
-import { getItems, type Item } from "@/services/itemService";
-import { getAllMatchesWithHistory, type Match } from "@/services/matchService";
-import { handoverService } from "@/services/handoverService";
-import { ItemHeatmap } from "@/components/admin/ItemHeatmap";
+} from 'recharts';
+import { cn } from '@/lib/utils';
+import { getItems, type Item } from '@/services/itemService';
+import { getAllMatchesWithHistory, type Match } from '@/services/matchService';
+import { handoverService } from '@/services/handoverService';
+import { ItemHeatmap } from '@/components/admin/ItemHeatmap';
 
 // ============================================================================
 // TYPES
@@ -112,22 +112,15 @@ interface KPICardProps {
   isPercentage?: boolean;
 }
 
-function KPICard({
-  title,
-  value,
-  icon,
-  subtext,
-  gradient,
-  isPercentage,
-}: KPICardProps) {
+function KPICard({ title, value, icon, subtext, gradient, isPercentage }: KPICardProps) {
   const animatedValue = useCountUp(value);
 
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl p-5 transition-all duration-300",
-        "hover:scale-[1.02] hover:shadow-xl cursor-pointer",
-        "border border-white/20",
+        'relative overflow-hidden rounded-2xl p-5 transition-all duration-300',
+        'hover:scale-[1.02] hover:shadow-xl cursor-pointer',
+        'border border-white/20',
         gradient,
       )}
     >
@@ -143,7 +136,7 @@ function KPICard({
 
         <p className="text-3xl font-bold text-white mb-1">
           {animatedValue.toLocaleString()}
-          {isPercentage ? "%" : ""}
+          {isPercentage ? '%' : ''}
         </p>
         <p className="text-white/90 font-medium text-sm">{title}</p>
         <p className="text-white/70 text-xs mt-1">{subtext}</p>
@@ -186,26 +179,21 @@ function MatchScoreChart({ data }: MatchScoreChartProps) {
     <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
       <div className="flex items-center gap-2 mb-4">
         <Activity className="w-5 h-5 text-primary" />
-        <h3 className="font-semibold text-text-primary">
-          Match Score Distribution
-        </h3>
+        <h3 className="font-semibold text-text-primary">Match Score Distribution</h3>
       </div>
 
       <ResponsiveContainer width="100%" height={280}>
-        <BarChart
-          data={data}
-          margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
-        >
+        <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="range" tick={{ fontSize: 12 }} />
           <YAxis tick={{ fontSize: 12 }} />
           <Tooltip
             contentStyle={{
-              borderRadius: "12px",
-              border: "none",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+              borderRadius: '12px',
+              border: 'none',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
             }}
-            formatter={(value: any) => [`${value} matches`, "Count"]}
+            formatter={(value: any) => [`${value} matches`, 'Count']}
           />
           <Bar dataKey="count" radius={[8, 8, 0, 0]}>
             {data.map((entry, index) => (
@@ -219,10 +207,7 @@ function MatchScoreChart({ data }: MatchScoreChartProps) {
       <div className="flex flex-wrap gap-4 mt-4 justify-center">
         {data.map((item, index) => (
           <div key={index} className="flex items-center gap-2 text-sm">
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: item.color }}
-            />
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
             <span className="text-text-secondary">{item.range}</span>
           </div>
         ))}
@@ -236,15 +221,11 @@ function MatchScoreChart({ data }: MatchScoreChartProps) {
 // ============================================================================
 interface MatchTrendChartProps {
   data: TrendData[];
-  timeRange: "7d" | "30d" | "all";
-  onRangeChange: (range: "7d" | "30d" | "all") => void;
+  timeRange: '7d' | '30d' | 'all';
+  onRangeChange: (range: '7d' | '30d' | 'all') => void;
 }
 
-function MatchTrendChart({
-  data,
-  timeRange,
-  onRangeChange,
-}: MatchTrendChartProps) {
+function MatchTrendChart({ data, timeRange, onRangeChange }: MatchTrendChartProps) {
   return (
     <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
       <div className="flex items-center justify-between mb-4">
@@ -253,40 +234,33 @@ function MatchTrendChart({
           <h3 className="font-semibold text-text-primary">Matches Over Time</h3>
         </div>
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          {(["7d", "30d", "all"] as const).map((range) => (
+          {(['7d', '30d', 'all'] as const).map((range) => (
             <button
               key={range}
               onClick={() => onRangeChange(range)}
               className={cn(
-                "px-3 py-1 text-xs font-medium rounded-md transition-colors",
+                'px-3 py-1 text-xs font-medium rounded-md transition-colors',
                 timeRange === range
-                  ? "bg-white text-primary shadow-sm"
-                  : "text-text-secondary hover:text-text-primary",
+                  ? 'bg-white text-primary shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary',
               )}
             >
-              {range === "7d"
-                ? "7 Days"
-                : range === "30d"
-                  ? "30 Days"
-                  : "All Time"}
+              {range === '7d' ? '7 Days' : range === '30d' ? '30 Days' : 'All Time'}
             </button>
           ))}
         </div>
       </div>
 
       <ResponsiveContainer width="100%" height={280}>
-        <LineChart
-          data={data}
-          margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
-        >
+        <LineChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="date" tick={{ fontSize: 11 }} />
           <YAxis tick={{ fontSize: 12 }} />
           <Tooltip
             contentStyle={{
-              borderRadius: "12px",
-              border: "none",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+              borderRadius: '12px',
+              border: 'none',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
             }}
           />
           <Line
@@ -294,8 +268,8 @@ function MatchTrendChart({
             dataKey="matches"
             stroke="#4285f4"
             strokeWidth={3}
-            dot={{ fill: "#4285f4", strokeWidth: 2, r: 4 }}
-            activeDot={{ r: 6, fill: "#4285f4" }}
+            dot={{ fill: '#4285f4', strokeWidth: 2, r: 4 }}
+            activeDot={{ r: 6, fill: '#4285f4' }}
           />
         </LineChart>
       </ResponsiveContainer>
@@ -316,14 +290,14 @@ function EfficiencyDonut({ matched, unmatched }: EfficiencyDonutProps) {
   const efficiency = total > 0 ? Math.round((matched / total) * 100) : 0;
 
   const data = [
-    { name: "Matched", value: matched, color: "#22c55e" },
-    { name: "Unmatched", value: unmatched, color: "#e5e7eb" },
+    { name: 'Matched', value: matched, color: '#22c55e' },
+    { name: 'Unmatched', value: unmatched, color: '#e5e7eb' },
   ];
 
   return (
     <div
       className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm h-full"
-      style={{ minHeight: "340px" }}
+      style={{ minHeight: '340px' }}
     >
       <div className="flex items-center gap-2 mb-4">
         <CheckCircle className="w-5 h-5 text-green-500" />
@@ -348,9 +322,9 @@ function EfficiencyDonut({ matched, unmatched }: EfficiencyDonutProps) {
             </Pie>
             <Tooltip
               contentStyle={{
-                borderRadius: "12px",
-                border: "none",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                borderRadius: '12px',
+                border: 'none',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
               }}
             />
             <Legend />
@@ -360,9 +334,7 @@ function EfficiencyDonut({ matched, unmatched }: EfficiencyDonutProps) {
         {/* Center text */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-center -mt-4">
-            <p className="text-3xl font-bold text-text-primary">
-              {efficiency}%
-            </p>
+            <p className="text-3xl font-bold text-text-primary">{efficiency}%</p>
             <p className="text-xs text-text-secondary">Success Rate</p>
           </div>
         </div>
@@ -383,24 +355,24 @@ function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
   const recentMatches = matches.slice(0, 3); // Show only 3 recent matches
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return "bg-green-500";
-    if (score >= 60) return "bg-blue-500";
-    if (score >= 40) return "bg-yellow-500";
-    return "bg-red-500";
+    if (score >= 80) return 'bg-green-500';
+    if (score >= 60) return 'bg-blue-500';
+    if (score >= 40) return 'bg-yellow-500';
+    return 'bg-red-500';
   };
 
   const formatMatchDate = (createdAt: unknown) => {
-    if (!createdAt) return "N/A";
+    if (!createdAt) return 'N/A';
     const ts = createdAt as { _seconds?: number; seconds?: number };
     const secs = ts._seconds ?? ts.seconds;
-    if (secs) return format(new Date(secs * 1000), "MMM d, h:mm a");
-    return "N/A";
+    if (secs) return format(new Date(secs * 1000), 'MMM d, h:mm a');
+    return 'N/A';
   };
 
   return (
     <div
       className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm h-full"
-      style={{ minHeight: "340px" }}
+      style={{ minHeight: '340px' }}
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -433,7 +405,7 @@ function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
                   {lostItem?.cloudinaryUrls?.[0] ? (
                     <img
                       src={lostItem.cloudinaryUrls[0]}
-                      alt={lostItem?.name || "Lost Item"}
+                      alt={lostItem?.name || 'Lost Item'}
                       className="w-10 h-10 rounded-lg object-cover"
                     />
                   ) : (
@@ -443,7 +415,7 @@ function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
                   )}
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-text-primary truncate">
-                      {lostItem?.name || "Unknown"}
+                      {lostItem?.name || 'Unknown'}
                     </p>
                     <p className="text-xs text-red-500">Lost</p>
                   </div>
@@ -453,7 +425,7 @@ function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
                 <div className="flex flex-col items-center gap-1">
                   <div
                     className={cn(
-                      "px-2 py-0.5 rounded-full text-white text-xs font-bold",
+                      'px-2 py-0.5 rounded-full text-white text-xs font-bold',
                       getScoreColor(match.matchScore),
                     )}
                   >
@@ -467,7 +439,7 @@ function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
                   {foundItem?.cloudinaryUrls?.[0] ? (
                     <img
                       src={foundItem.cloudinaryUrls[0]}
-                      alt={foundItem?.name || "Found Item"}
+                      alt={foundItem?.name || 'Found Item'}
                       className="w-10 h-10 rounded-lg object-cover"
                     />
                   ) : (
@@ -477,7 +449,7 @@ function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
                   )}
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-text-primary truncate">
-                      {foundItem?.name || "Unknown"}
+                      {foundItem?.name || 'Unknown'}
                     </p>
                     <p className="text-xs text-green-500">Found</p>
                   </div>
@@ -500,13 +472,13 @@ function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
 // ============================================================================
 interface HandoverTrendChartProps {
   handovers: HandoverRecord[];
-  timeRange: "7d" | "30d" | "all";
+  timeRange: '7d' | '30d' | 'all';
 }
 
 function HandoverTrendChart({ handovers, timeRange }: HandoverTrendChartProps) {
   // Calculate trend data based on time range
   const getTrendData = () => {
-    const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
+    const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
     const result: { date: string; handovers: number }[] = [];
 
     for (let i = days - 1; i >= 0; i--) {
@@ -522,7 +494,7 @@ function HandoverTrendChart({ handovers, timeRange }: HandoverTrendChartProps) {
       }).length;
 
       result.push({
-        date: format(day, timeRange === "7d" ? "EEE" : "MMM d"),
+        date: format(day, timeRange === '7d' ? 'EEE' : 'MMM d'),
         handovers: count,
       });
     }
@@ -546,25 +518,17 @@ function HandoverTrendChart({ handovers, timeRange }: HandoverTrendChartProps) {
       </div>
 
       <ResponsiveContainer width="100%" height={280}>
-        <BarChart
-          data={data}
-          margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
-        >
+        <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-          <YAxis
-            tick={{ fontSize: 12 }}
-            domain={[0, 5]}
-            allowDecimals={false}
-            tickCount={6}
-          />
+          <YAxis tick={{ fontSize: 12 }} domain={[0, 5]} allowDecimals={false} tickCount={6} />
           <Tooltip
             contentStyle={{
-              borderRadius: "12px",
-              border: "none",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+              borderRadius: '12px',
+              border: 'none',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
             }}
-            formatter={(value: any) => [`${value} handovers`, "Completed"]}
+            formatter={(value: any) => [`${value} handovers`, 'Completed']}
           />
           <Bar dataKey="handovers" fill="#22c55e" radius={[8, 8, 0, 0]} />
         </BarChart>
@@ -582,7 +546,7 @@ export function MainDashboard() {
   const [handovers, setHandovers] = useState<HandoverRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-  const [timeRange, setTimeRange] = useState<"7d" | "30d" | "all">("7d");
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('7d');
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -597,7 +561,7 @@ export function MainDashboard() {
       setHandovers(handoverData || []);
       setLastRefresh(new Date());
     } catch (error) {
-      console.error("Failed to fetch dashboard data:", error);
+      console.error('Failed to fetch dashboard data:', error);
     } finally {
       setLoading(false);
     }
@@ -615,26 +579,24 @@ export function MainDashboard() {
 
   // Calculate KPI data
   // Note: Claimed/Matched should only count LOST items (owners claim, finders hand over)
-  const lostItems = items.filter((i) => i.type === "Lost");
-  const foundItems = items.filter((i) => i.type === "Found");
+  const lostItems = items.filter((i) => i.type === 'Lost');
+  const foundItems = items.filter((i) => i.type === 'Found');
 
   const kpiData: KPIData = {
     totalItems: items.length,
-    activeLost: lostItems.filter((i) => i.status === "Pending").length,
-    activeFound: foundItems.filter((i) => i.status === "Pending").length,
+    activeLost: lostItems.filter((i) => i.status === 'Pending').length,
+    activeFound: foundItems.filter((i) => i.status === 'Pending').length,
     totalMatches: matches.length, // Match pairs from AI matching
-    pendingReview: items.filter((i) => i.status === "Pending").length,
+    pendingReview: items.filter((i) => i.status === 'Pending').length,
     // Only Lost items can be "Claimed" (owner claims their item)
-    claimed: lostItems.filter((i) => i.status === "Claimed").length,
+    claimed: lostItems.filter((i) => i.status === 'Claimed').length,
     // Count Lost items that are matched (awaiting handover)
-    matched: lostItems.filter((i) => i.status === "Matched").length,
+    matched: lostItems.filter((i) => i.status === 'Matched').length,
     // Success rate based on Lost items (how many lost items were reunited)
     matchSuccessRate:
       lostItems.length > 0
         ? Math.round(
-            (lostItems.filter(
-              (i) => i.status === "Matched" || i.status === "Claimed",
-            ).length /
+            (lostItems.filter((i) => i.status === 'Matched' || i.status === 'Claimed').length /
               lostItems.length) *
               100,
           )
@@ -644,32 +606,30 @@ export function MainDashboard() {
   // Calculate score distribution
   const scoreDistribution: ScoreDistribution[] = [
     {
-      range: "0-30%",
+      range: '0-30%',
       count: matches.filter((m) => m.matchScore <= 30).length,
-      color: "#ef4444",
+      color: '#ef4444',
     },
     {
-      range: "31-50%",
-      count: matches.filter((m) => m.matchScore > 30 && m.matchScore <= 50)
-        .length,
-      color: "#f59e0b",
+      range: '31-50%',
+      count: matches.filter((m) => m.matchScore > 30 && m.matchScore <= 50).length,
+      color: '#f59e0b',
     },
     {
-      range: "51-70%",
-      count: matches.filter((m) => m.matchScore > 50 && m.matchScore <= 70)
-        .length,
-      color: "#3b82f6",
+      range: '51-70%',
+      count: matches.filter((m) => m.matchScore > 50 && m.matchScore <= 70).length,
+      color: '#3b82f6',
     },
     {
-      range: "71-100%",
+      range: '71-100%',
       count: matches.filter((m) => m.matchScore > 70).length,
-      color: "#22c55e",
+      color: '#22c55e',
     },
   ];
 
   // Calculate trend data based on time range
   const getTrendData = (): TrendData[] => {
-    const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
+    const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
     const result: TrendData[] = [];
 
     for (let i = days - 1; i >= 0; i--) {
@@ -685,7 +645,7 @@ export function MainDashboard() {
       }).length;
 
       result.push({
-        date: format(day, timeRange === "7d" ? "EEE" : "MMM d"),
+        date: format(day, timeRange === '7d' ? 'EEE' : 'MMM d'),
         matches: count,
       });
     }
@@ -695,12 +655,12 @@ export function MainDashboard() {
 
   // Efficiency data - count only LOST items for success metrics
   // (Lost items get matched/claimed when they are successfully reunited)
-  const lostItemsForEfficiency = items.filter((i) => i.type === "Lost");
+  const lostItemsForEfficiency = items.filter((i) => i.type === 'Lost');
   const matchedLostItems = lostItemsForEfficiency.filter(
-    (i) => i.status === "Matched" || i.status === "Claimed",
+    (i) => i.status === 'Matched' || i.status === 'Claimed',
   ).length;
   const unmatchedLostItems = lostItemsForEfficiency.filter(
-    (i) => i.status !== "Matched" && i.status !== "Claimed",
+    (i) => i.status !== 'Matched' && i.status !== 'Claimed',
   ).length;
 
   if (loading) {
@@ -726,16 +686,14 @@ export function MainDashboard() {
       {/* Header with Refresh */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">
-            Dashboard Overview
-          </h1>
+          <h1 className="text-2xl font-bold text-text-primary">Dashboard Overview</h1>
           <p className="text-text-secondary text-sm">
             AI-powered insights for your lost & found system
           </p>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-text-secondary">
-            Last updated: {format(lastRefresh, "h:mm:ss a")}
+            Last updated: {format(lastRefresh, 'h:mm:ss a')}
           </span>
           <button
             onClick={fetchData}
@@ -797,19 +755,12 @@ export function MainDashboard() {
       {/* Charts Row 1: Score Distribution + Trend - Stack below 1280px */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <MatchScoreChart data={scoreDistribution} />
-        <MatchTrendChart
-          data={getTrendData()}
-          timeRange={timeRange}
-          onRangeChange={setTimeRange}
-        />
+        <MatchTrendChart data={getTrendData()} timeRange={timeRange} onRangeChange={setTimeRange} />
       </div>
 
       {/* Charts Row 2: Efficiency + Recent Matches - Stack below 1280px */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <EfficiencyDonut
-          matched={matchedLostItems}
-          unmatched={unmatchedLostItems}
-        />
+        <EfficiencyDonut matched={matchedLostItems} unmatched={unmatchedLostItems} />
         <div className="xl:col-span-2">
           <RecentMatchesPanel matches={matches} itemsMap={itemsMap} />
         </div>
@@ -830,32 +781,26 @@ export function MainDashboard() {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
           <div className="text-center p-4 bg-red-50 rounded-xl">
             <p className="text-2xl font-bold text-red-600">
-              {items.filter((i) => i.type === "Lost").length}
+              {items.filter((i) => i.type === 'Lost').length}
             </p>
             <p className="text-sm text-text-secondary">Lost</p>
           </div>
           <div className="text-center p-4 bg-blue-50 rounded-xl">
             <p className="text-2xl font-bold text-blue-600">
-              {items.filter((i) => i.type === "Found").length}
+              {items.filter((i) => i.type === 'Found').length}
             </p>
             <p className="text-sm text-text-secondary">Found</p>
           </div>
           <div className="text-center p-4 bg-green-50 rounded-xl">
-            <p className="text-2xl font-bold text-green-600">
-              {kpiData.matched}
-            </p>
+            <p className="text-2xl font-bold text-green-600">{kpiData.matched}</p>
             <p className="text-sm text-text-secondary">Matched</p>
           </div>
           <div className="text-center p-4 bg-purple-50 rounded-xl">
-            <p className="text-2xl font-bold text-purple-600">
-              {kpiData.claimed}
-            </p>
+            <p className="text-2xl font-bold text-purple-600">{kpiData.claimed}</p>
             <p className="text-sm text-text-secondary">Claimed</p>
           </div>
           <div className="text-center p-4 bg-orange-50 rounded-xl">
-            <p className="text-2xl font-bold text-orange-500">
-              {kpiData.pendingReview}
-            </p>
+            <p className="text-2xl font-bold text-orange-500">{kpiData.pendingReview}</p>
             <p className="text-sm text-text-secondary">Pending</p>
           </div>
         </div>

@@ -233,7 +233,7 @@ Added during the phase, not in the original scope:
 
 Exit: both builds pass, both linters exit 0, `pip install -r models/requirements.txt` parses, no behavior change.
 
-Outstanding: `npm run format:check` fails on 87 source files because the Prettier config contradicts the existing double-quoted style and no formatting pass has been run. Until that pass lands, `format:check` cannot be used as a CI gate.
+Outstanding, then resolved at the start of phase 2: `npm run format:check` failed on 97 files (39 in `server/`, 58 in `client/`) because the Prettier config contradicts the existing double-quoted style and no formatting pass had been run. The pass ran across both packages as the first commit of `refactor/reclaim-202-server-foundation`. It produces a content change in 92 of those files; the other five differ only in bytes that git's line-ending normalization already collapses, so they never appear in `git diff`. `format:check` now exits 0 in `server/` and `client/` and can be used as a CI gate in phase 17.
 
 ### Phase 2 - Server foundation: logging, config, error model, bootstrap
 
@@ -246,7 +246,19 @@ Fixes: ARCH-02, ARCH-07, ARCH-11, ARCH-12.
 - Split bootstrap: `app.ts` builds and exports the Express app with no side effects, and `server.ts` (or the existing `index.ts`) owns `dotenv`, config validation, and `app.listen`.
 - Convert every route handler to `asyncHandler` and make `errorHandler` the single exit path. Replace ad-hoc `res.status(500).json({ error })` with thrown `AppError`s so the JSON error shape is uniform.
 
+Decisions taken during the phase, not in the original scope:
+
+- Fail-fast is narrow on purpose. Only two problems abort boot, and only under `NODE_ENV=production`: a missing `FIREBASE_SERVICE_ACCOUNT_KEY` (nothing reads or writes without it) and a `CLIENT_URL` still pointing at localhost (CORS and every email link break). Missing Cloudinary, LLM, email or blockchain configuration is reported as a boot warning instead, because each of those paths already guards itself at runtime, and aborting on them would turn a partly configured deployment that used to serve degraded into a crash loop. This was tightened after code review; the first cut aborted on all of them.
+- A variable that is present but empty is treated as absent. `CLIENT_URL=` in a `.env` file would otherwise fail schema validation before the default could apply, and `LOG_LEVEL=INFO` would fail on casing, either of which would abort boot over a benign entry.
+- The bootstrap is a three-file chain rather than two. `index.ts` loads `dotenv` and dynamically imports `server.ts`, which validates config and calls `listen`, and `app.ts` exports a side-effect-free `createApp()`. The dynamic import is what guarantees `config/env.ts` parses a populated `process.env`.
+- The logger is the one module allowed to read `process.env` directly, because it has to be able to report a configuration failure that happened before `config/env.ts` finished parsing.
+- Redaction is two-layered: sensitive-looking metadata keys are replaced wholesale, and every surviving string is scrubbed for email addresses, bearer tokens, and provider API keys. `statusCode` and `errorCode` are allow-listed, or the substring rule would redact them.
+- `scripts/deploy-contract.ts` keeps its 13 `console.*` calls. It is a one-off operator CLI outside `src/`, and structured JSON logging would make its output worse.
+- Three handlers keep an internal `try/catch` because they return a meaningful fallback rather than an error (`GET /api/cctv/classes` returns 503 with a hint, `GET /api/settings/mode` falls back to defaults, `GET /api/notifications/status` cannot throw). They are still wrapped in `asyncHandler`.
+
 Exit: no `console.*` in `server/src`, boot fails loudly on a missing required variable, all endpoints return the same error envelope, both builds pass, regression matrix green.
+
+Delivered: 192 `console.*` calls replaced across 25 files, 42 route handlers wrapped, 40 `process.env` reads collapsed into one typed module, server lint down from 270 to 62 warnings. Verified by booting `dist/index.js`: production with an empty environment exits 1 listing all five problems at once, development boots with those problems as warnings, `/health` returns 200 and an unknown path returns the uniform 404 envelope.
 
 ### Phase 3 - Authentication and authorization lockdown
 
@@ -586,7 +598,7 @@ Run after every phase. Record pass or fail with the date, and note any regressio
 | ----- | --------------------------------------------- | ------- | -------- | ------------ | ------------ | ---------- | ------------------------------ |
 | 0     | `chore/reclaim-200-baseline`                  |         |          | PASS         | PASS         |            | Baseline captured at `48ff74e` |
 | 1     | `chore/reclaim-201-hygiene-and-config`        | 2026-08-29 | 2026-08-29 | PASS | PASS | n/a (no behaviour change) | ARCH-15, ARCH-16 fixed. ESLint now runs on server for the first time: 270 warnings (219 no-console, 33 any, 13 unused). Client lint 34 errors to 0 errors, 38 warnings. |
-| 2     | `refactor/reclaim-202-server-foundation`      |         |          |              |              |            |                                |
+| 2     | `refactor/reclaim-202-server-foundation`      | 2026-08-29 | 2026-08-29 | PASS | PASS | pending manual run | ARCH-02, ARCH-07, ARCH-11, ARCH-12 fixed. Opened with the phase 1 formatting pass (97 files, 92 with a content diff). 192 `console.*` calls in `src/` replaced by the redacting logger, 42 route handlers wrapped in `asyncHandler`, every `process.env` read moved into `config/env.ts`. Server lint 270 to 62 warnings. |
 | 3     | `fix/reclaim-203-auth-hardening`              |         |          |              |              |            |                                |
 | 4     | `feature/reclaim-204-validation-sanitization` |         |          |              |              |            |                                |
 | 5     | `fix/reclaim-205-secrets-and-rules`           |         |          |              |              |            |                                |

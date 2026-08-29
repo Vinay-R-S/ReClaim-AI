@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
-import { UserLayout } from "../../components/layout/UserLayout";
-import { useAuth } from "../../context/AuthContext";
-import { Package, Calendar, User, ExternalLink } from "lucide-react";
+import { useState, useEffect } from 'react';
+import { UserLayout } from '../../components/layout/UserLayout';
+import { useAuth } from '../../context/AuthContext';
+import { Package, Calendar, User, ExternalLink } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface HandoverRecord {
   id: string;
@@ -44,29 +44,27 @@ export function HandoversPage() {
         setHandovers(data.handovers || []);
       })
       .catch((err) => {
-        console.error("Failed to fetch handovers:", err);
+        console.error('Failed to fetch handovers:', err);
         setHandovers([]);
       })
       .finally(() => setLoading(false));
   }, [user?.uid]);
 
-  const formatDate = (
-    date: { seconds: number } | Date | string | number | undefined | null,
-  ) => {
-    if (!date) return "Date not available";
+  const formatDate = (date: { seconds: number } | Date | string | number | undefined | null) => {
+    if (!date) return 'Date not available';
 
     let d: Date;
 
     // Handle Firestore Timestamp object
-    if (typeof date === "object" && "seconds" in date) {
+    if (typeof date === 'object' && 'seconds' in date) {
       d = new Date(date.seconds * 1000);
     }
     // Handle ISO string or other string formats
-    else if (typeof date === "string") {
+    else if (typeof date === 'string') {
       d = new Date(date);
     }
     // Handle numeric timestamp (milliseconds)
-    else if (typeof date === "number") {
+    else if (typeof date === 'number') {
       d = new Date(date);
     }
     // Handle Date object
@@ -76,15 +74,15 @@ export function HandoversPage() {
 
     // Check for invalid date
     if (isNaN(d.getTime())) {
-      return "Date not available";
+      return 'Date not available';
     }
 
-    return d.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+    return d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
@@ -103,24 +101,18 @@ export function HandoversPage() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">
-            Handover History
-          </h1>
-          <p className="text-text-secondary mt-1">
-            View all your completed item handovers
-          </p>
+          <h1 className="text-2xl font-bold text-text-primary">Handover History</h1>
+          <p className="text-text-secondary mt-1">View all your completed item handovers</p>
         </div>
 
         {/* Handovers List */}
         {handovers.length === 0 ? (
           <div className="card p-12 text-center">
             <Package className="w-16 h-16 text-text-secondary mx-auto mb-4 opacity-50" />
-            <h3 className="text-lg font-medium text-text-primary mb-2">
-              No handovers yet
-            </h3>
+            <h3 className="text-lg font-medium text-text-primary mb-2">No handovers yet</h3>
             <p className="text-sm text-text-secondary">
-              Complete a handover to see it here. Handovers are recorded
-              immutably on the blockchain.
+              Complete a handover to see it here. Handovers are recorded immutably on the
+              blockchain.
             </p>
           </div>
         ) : (
@@ -129,7 +121,7 @@ export function HandoversPage() {
               <HandoverCard
                 key={handover.id}
                 handover={handover}
-                currentUserId={user?.uid || ""}
+                currentUserId={user?.uid || ''}
                 formatDate={formatDate}
               />
             ))}
@@ -143,16 +135,10 @@ export function HandoversPage() {
 interface HandoverCardProps {
   handover: HandoverRecord;
   currentUserId: string;
-  formatDate: (
-    date: { seconds: number } | Date | string | number | undefined | null,
-  ) => string;
+  formatDate: (date: { seconds: number } | Date | string | number | undefined | null) => string;
 }
 
-function HandoverCard({
-  handover,
-  currentUserId,
-  formatDate,
-}: HandoverCardProps) {
+function HandoverCard({ handover, currentUserId, formatDate }: HandoverCardProps) {
   const isLostPerson = handover.lostPersonDetails.userId === currentUserId;
   const isFoundPerson = handover.foundPersonDetails.userId === currentUserId;
 
@@ -175,16 +161,16 @@ function HandoverCard({
             <InfoRow
               icon={<User className="w-4 h-4 text-red-600" />}
               label="Lost by"
-              value={handover.lostPersonDetails.displayName || "Unknown"}
+              value={handover.lostPersonDetails.displayName || 'Unknown'}
               highlight={isLostPerson}
-              badge={isLostPerson ? "+10 credits" : undefined}
+              badge={isLostPerson ? '+10 credits' : undefined}
             />
             <InfoRow
               icon={<User className="w-4 h-4 text-green-600" />}
               label="Found by"
-              value={handover.foundPersonDetails.displayName || "Unknown"}
+              value={handover.foundPersonDetails.displayName || 'Unknown'}
               highlight={isFoundPerson}
-              badge={isFoundPerson ? "+20 credits" : undefined}
+              badge={isFoundPerson ? '+20 credits' : undefined}
             />
             <InfoRow
               icon={<Calendar className="w-4 h-4 text-blue-600" />}
@@ -223,9 +209,7 @@ function InfoRow({ icon, label, value, highlight, badge }: InfoRowProps) {
       {icon}
       <div className="flex-1">
         <p className="text-xs text-text-secondary">{label}</p>
-        <p
-          className={`text-sm ${highlight ? "font-semibold text-primary" : "text-text-primary"}`}
-        >
+        <p className={`text-sm ${highlight ? 'font-semibold text-primary' : 'text-text-primary'}`}>
           {value}
           {badge && (
             <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">

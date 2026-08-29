@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Search,
   Camera,
@@ -11,8 +11,8 @@ import {
   Menu,
   X,
   LogOut,
-} from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -22,21 +22,21 @@ export function LandingPage() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      navigate("/");
+      navigate('/');
     } catch (err) {
-      console.error("Error signing out:", err);
+      console.error('Error signing out:', err);
     }
   };
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
     if (mobileMenuOpen) {
-      document.body.style.overflow = "hidden";
+      document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     }
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     };
   }, [mobileMenuOpen]);
 
@@ -63,9 +63,7 @@ export function LandingPage() {
               height={40}
               className="w-10 h-10 object-contain rounded-full"
             />
-            <span className="font-medium text-xl text-text-primary">
-              ReClaim AI
-            </span>
+            <span className="font-medium text-xl text-text-primary">ReClaim AI</span>
           </Link>
 
           {/* Nav Links - Hidden on mobile */}
@@ -94,10 +92,7 @@ export function LandingPage() {
           <div className="flex items-center gap-2 sm:gap-3">
             {user ? (
               <>
-                <Link
-                  to="/app"
-                  className="btn-pill btn-primary text-sm sm:text-base px-4 sm:px-6"
-                >
+                <Link to="/app" className="btn-pill btn-primary text-sm sm:text-base px-4 sm:px-6">
                   Go to App
                 </Link>
                 <button
@@ -149,9 +144,7 @@ export function LandingPage() {
                   height={40}
                   className="w-10 h-10 object-contain rounded-full"
                 />
-                <span className="font-medium text-xl text-text-primary">
-                  ReClaim AI
-                </span>
+                <span className="font-medium text-xl text-text-primary">ReClaim AI</span>
               </div>
               <button
                 onClick={() => setMobileMenuOpen(false)}
@@ -238,9 +231,7 @@ export function LandingPage() {
           <div className="max-w-3xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 bg-surface rounded-full px-4 py-2 mb-6 border border-border">
               <Sparkles className="w-4 h-4 text-google-yellow" />
-              <span className="text-sm text-text-secondary">
-                Powered by Google Gemini AI
-              </span>
+              <span className="text-sm text-text-secondary">Powered by Google Gemini AI</span>
             </div>
 
             <h1 className="text-3xl sm:text-4xl lg:text-6xl font-medium text-text-primary mb-4 sm:mb-6 leading-tight">
@@ -249,9 +240,8 @@ export function LandingPage() {
             </h1>
 
             <p className="text-base sm:text-lg lg:text-xl text-text-secondary mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
-              ReClaim AI uses LLM-based semantic matching and visual similarity
-              to intelligently match lost items with found reports. Finding what
-              you've lost has never been easier.
+              ReClaim AI uses LLM-based semantic matching and visual similarity to intelligently
+              match lost items with found reports. Finding what you've lost has never been easier.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4">
@@ -279,36 +269,22 @@ export function LandingPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8 text-center">
             <div>
-              <p className="text-2xl sm:text-3xl lg:text-4xl font-medium text-primary">
-                95%
-              </p>
-              <p className="text-sm sm:text-base text-text-secondary mt-1">
-                Match Accuracy
-              </p>
+              <p className="text-2xl sm:text-3xl lg:text-4xl font-medium text-primary">95%</p>
+              <p className="text-sm sm:text-base text-text-secondary mt-1">Match Accuracy</p>
             </div>
             <div>
-              <p className="text-2xl sm:text-3xl lg:text-4xl font-medium text-google-green">
-                10K+
-              </p>
-              <p className="text-sm sm:text-base text-text-secondary mt-1">
-                Items Reunited
-              </p>
+              <p className="text-2xl sm:text-3xl lg:text-4xl font-medium text-google-green">10K+</p>
+              <p className="text-sm sm:text-base text-text-secondary mt-1">Items Reunited</p>
             </div>
             <div>
               <p className="text-2xl sm:text-3xl lg:text-4xl font-medium text-google-yellow">
                 24hrs
               </p>
-              <p className="text-sm sm:text-base text-text-secondary mt-1">
-                Avg. Match Time
-              </p>
+              <p className="text-sm sm:text-base text-text-secondary mt-1">Avg. Match Time</p>
             </div>
             <div>
-              <p className="text-2xl sm:text-3xl lg:text-4xl font-medium text-google-red">
-                50+
-              </p>
-              <p className="text-sm sm:text-base text-text-secondary mt-1">
-                Collection Points
-              </p>
+              <p className="text-2xl sm:text-3xl lg:text-4xl font-medium text-google-red">50+</p>
+              <p className="text-sm sm:text-base text-text-secondary mt-1">Collection Points</p>
             </div>
           </div>
         </div>
@@ -322,8 +298,8 @@ export function LandingPage() {
               Why Choose ReClaim AI?
             </h2>
             <p className="text-base sm:text-lg text-text-secondary max-w-2xl mx-auto">
-              Combining LLM semantic understanding with visual similarity for
-              unmatched accuracy in item matching
+              Combining LLM semantic understanding with visual similarity for unmatched accuracy in
+              item matching
             </p>
           </div>
 
@@ -395,8 +371,8 @@ export function LandingPage() {
             Ready to Find Your Lost Items?
           </h2>
           <p className="text-base sm:text-lg text-text-secondary mb-6 sm:mb-8 max-w-2xl mx-auto">
-            Join thousands of users who have successfully reunited with their
-            belongings using ReClaim AI
+            Join thousands of users who have successfully reunited with their belongings using
+            ReClaim AI
           </p>
           <Link
             to="/auth?mode=signup"
@@ -423,13 +399,11 @@ export function LandingPage() {
                   loading="lazy"
                   className="w-10 h-10 object-contain rounded-full"
                 />
-                <span className="font-medium text-xl text-text-primary">
-                  ReClaim AI
-                </span>
+                <span className="font-medium text-xl text-text-primary">ReClaim AI</span>
               </div>
               <p className="text-text-secondary max-w-md text-sm sm:text-base">
-                AI-powered lost and found platform that uses LLM-based semantic
-                matching to reunite people with their belongings.
+                AI-powered lost and found platform that uses LLM-based semantic matching to reunite
+                people with their belongings.
               </p>
               <div className="flex items-center gap-2 mt-4 text-sm text-text-secondary">
                 <Zap className="w-4 h-4 text-google-yellow" />
@@ -539,9 +513,7 @@ function FeatureCard({ icon, iconBg, title, description }: FeatureCardProps) {
       >
         {icon}
       </div>
-      <h3 className="font-medium text-text-primary mb-2 text-sm sm:text-base">
-        {title}
-      </h3>
+      <h3 className="font-medium text-text-primary mb-2 text-sm sm:text-base">{title}</h3>
       <p className="text-xs sm:text-sm text-text-secondary">{description}</p>
     </div>
   );
@@ -560,9 +532,7 @@ function StepCard({ number, title, description }: StepCardProps) {
       <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-primary text-white text-xl sm:text-2xl font-medium flex items-center justify-center mx-auto mb-3 sm:mb-4">
         {number}
       </div>
-      <h3 className="font-medium text-text-primary text-base sm:text-lg mb-2">
-        {title}
-      </h3>
+      <h3 className="font-medium text-text-primary text-base sm:text-lg mb-2">{title}</h3>
       <p className="text-sm sm:text-base text-text-secondary">{description}</p>
     </div>
   );

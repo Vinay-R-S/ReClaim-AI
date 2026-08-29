@@ -1,4 +1,11 @@
-// Main Express app - imported dynamically after env vars are loaded
+/**
+ * Express application factory.
+ *
+ * Building the app has no side effects: no `dotenv`, no `listen`, no process
+ * exit. `server.ts` owns the process lifecycle. Keeping them apart is what lets
+ * tests import the app and drive it without opening a port.
+ */
+
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import compression from 'compression';
@@ -14,11 +21,18 @@ import handoversRoutes from './routes/handovers.js';
 import creditsRoutes from './routes/credits.js';
 import authRoutes from './routes/auth.js';
 import cctvRoutes from './routes/cctv.js';
-import { authLimiter, apiLimiter, testingApiLimiter, errorHandler, notFoundHandler } from './middleware/index.js';
+import {
+  authLimiter,
+  apiLimiter,
+  testingApiLimiter,
+  errorHandler,
+  notFoundHandler,
+} from './middleware/index.js';
 import { collections } from './utils/firebase-admin.js';
+import { env } from './config/env.js';
+import { createLogger } from './utils/logger.js';
 
-const app = express();
-const PORT = process.env.PORT || 3001;
+const log = createLogger('app');
 
 // Cache testing mode to avoid hitting Firebase on every request
 let testingModeCache: boolean | null = null;
@@ -26,105 +40,107 @@ let lastCacheUpdate = 0;
 const CACHE_TTL = 60000; // 1 minute cache
 
 async function isTestingModeEnabled(): Promise<boolean> {
-    const now = Date.now();
-    if (testingModeCache !== null && (now - lastCacheUpdate) < CACHE_TTL) {
-        return testingModeCache;
-    }
+  const now = Date.now();
+  if (testingModeCache !== null && now - lastCacheUpdate < CACHE_TTL) {
+    return testingModeCache;
+  }
 
-    try {
-        const doc = await collections.settings.doc('system').get();
-        testingModeCache = doc.exists ? doc.data()?.testingMode === true : false;
-        lastCacheUpdate = now;
-        return testingModeCache;
-    } catch (error) {
-        console.warn('Failed to check testing mode, defaulting to false:', error);
-        return false;
-    }
+  try {
+    const doc = await collections.settings.doc('system').get();
+    testingModeCache = doc.exists ? doc.data()?.testingMode === true : false;
+    lastCacheUpdate = now;
+    return testingModeCache;
+  } catch (error) {
+    log.warn('Failed to check testing mode, defaulting to false', { error });
+    return false;
+  }
 }
 
-// Trust proxy - Required for Render/Vercel deployment (fixes express-rate-limit X-Forwarded-For issue)
-// Set to 1 to trust the first proxy hop
-app.set('trust proxy', 1);
+export function createApp(): express.Express {
+  const app = express();
 
-// SECURITY MIDDLEWARE
+  // Trust proxy - Required for Render/Vercel deployment (fixes express-rate-limit X-Forwarded-For issue)
+  // Set to 1 to trust the first proxy hop
+  app.set('trust proxy', 1);
 
-app.use(compression({
-    threshold: 1024,
-    filter: (req, res) => {
+  // SECURITY MIDDLEWARE
+
+  app.use(
+    compression({
+      threshold: 1024,
+      filter: (req, res) => {
         if (req.headers['x-no-compression']) return false;
         return compression.filter(req, res);
-    }
-}));
+      },
+    }),
+  );
 
-// Security headers (XSS, clickjacking, content-type sniffing protection)
-app.use(helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-    contentSecurityPolicy: false,
-}));
+  // Security headers (XSS, clickjacking, content-type sniffing protection)
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      contentSecurityPolicy: false,
+    }),
+  );
 
-// CORS configuration with credentials support
-app.use(cors({
-    origin: [
-        'https://re-claim-ai.vercel.app',
-        process.env.CLIENT_URL || 'http://localhost:5173',
-        'http://localhost:4173'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+  // CORS configuration with credentials support
+  app.use(
+    cors({
+      origin: ['https://re-claim-ai.vercel.app', env.clientUrl, 'http://localhost:4173'],
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    }),
+  );
 
-// Rate limiting on auth routes (stricter)
-app.use('/api/auth', authLimiter);
+  // Rate limiting on auth routes (stricter)
+  app.use('/api/auth', authLimiter);
 
-// Conditional testing mode rate limiting (400 calls/day when enabled)
-app.use('/api', async (req: Request, res: Response, next: NextFunction) => {
+  // Conditional testing mode rate limiting (400 calls/day when enabled)
+  app.use('/api', async (req: Request, res: Response, next: NextFunction) => {
     const isTestingMode = await isTestingModeEnabled();
     if (isTestingMode) {
-        return testingApiLimiter(req, res, next);
+      return testingApiLimiter(req, res, next);
     }
     // In Dev mode, use standard rate limiting
     return apiLimiter(req, res, next);
-});
+  });
 
-// BODY PARSING
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  // BODY PARSING
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// HEALTH CHECK
-app.get('/health', (req, res) => {
+  // HEALTH CHECK
+  app.get('/health', (req, res) => {
     res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development'
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      environment: env.nodeEnv,
     });
-});
+  });
 
-// API ROUTES
+  // API ROUTES
 
-app.use('/api/items', itemsRoutes);
-app.use('/api/matches', matchesRoutes);
-app.use('/api/notifications', notificationsRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/verification', verificationRoutes);
-app.use('/api/handover', handoverRoutes);
-app.use('/api/handovers', handoversRoutes);
-app.use('/api/credits', creditsRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/cctv', cctvRoutes);
+  app.use('/api/items', itemsRoutes);
+  app.use('/api/matches', matchesRoutes);
+  app.use('/api/notifications', notificationsRoutes);
+  app.use('/api/settings', settingsRoutes);
+  app.use('/api/verification', verificationRoutes);
+  app.use('/api/handover', handoverRoutes);
+  app.use('/api/handovers', handoversRoutes);
+  app.use('/api/credits', creditsRoutes);
+  app.use('/api/auth', authRoutes);
+  app.use('/api/cctv', cctvRoutes);
 
-// ERROR HANDLING
+  // ERROR HANDLING
 
-// 404 handler for undefined routes
-app.use(notFoundHandler);
+  // 404 handler for undefined routes
+  app.use(notFoundHandler);
 
-// Global error handler (must be last)
-app.use(errorHandler);
+  // Global error handler (must be last)
+  app.use(errorHandler);
 
-// START SERVER
-app.listen(PORT, () => {
-    console.log(`ReClaim AI Server running on http://localhost:${PORT}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+  return app;
+}
 
-export default app;
+export default createApp;

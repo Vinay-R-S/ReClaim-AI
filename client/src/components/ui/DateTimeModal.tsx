@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { DayPicker } from "react-day-picker";
-import { format } from "date-fns";
-import { X, Calendar, Clock } from "lucide-react";
-import "react-day-picker/dist/style.css";
+import { useState } from 'react';
+import { DayPicker } from 'react-day-picker';
+import { format } from 'date-fns';
+import { X, Calendar, Clock } from 'lucide-react';
+import 'react-day-picker/dist/style.css';
 
 interface DateTimeModalProps {
   isOpen: boolean;
@@ -10,17 +10,11 @@ interface DateTimeModalProps {
   onSelectDateTime: (dateTime: Date) => void;
 }
 
-export function DateTimeModal({
-  isOpen,
-  onClose,
-  onSelectDateTime,
-}: DateTimeModalProps) {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
-    new Date()
-  );
-  const [selectedHour, setSelectedHour] = useState("12");
-  const [selectedMinute, setSelectedMinute] = useState("00");
-  const [ampm, setAmpm] = useState<"AM" | "PM">("PM");
+export function DateTimeModal({ isOpen, onClose, onSelectDateTime }: DateTimeModalProps) {
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedHour, setSelectedHour] = useState('12');
+  const [selectedMinute, setSelectedMinute] = useState('00');
+  const [ampm, setAmpm] = useState<'AM' | 'PM'>('PM');
 
   if (!isOpen) return null;
 
@@ -31,9 +25,9 @@ export function DateTimeModal({
     let hour = parseInt(selectedHour);
 
     // Convert to 24-hour format
-    if (ampm === "PM" && hour !== 12) {
+    if (ampm === 'PM' && hour !== 12) {
       hour += 12;
-    } else if (ampm === "AM" && hour === 12) {
+    } else if (ampm === 'AM' && hour === 12) {
       hour = 0;
     }
 
@@ -42,10 +36,8 @@ export function DateTimeModal({
     onClose();
   };
 
-  const hours = Array.from({ length: 12 }, (_, i) =>
-    (i + 1).toString().padStart(2, "0")
-  );
-  const minutes = ["00", "15", "30", "45"];
+  const hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+  const minutes = ['00', '15', '30', '45'];
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -72,8 +64,8 @@ export function DateTimeModal({
             onSelect={setSelectedDate}
             className="!m-0"
             styles={{
-              caption: { color: "#1e40af" },
-              day_selected: { backgroundColor: "#3b82f6" },
+              caption: { color: '#1e40af' },
+              day_selected: { backgroundColor: '#3b82f6' },
             }}
           />
         </div>
@@ -110,21 +102,21 @@ export function DateTimeModal({
             </select>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               <button
-                onClick={() => setAmpm("AM")}
+                onClick={() => setAmpm('AM')}
                 className={`px-3 py-2 text-sm font-medium transition-colors ${
-                  ampm === "AM"
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                  ampm === 'AM'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 AM
               </button>
               <button
-                onClick={() => setAmpm("PM")}
+                onClick={() => setAmpm('PM')}
                 className={`px-3 py-2 text-sm font-medium transition-colors ${
-                  ampm === "PM"
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                  ampm === 'PM'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 PM
@@ -138,8 +130,8 @@ export function DateTimeModal({
           <div className="px-4 pb-4">
             <div className="bg-blue-50 rounded-lg p-3 text-center">
               <p className="text-sm text-blue-600 font-medium">
-                {format(selectedDate, "EEEE, MMMM d, yyyy")} at {selectedHour}:
-                {selectedMinute} {ampm}
+                {format(selectedDate, 'EEEE, MMMM d, yyyy')} at {selectedHour}:{selectedMinute}{' '}
+                {ampm}
               </p>
             </div>
           </div>

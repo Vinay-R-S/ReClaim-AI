@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import { handoverService } from "../services/handoverService";
-import { AlertTriangle, CheckCircle, Lock } from "lucide-react";
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { handoverService } from '../services/handoverService';
+import { AlertTriangle, CheckCircle, Lock } from 'lucide-react';
 
 export default function VerifyHandoverPage() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
-  const [code, setCode] = useState<string[]>(["", "", "", "", "", ""]);
-  const [status, setStatus] = useState<
-    "idle" | "loading" | "success" | "error" | "blocked"
-  >("idle");
-  const [message, setMessage] = useState("");
+  const [code, setCode] = useState<string[]>(['', '', '', '', '', '']);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error' | 'blocked'>(
+    'idle',
+  );
+  const [message, setMessage] = useState('');
   const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -28,27 +28,19 @@ export default function VerifyHandoverPage() {
       const statusData = await handoverService.getStatus(matchId);
       setAttemptsLeft(statusData.maxAttempts - statusData.attempts);
 
-      if (statusData.status === "completed") {
-        setStatus("success");
-        setMessage("This handover has already been completed.");
-      } else if (
-        statusData.status === "failed" ||
-        statusData.status === "blocked"
-      ) {
-        setStatus("blocked");
-        setMessage("Too many failed attempts. This handover is blocked.");
+      if (statusData.status === 'completed') {
+        setStatus('success');
+        setMessage('This handover has already been completed.');
+      } else if (statusData.status === 'failed' || statusData.status === 'blocked') {
+        setStatus('blocked');
+        setMessage('Too many failed attempts. This handover is blocked.');
       }
     } catch (error: any) {
-      console.error("Failed to get status", error);
+      console.error('Failed to get status', error);
       // If 404, handover session doesn't exist
-      if (
-        error?.message?.includes("404") ||
-        error?.message?.includes("Failed")
-      ) {
-        setStatus("error");
-        setMessage(
-          "Handover session not found. The verification link may be invalid or expired.",
-        );
+      if (error?.message?.includes('404') || error?.message?.includes('Failed')) {
+        setStatus('error');
+        setMessage('Handover session not found. The verification link may be invalid or expired.');
       }
     }
   };
@@ -67,14 +59,14 @@ export default function VerifyHandoverPage() {
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace" && !code[index] && index > 0) {
+    if (e.key === 'Backspace' && !code[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
-    const pastedData = e.clipboardData.getData("text").slice(0, 6).split("");
+    const pastedData = e.clipboardData.getData('text').slice(0, 6).split('');
     if (pastedData.every((char) => /^\d$/.test(char))) {
       const newCode = [...code];
       pastedData.forEach((char, i) => {
@@ -89,26 +81,24 @@ export default function VerifyHandoverPage() {
     e.preventDefault();
     if (!matchId) return;
 
-    const fullCode = code.join("");
+    const fullCode = code.join('');
     if (fullCode.length !== 6) {
-      setMessage("Please enter a complete 6-digit code.");
+      setMessage('Please enter a complete 6-digit code.');
       return;
     }
 
-    setStatus("loading");
-    setMessage("");
+    setStatus('loading');
+    setMessage('');
 
     try {
       const result = await handoverService.verifyCode(matchId, fullCode);
 
       if (result.success) {
-        setStatus("success");
-        setMessage(
-          "Handover verified successfully! Thank you for helping return the item.",
-        );
+        setStatus('success');
+        setMessage('Handover verified successfully! Thank you for helping return the item.');
       } else {
-        setStatus("error");
-        setMessage(result.message || "Invalid code. Please try again.");
+        setStatus('error');
+        setMessage(result.message || 'Invalid code. Please try again.');
         if (result.attemptsRemaining !== undefined) {
           setAttemptsLeft(result.attemptsRemaining);
         }
@@ -116,19 +106,17 @@ export default function VerifyHandoverPage() {
         checkStatus();
       }
     } catch (error: any) {
-      console.error("Verification error:", error);
-      setStatus("error");
-      setMessage(
-        error.response?.data?.error || "Verification failed. Please try again.",
-      );
+      console.error('Verification error:', error);
+      setStatus('error');
+      setMessage(error.response?.data?.error || 'Verification failed. Please try again.');
     }
   };
 
   // Google Colors
-  const googleBlue = "#4285F4";
-  const googleRed = "#EA4335";
-  const googleYellow = "#FBBC05";
-  const googleGreen = "#34A853";
+  const googleBlue = '#4285F4';
+  const googleRed = '#EA4335';
+  const googleYellow = '#FBBC05';
+  const googleGreen = '#34A853';
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
@@ -143,7 +131,7 @@ export default function VerifyHandoverPage() {
       <div className="flex-grow flex items-center justify-center p-4">
         <div
           className="max-w-md w-full bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden transition-all duration-300"
-          style={{ borderRadius: "8px" }}
+          style={{ borderRadius: '8px' }}
         >
           {/* Google-style Header */}
           <div className="pt-8 pb-4 px-8 text-center border-b border-gray-100">
@@ -163,58 +151,45 @@ export default function VerifyHandoverPage() {
               </span>
             </div>
 
-            <h1 className="text-xl font-normal text-gray-800 mb-1">
-              Verify Handover
-            </h1>
+            <h1 className="text-xl font-normal text-gray-800 mb-1">Verify Handover</h1>
             <p className="text-gray-500 text-sm">
               Enter the 6-digit code to confirm the item exchange
             </p>
           </div>
 
           <div className="p-8">
-            {status === "success" ? (
+            {status === 'success' ? (
               <div className="text-center">
                 <div
                   className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-                  style={{ backgroundColor: "#E6F4EA" }}
+                  style={{ backgroundColor: '#E6F4EA' }}
                 >
-                  <CheckCircle
-                    className="w-8 h-8"
-                    style={{ color: googleGreen }}
-                  />
+                  <CheckCircle className="w-8 h-8" style={{ color: googleGreen }} />
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-1">
-                  Handover Verified
-                </h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-1">Handover Verified</h3>
                 <p className="text-gray-600 mb-6 text-sm">{message}</p>
                 <button
-                  onClick={() => navigate("/")}
+                  onClick={() => navigate('/')}
                   className="px-6 py-2 rounded text-white font-medium text-sm transition-colors hover:opacity-90"
                   style={{ backgroundColor: googleBlue }}
                 >
                   Return to Home
                 </button>
               </div>
-            ) : status === "blocked" ? (
+            ) : status === 'blocked' ? (
               <div className="text-center">
                 <div
                   className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-                  style={{ backgroundColor: "#FCE8E6" }}
+                  style={{ backgroundColor: '#FCE8E6' }}
                 >
-                  <AlertTriangle
-                    className="w-8 h-8"
-                    style={{ color: googleRed }}
-                  />
+                  <AlertTriangle className="w-8 h-8" style={{ color: googleRed }} />
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-1">
-                  Verification Failed
-                </h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-1">Verification Failed</h3>
                 <p className="text-gray-600 mb-6 text-sm">
-                  Too many failed attempts. For security, this transaction has
-                  been blocked.
+                  Too many failed attempts. For security, this transaction has been blocked.
                 </p>
                 <button
-                  onClick={() => navigate("/contact")}
+                  onClick={() => navigate('/contact')}
                   className="text-sm font-medium hover:underline"
                   style={{ color: googleBlue }}
                 >
@@ -223,10 +198,7 @@ export default function VerifyHandoverPage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit}>
-                <div
-                  className="flex gap-3 justify-center mb-6"
-                  onPaste={handlePaste}
-                >
+                <div className="flex gap-3 justify-center mb-6" onPaste={handlePaste}>
                   {code.map((digit, idx) => (
                     <input
                       key={idx}
@@ -238,15 +210,15 @@ export default function VerifyHandoverPage() {
                       onChange={(e) => handleInput(idx, e.target.value)}
                       onKeyDown={(e) => handleKeyDown(idx, e)}
                       className="w-11 h-12 border border-gray-300 rounded text-center text-xl font-medium focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-gray-800"
-                      disabled={status === "loading"}
+                      disabled={status === 'loading'}
                     />
                   ))}
                 </div>
 
-                {message && status === "error" && (
+                {message && status === 'error' && (
                   <div
                     className="flex items-start gap-3 text-left mb-4 text-sm p-3 rounded"
-                    style={{ backgroundColor: "#FCE8E6", color: "#D93025" }}
+                    style={{ backgroundColor: '#FCE8E6', color: '#D93025' }}
                   >
                     <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
                     <span>{message}</span>
@@ -254,30 +226,25 @@ export default function VerifyHandoverPage() {
                 )}
 
                 {attemptsLeft !== null && attemptsLeft <= 2 && (
-                  <p
-                    className="text-center text-sm font-medium mb-4"
-                    style={{ color: "#D93025" }}
-                  >
+                  <p className="text-center text-sm font-medium mb-4" style={{ color: '#D93025' }}>
                     {attemptsLeft} attempts remaining
                   </p>
                 )}
 
                 <button
                   type="submit"
-                  disabled={status === "loading" || code.join("").length !== 6}
+                  disabled={status === 'loading' || code.join('').length !== 6}
                   className={`w-full py-3 rounded font-medium text-sm transition-all ${
-                    status === "loading" || code.join("").length !== 6
-                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : "text-white hover:shadow-md"
+                    status === 'loading' || code.join('').length !== 6
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'text-white hover:shadow-md'
                   }`}
                   style={{
                     backgroundColor:
-                      status === "loading" || code.join("").length !== 6
-                        ? "#F1F3F4"
-                        : googleBlue,
+                      status === 'loading' || code.join('').length !== 6 ? '#F1F3F4' : googleBlue,
                   }}
                 >
-                  {status === "loading" ? "Verifying..." : "Verify Code"}
+                  {status === 'loading' ? 'Verifying...' : 'Verify Code'}
                 </button>
               </form>
             )}

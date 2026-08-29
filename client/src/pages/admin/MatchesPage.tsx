@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { format } from "date-fns";
-import { Search, RefreshCw, Package } from "lucide-react";
-import { getAllMatches, type Match } from "@/services/matchService";
-import { getItems, type Item } from "@/services/itemService";
+import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
+import { Search, RefreshCw, Package } from 'lucide-react';
+import { getAllMatches, type Match } from '@/services/matchService';
+import { getItems, type Item } from '@/services/itemService';
 
 // Extended match with item names
 interface MatchWithNames extends Match {
@@ -15,17 +15,14 @@ interface MatchWithNames extends Match {
 export function MatchesPage() {
   const [matches, setMatches] = useState<MatchWithNames[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
 
   const fetchMatches = async () => {
     try {
       setLoading(true);
 
       // Fetch matches and items in parallel
-      const [matchesData, itemsData] = await Promise.all([
-        getAllMatches(),
-        getItems(),
-      ]);
+      const [matchesData, itemsData] = await Promise.all([getAllMatches(), getItems()]);
 
       // Create a lookup map for items by ID
       const itemsMap = new Map<string, Item>();
@@ -39,8 +36,8 @@ export function MatchesPage() {
         const foundItem = itemsMap.get(match.foundItemId);
         return {
           ...match,
-          lostItemName: lostItem?.name || "Unknown Item",
-          foundItemName: foundItem?.name || "Unknown Item",
+          lostItemName: lostItem?.name || 'Unknown Item',
+          foundItemName: foundItem?.name || 'Unknown Item',
           lostItemImage: lostItem?.cloudinaryUrls?.[0] || lostItem?.imageUrl,
           foundItemImage: foundItem?.cloudinaryUrls?.[0] || foundItem?.imageUrl,
         };
@@ -48,7 +45,7 @@ export function MatchesPage() {
 
       setMatches(enrichedMatches);
     } catch (error) {
-      console.error("Failed to fetch matches:", error);
+      console.error('Failed to fetch matches:', error);
     } finally {
       setLoading(false);
     }
@@ -124,13 +121,8 @@ export function MatchesPage() {
               <tbody>
                 {filteredMatches.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={5}
-                      className="text-center py-12 text-text-secondary"
-                    >
-                      {searchTerm
-                        ? "No matches found matching your search"
-                        : "No matches found"}
+                    <td colSpan={5} className="text-center py-12 text-text-secondary">
+                      {searchTerm ? 'No matches found matching your search' : 'No matches found'}
                     </td>
                   </tr>
                 ) : (
@@ -176,7 +168,7 @@ export function MatchesPage() {
                         </div>
                       </td>
                       <td
-                        className={`py-3 px-4 text-sm font-bold ${match.matchScore >= 60 ? "text-green-600" : "text-blue-600"}`}
+                        className={`py-3 px-4 text-sm font-bold ${match.matchScore >= 60 ? 'text-green-600' : 'text-blue-600'}`}
                       >
                         {match.matchScore}%
                       </td>
@@ -187,15 +179,14 @@ export function MatchesPage() {
                       </td>
                       <td className="py-3 px-4 text-sm text-text-secondary">
                         {(() => {
-                          if (!match.createdAt) return "-";
+                          if (!match.createdAt) return '-';
                           const ts = match.createdAt as {
                             _seconds?: number;
                             seconds?: number;
                           };
                           const secs = ts._seconds ?? ts.seconds;
-                          if (secs)
-                            return format(new Date(secs * 1000), "MMM d, yyyy");
-                          return "-";
+                          if (secs) return format(new Date(secs * 1000), 'MMM d, yyyy');
+                          return '-';
                         })()}
                       </td>
                     </tr>

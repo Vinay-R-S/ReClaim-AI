@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useState, useRef, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -13,11 +13,11 @@ import {
   Video,
   Menu,
   X,
-} from "@/lib/icons";
-import { cn } from "../../lib/utils";
-import { useAuth } from "../../context/AuthContext";
-import { getItems } from "../../services/itemService";
-import { getAllMatches } from "../../services/matchService";
+} from '@/lib/icons';
+import { cn } from '../../lib/utils';
+import { useAuth } from '../../context/AuthContext';
+import { getItems } from '../../services/itemService';
+import { getAllMatches } from '../../services/matchService';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -29,7 +29,7 @@ interface SidebarCounts {
   pendingItems: number;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const location = useLocation();
@@ -49,14 +49,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const [items, matches] = await Promise.all([
-          getItems(),
-          getAllMatches(),
-        ]);
+        const [items, matches] = await Promise.all([getItems(), getAllMatches()]);
 
-        const pendingItems = items.filter(
-          (item) => item.status === "Pending",
-        ).length;
+        const pendingItems = items.filter((item) => item.status === 'Pending').length;
 
         setCounts({
           allItems: items.length, // Total items (Lost + Found)
@@ -64,7 +59,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           pendingItems: pendingItems,
         });
       } catch (error) {
-        console.error("Failed to fetch sidebar counts:", error);
+        console.error('Failed to fetch sidebar counts:', error);
       }
     };
 
@@ -85,7 +80,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           setCctvEnabled(data.cctvEnabled !== false);
         }
       } catch (error) {
-        console.error("Failed to fetch settings:", error);
+        console.error('Failed to fetch settings:', error);
       }
     };
     fetchSettings();
@@ -98,8 +93,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         setShowUserMenu(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Close mobile menu on route change
@@ -110,21 +105,21 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   // Lock body scroll when mobile menu is open
   useEffect(() => {
     if (mobileMenuOpen) {
-      document.body.style.overflow = "hidden";
+      document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     }
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     };
   }, [mobileMenuOpen]);
 
   const handleSignOut = async () => {
     try {
       await signOut();
-      navigate("/");
+      navigate('/');
     } catch (err) {
-      console.error("Error signing out:", err);
+      console.error('Error signing out:', err);
     }
   };
 
@@ -132,74 +127,74 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const getUserInitials = () => {
     if (user?.displayName) {
       return user.displayName
-        .split(" ")
+        .split(' ')
         .map((n) => n[0])
-        .join("")
+        .join('')
         .toUpperCase()
         .slice(0, 2);
     }
     if (user?.email) {
       return user.email[0].toUpperCase();
     }
-    return "AD";
+    return 'AD';
   };
 
   // Build sidebar sections with dynamic counts
   const sidebarSections = [
     {
-      title: "OVERVIEW",
+      title: 'OVERVIEW',
       items: [
         {
-          name: "Dashboard",
-          path: "/admin",
+          name: 'Dashboard',
+          path: '/admin',
           icon: LayoutDashboard,
           badge: null,
         },
         {
-          name: "All Items",
-          path: "/admin/items",
+          name: 'All Items',
+          path: '/admin/items',
           icon: Package,
           badge: counts.allItems || null,
         },
         {
-          name: "Matches",
-          path: "/admin/matches",
+          name: 'Matches',
+          path: '/admin/matches',
           icon: Link2,
           badge: counts.matches || null,
         },
       ],
     },
     {
-      title: "MANAGEMENT",
+      title: 'MANAGEMENT',
       items: [
         {
-          name: "CCTV Intelligence",
-          path: "/admin/cctv",
+          name: 'CCTV Intelligence',
+          path: '/admin/cctv',
           icon: Video,
           badge: null,
           disabled: !cctvEnabled,
         },
         {
-          name: "Handovers",
-          path: "/admin/handovers",
+          name: 'Handovers',
+          path: '/admin/handovers',
           icon: ArrowLeftRight,
           badge: null,
         },
-        { name: "Users", path: "/admin/users", icon: Users, badge: null },
+        { name: 'Users', path: '/admin/users', icon: Users, badge: null },
       ],
     },
     {
-      title: "ADMIN",
+      title: 'ADMIN',
       items: [
         {
-          name: "Pending Approvals",
-          path: "/admin/approvals",
+          name: 'Pending Approvals',
+          path: '/admin/approvals',
           icon: UserCheck,
           badge: counts.pendingItems || null,
         },
         {
-          name: "Settings",
-          path: "/admin/settings",
+          name: 'Settings',
+          path: '/admin/settings',
           icon: Settings,
           badge: null,
         },
@@ -213,8 +208,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       {/* Logo */}
       <div
         className={cn(
-          "h-16 px-4 flex items-center gap-2 border-b border-border",
-          isMobile && "justify-between",
+          'h-16 px-4 flex items-center gap-2 border-b border-border',
+          isMobile && 'justify-between',
         )}
       >
         <Link to="/" className="flex items-center gap-2">
@@ -251,7 +246,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             <div className="space-y-1">
               {section.items.map((item) => {
                 const isActive = location.pathname === item.path;
-                const isDisabled = "disabled" in item && item.disabled;
+                const isDisabled = 'disabled' in item && item.disabled;
 
                 // Render disabled items as a div instead of Link
                 if (isDisabled) {
@@ -275,10 +270,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     key={item.path}
                     to={item.path}
                     className={cn(
-                      "sidebar-link",
-                      isActive
-                        ? "sidebar-link-active"
-                        : "sidebar-link-inactive",
+                      'sidebar-link',
+                      isActive ? 'sidebar-link-active' : 'sidebar-link-inactive',
                     )}
                   >
                     <item.icon className="w-5 h-5" />
@@ -286,10 +279,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     {item.badge !== null && item.badge > 0 && (
                       <span
                         className={cn(
-                          "px-2 py-0.5 rounded-full text-xs font-medium",
-                          isActive
-                            ? "bg-primary text-white"
-                            : "bg-gray-200 text-text-secondary",
+                          'px-2 py-0.5 rounded-full text-xs font-medium',
+                          isActive ? 'bg-primary text-white' : 'bg-gray-200 text-text-secondary',
                         )}
                       >
                         {item.badge}
@@ -354,9 +345,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             <Menu className="w-6 h-6 text-text-primary" />
           </button>
 
-          <h1 className="text-lg lg:text-xl font-medium text-text-primary">
-            Dashboard
-          </h1>
+          <h1 className="text-lg lg:text-xl font-medium text-text-primary">Dashboard</h1>
 
           <div className="flex items-center gap-4">
             {/* User Avatar & Menu */}
@@ -368,7 +357,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 {user?.photoURL ? (
                   <img
                     src={user.photoURL}
-                    alt={user.displayName || "Admin"}
+                    alt={user.displayName || 'Admin'}
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                   />
@@ -388,7 +377,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                       {user?.photoURL ? (
                         <img
                           src={user.photoURL}
-                          alt={user.displayName || "Admin"}
+                          alt={user.displayName || 'Admin'}
                           className="w-10 h-10 rounded-full object-cover"
                           referrerPolicy="no-referrer"
                         />
@@ -399,11 +388,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-text-primary truncate">
-                          {user?.displayName || "Admin User"}
+                          {user?.displayName || 'Admin User'}
                         </p>
-                        <p className="text-sm text-text-secondary truncate">
-                          {user?.email}
-                        </p>
+                        <p className="text-sm text-text-secondary truncate">{user?.email}</p>
                       </div>
                     </div>
                   </div>
@@ -412,7 +399,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                   <div className="py-2">
                     <button
                       onClick={() => {
-                        navigate("/admin/profile");
+                        navigate('/admin/profile');
                         setShowUserMenu(false);
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2 text-text-primary hover:bg-gray-50 transition-colors"
@@ -422,7 +409,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     </button>
                     <button
                       onClick={() => {
-                        navigate("/admin/settings");
+                        navigate('/admin/settings');
                         setShowUserMenu(false);
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2 text-text-primary hover:bg-gray-50 transition-colors"

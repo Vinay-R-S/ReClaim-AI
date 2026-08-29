@@ -1,19 +1,19 @@
-import { useState, useRef, useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { HelpCircle, LogOut, User, Settings, Menu, X } from "lucide-react";
-import { cn } from "../../lib/utils";
-import { useAuth } from "../../context/AuthContext";
+import { useState, useRef, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { HelpCircle, LogOut, User, Settings, Menu, X } from 'lucide-react';
+import { cn } from '../../lib/utils';
+import { useAuth } from '../../context/AuthContext';
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface UserLayoutProps {
   children: React.ReactNode;
 }
 
 const navTabs = [
-  { name: "Assistant", path: "/app" },
-  { name: "My Reports", path: "/app/reports" },
-  { name: "Handovers", path: "/app/handovers" },
+  { name: 'Assistant', path: '/app' },
+  { name: 'My Reports', path: '/app/reports' },
+  { name: 'Handovers', path: '/app/handovers' },
 ];
 
 export function UserLayout({ children }: UserLayoutProps) {
@@ -24,7 +24,7 @@ export function UserLayout({ children }: UserLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [credits, setCredits] = useState(() => {
     // Initialize from sessionStorage if available
-    const cached = sessionStorage.getItem("userCredits");
+    const cached = sessionStorage.getItem('userCredits');
     return cached ? parseInt(cached, 10) : 0;
   });
   const menuRef = useRef<HTMLDivElement>(null);
@@ -36,8 +36,8 @@ export function UserLayout({ children }: UserLayoutProps) {
         setShowUserMenu(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Close mobile menu on route change
@@ -48,12 +48,12 @@ export function UserLayout({ children }: UserLayoutProps) {
   // Lock body scroll when mobile menu is open
   useEffect(() => {
     if (mobileMenuOpen) {
-      document.body.style.overflow = "hidden";
+      document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     }
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     };
   }, [mobileMenuOpen]);
 
@@ -62,17 +62,13 @@ export function UserLayout({ children }: UserLayoutProps) {
     if (!user?.uid) return;
 
     // Check if we already have fresh credits in sessionStorage
-    const cachedCredits = sessionStorage.getItem("userCredits");
-    const cacheTimestamp = sessionStorage.getItem("userCreditsTimestamp");
+    const cachedCredits = sessionStorage.getItem('userCredits');
+    const cacheTimestamp = sessionStorage.getItem('userCreditsTimestamp');
     const now = Date.now();
     const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
     // Use cache if it's less than 5 minutes old
-    if (
-      cachedCredits &&
-      cacheTimestamp &&
-      now - parseInt(cacheTimestamp, 10) < CACHE_DURATION
-    ) {
+    if (cachedCredits && cacheTimestamp && now - parseInt(cacheTimestamp, 10) < CACHE_DURATION) {
       setCredits(parseInt(cachedCredits, 10));
       return;
     }
@@ -84,10 +80,10 @@ export function UserLayout({ children }: UserLayoutProps) {
         const newCredits = data.credits || 0;
         setCredits(newCredits);
         // Cache the result
-        sessionStorage.setItem("userCredits", newCredits.toString());
-        sessionStorage.setItem("userCreditsTimestamp", now.toString());
+        sessionStorage.setItem('userCredits', newCredits.toString());
+        sessionStorage.setItem('userCreditsTimestamp', now.toString());
       })
-      .catch((err) => console.error("Failed to fetch credits:", err));
+      .catch((err) => console.error('Failed to fetch credits:', err));
   }, [user?.uid]);
 
   // Listen for credit updates (e.g., after handover)
@@ -95,21 +91,20 @@ export function UserLayout({ children }: UserLayoutProps) {
     const handleCreditUpdate = (event: CustomEvent) => {
       const newCredits = event.detail.credits;
       setCredits(newCredits);
-      sessionStorage.setItem("userCredits", newCredits.toString());
-      sessionStorage.setItem("userCreditsTimestamp", Date.now().toString());
+      sessionStorage.setItem('userCredits', newCredits.toString());
+      sessionStorage.setItem('userCreditsTimestamp', Date.now().toString());
     };
 
-    window.addEventListener("creditsUpdated" as any, handleCreditUpdate);
-    return () =>
-      window.removeEventListener("creditsUpdated" as any, handleCreditUpdate);
+    window.addEventListener('creditsUpdated' as any, handleCreditUpdate);
+    return () => window.removeEventListener('creditsUpdated' as any, handleCreditUpdate);
   }, []);
 
   const handleSignOut = async () => {
     try {
       await signOut();
-      navigate("/");
+      navigate('/');
     } catch (err) {
-      console.error("Error signing out:", err);
+      console.error('Error signing out:', err);
     }
   };
 
@@ -117,19 +112,19 @@ export function UserLayout({ children }: UserLayoutProps) {
   const getUserInitials = () => {
     if (user?.displayName) {
       return user.displayName
-        .split(" ")
+        .split(' ')
         .map((n) => n[0])
-        .join("")
+        .join('')
         .toUpperCase()
         .slice(0, 2);
     }
     if (user?.email) {
       return user.email[0].toUpperCase();
     }
-    return "U";
+    return 'U';
   };
 
-  const isHowItWorksPage = location.pathname === "/app/how-it-works";
+  const isHowItWorksPage = location.pathname === '/app/how-it-works';
 
   return (
     <div className="min-h-screen bg-background">
@@ -154,9 +149,7 @@ export function UserLayout({ children }: UserLayoutProps) {
               height={40}
               className="w-10 h-10 object-contain rounded-full"
             />
-            <span className="font-medium text-xl text-text-primary">
-              ReClaim AI
-            </span>
+            <span className="font-medium text-xl text-text-primary">ReClaim AI</span>
           </Link>
 
           {/* Navigation Tabs - Hidden on mobile */}
@@ -166,10 +159,8 @@ export function UserLayout({ children }: UserLayoutProps) {
                 key={tab.path}
                 to={tab.path}
                 className={cn(
-                  "nav-tab",
-                  location.pathname === tab.path
-                    ? "nav-tab-active"
-                    : "nav-tab-inactive",
+                  'nav-tab',
+                  location.pathname === tab.path ? 'nav-tab-active' : 'nav-tab-inactive',
                 )}
               >
                 {tab.name}
@@ -196,7 +187,7 @@ export function UserLayout({ children }: UserLayoutProps) {
                 {user?.photoURL ? (
                   <img
                     src={user.photoURL}
-                    alt={user.displayName || "User"}
+                    alt={user.displayName || 'User'}
                     className="w-9 h-9 rounded-full object-cover"
                     referrerPolicy="no-referrer"
                   />
@@ -216,7 +207,7 @@ export function UserLayout({ children }: UserLayoutProps) {
                       {user?.photoURL ? (
                         <img
                           src={user.photoURL}
-                          alt={user.displayName || "User"}
+                          alt={user.displayName || 'User'}
                           className="w-10 h-10 rounded-full object-cover"
                           referrerPolicy="no-referrer"
                         />
@@ -227,18 +218,16 @@ export function UserLayout({ children }: UserLayoutProps) {
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-text-primary truncate">
-                          {user?.displayName || "User"}
+                          {user?.displayName || 'User'}
                         </p>
-                        <p className="text-sm text-text-secondary truncate">
-                          {user?.email}
-                        </p>
+                        <p className="text-sm text-text-secondary truncate">{user?.email}</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Menu Items */}
                   <div className="py-2">
-                    {role === "admin" && (
+                    {role === 'admin' && (
                       <Link
                         to="/admin"
                         className="w-full flex items-center gap-3 px-4 py-2 text-text-primary hover:bg-gray-50 transition-colors"
@@ -299,9 +288,7 @@ export function UserLayout({ children }: UserLayoutProps) {
                   height={40}
                   className="w-10 h-10 object-contain rounded-full"
                 />
-                <span className="font-medium text-xl text-text-primary">
-                  ReClaim AI
-                </span>
+                <span className="font-medium text-xl text-text-primary">ReClaim AI</span>
               </div>
               <button
                 onClick={() => setMobileMenuOpen(false)}
@@ -318,7 +305,7 @@ export function UserLayout({ children }: UserLayoutProps) {
                 {user?.photoURL ? (
                   <img
                     src={user.photoURL}
-                    alt={user.displayName || "User"}
+                    alt={user.displayName || 'User'}
                     className="w-12 h-12 rounded-full object-cover"
                     referrerPolicy="no-referrer"
                   />
@@ -329,11 +316,9 @@ export function UserLayout({ children }: UserLayoutProps) {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-text-primary truncate">
-                    {user?.displayName || "User"}
+                    {user?.displayName || 'User'}
                   </p>
-                  <p className="text-sm text-text-secondary truncate">
-                    {user?.email}
-                  </p>
+                  <p className="text-sm text-text-secondary truncate">{user?.email}</p>
                 </div>
               </div>
             </div>
@@ -345,9 +330,7 @@ export function UserLayout({ children }: UserLayoutProps) {
                   <span className="text-xl">🪙</span>
                 </div>
                 <div>
-                  <p className="text-2xl font-medium text-text-primary">
-                    {credits}
-                  </p>
+                  <p className="text-2xl font-medium text-text-primary">{credits}</p>
                   <p className="text-xs text-text-secondary">Credits earned</p>
                 </div>
               </div>
@@ -363,10 +346,10 @@ export function UserLayout({ children }: UserLayoutProps) {
                   key={tab.path}
                   to={tab.path}
                   className={cn(
-                    "flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors",
+                    'flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors',
                     location.pathname === tab.path
-                      ? "bg-primary/10 text-primary"
-                      : "text-text-primary hover:bg-gray-100",
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-text-primary hover:bg-gray-100',
                   )}
                 >
                   {tab.name}
@@ -375,10 +358,10 @@ export function UserLayout({ children }: UserLayoutProps) {
               <Link
                 to="/app/how-it-works"
                 className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors",
+                  'flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors',
                   isHowItWorksPage
-                    ? "bg-primary/10 text-primary"
-                    : "text-text-primary hover:bg-gray-100",
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-text-primary hover:bg-gray-100',
                 )}
               >
                 <HelpCircle className="w-5 h-5" />
@@ -387,7 +370,7 @@ export function UserLayout({ children }: UserLayoutProps) {
             </nav>
 
             {/* Admin Link (if admin) */}
-            {role === "admin" && (
+            {role === 'admin' && (
               <div className="px-2 py-2 border-t border-border">
                 <Link
                   to="/admin"
@@ -432,21 +415,15 @@ export function UserLayout({ children }: UserLayoutProps) {
                   <span className="text-2xl">🪙</span>
                 </div>
                 <div>
-                  <p className="text-3xl font-medium text-text-primary">
-                    {credits}
-                  </p>
-                  <p className="text-sm text-text-secondary">
-                    Total credits earned
-                  </p>
+                  <p className="text-3xl font-medium text-text-primary">{credits}</p>
+                  <p className="text-sm text-text-secondary">Total credits earned</p>
                 </div>
               </div>
             </div>
           </aside>
 
           {/* Main Chat Area - Scrollable */}
-          <div className="flex-1 max-w-3xl mx-auto lg:mx-0 overflow-y-auto pb-6">
-            {children}
-          </div>
+          <div className="flex-1 max-w-3xl mx-auto lg:mx-0 overflow-y-auto pb-6">{children}</div>
         </div>
       </main>
     </div>

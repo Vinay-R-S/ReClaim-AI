@@ -1,16 +1,13 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense } from 'react';
 
 const LocationPickerLazy = lazy(() =>
-  import("./LocationPicker").then((m) => ({ default: m.LocationPicker })),
+  import('./LocationPicker').then((m) => ({ default: m.LocationPicker })),
 );
 
 interface LazyLocationPickerProps {
   value: string;
   onChange: (location: string) => void;
-  onLocationSelect?: (
-    location: string,
-    coordinates: { lat: number; lng: number },
-  ) => void;
+  onLocationSelect?: (location: string, coordinates: { lat: number; lng: number }) => void;
   placeholder?: string;
 }
 

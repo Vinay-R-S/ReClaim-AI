@@ -3,29 +3,19 @@
  * Shows admin info and office location (no credits)
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import {
-  User,
-  MapPin,
-  Mail,
-  Calendar,
-  Save,
-  Loader2,
-  Search,
-  X,
-} from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { User, MapPin, Mail, Calendar, Save, Loader2, Search, X } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // Default marker icon
 const defaultIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
@@ -47,14 +37,12 @@ interface AdminLocation {
 export function AdminProfile() {
   const { user } = useAuth();
   const [location, setLocation] = useState<AdminLocation | null>(null);
-  const [addressQuery, setAddressQuery] = useState("");
+  const [addressQuery, setAddressQuery] = useState('');
   const [suggestions, setSuggestions] = useState<GeocodingResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">(
-    "idle",
-  );
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [isLoading, setIsLoading] = useState(true);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -73,11 +61,11 @@ export function AdminProfile() {
           const data = await response.json();
           if (data.mapCenter) {
             setLocation(data.mapCenter);
-            setAddressQuery(data.mapCenter.address || "");
+            setAddressQuery(data.mapCenter.address || '');
           }
         }
       } catch (error) {
-        console.error("Failed to load settings:", error);
+        console.error('Failed to load settings:', error);
       } finally {
         setIsLoading(false);
       }
@@ -96,17 +84,14 @@ export function AdminProfile() {
     mapRef.current = L.map(mapContainerRef.current).setView(defaultCenter, 14);
 
     if (apiKey) {
-      L.tileLayer(
-        `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${apiKey}`,
-        {
-          maxZoom: 18,
-          attribution: "© Geoapify © OpenMapTiles © OpenStreetMap",
-        },
-      ).addTo(mapRef.current);
+      L.tileLayer(`https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${apiKey}`, {
+        maxZoom: 18,
+        attribution: '© Geoapify © OpenMapTiles © OpenStreetMap',
+      }).addTo(mapRef.current);
     } else {
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: "© OpenStreetMap",
+        attribution: '© OpenStreetMap',
       }).addTo(mapRef.current);
     }
 
@@ -117,15 +102,13 @@ export function AdminProfile() {
     }
 
     // Click handler
-    mapRef.current.on("click", async (e: L.LeafletMouseEvent) => {
+    mapRef.current.on('click', async (e: L.LeafletMouseEvent) => {
       const { lat, lng } = e.latlng;
 
       if (markerRef.current) {
         markerRef.current.setLatLng([lat, lng]);
       } else if (mapRef.current) {
-        markerRef.current = L.marker([lat, lng], { icon: defaultIcon }).addTo(
-          mapRef.current,
-        );
+        markerRef.current = L.marker([lat, lng], { icon: defaultIcon }).addTo(mapRef.current);
       }
 
       if (apiKey) {
@@ -140,7 +123,7 @@ export function AdminProfile() {
             setLocation({ address, lat, lng });
           }
         } catch (err) {
-          console.error("Reverse geocoding failed:", err);
+          console.error('Reverse geocoding failed:', err);
         }
       } else {
         setLocation({
@@ -194,10 +177,7 @@ export function AdminProfile() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (addressQuery.length >= 3) {
-      debounceRef.current = setTimeout(
-        () => fetchSuggestions(addressQuery),
-        300,
-      );
+      debounceRef.current = setTimeout(() => fetchSuggestions(addressQuery), 300);
     } else {
       setSuggestions([]);
     }
@@ -232,26 +212,26 @@ export function AdminProfile() {
   const handleSave = async () => {
     if (!location) return;
     setIsSaving(true);
-    setSaveStatus("idle");
+    setSaveStatus('idle');
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/settings`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          aiProvider: "groq_only", // Keep existing
+          aiProvider: 'groq_only', // Keep existing
           mapCenter: location,
         }),
       });
 
       if (response.ok) {
-        setSaveStatus("success");
-        setTimeout(() => setSaveStatus("idle"), 3000);
+        setSaveStatus('success');
+        setTimeout(() => setSaveStatus('idle'), 3000);
       } else {
-        setSaveStatus("error");
+        setSaveStatus('error');
       }
     } catch {
-      setSaveStatus("error");
+      setSaveStatus('error');
     } finally {
       setIsSaving(false);
     }
@@ -268,12 +248,8 @@ export function AdminProfile() {
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold text-text-primary">
-          Admin Profile
-        </h1>
-        <p className="text-text-secondary mt-1">
-          Your admin information and office location
-        </p>
+        <h1 className="text-2xl font-semibold text-text-primary">Admin Profile</h1>
+        <p className="text-text-secondary mt-1">Your admin information and office location</p>
       </div>
 
       {/* Admin Info Card */}
@@ -283,12 +259,8 @@ export function AdminProfile() {
             <User className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h2 className="text-lg font-medium text-text-primary">
-              Account Info
-            </h2>
-            <p className="text-sm text-text-secondary">
-              Your admin account details
-            </p>
+            <h2 className="text-lg font-medium text-text-primary">Account Info</h2>
+            <p className="text-sm text-text-secondary">Your admin account details</p>
           </div>
         </div>
 
@@ -298,12 +270,12 @@ export function AdminProfile() {
             {user?.photoURL ? (
               <img
                 src={user.photoURL}
-                alt={user.displayName || "Admin"}
+                alt={user.displayName || 'Admin'}
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              user?.displayName?.[0] || user?.email?.[0] || "A"
+              user?.displayName?.[0] || user?.email?.[0] || 'A'
             )}
           </div>
 
@@ -312,7 +284,7 @@ export function AdminProfile() {
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-text-secondary" />
               <span className="font-medium text-text-primary">
-                {user?.displayName || "Admin User"}
+                {user?.displayName || 'Admin User'}
               </span>
               <span className="px-2 py-0.5 bg-primary text-white text-xs font-medium rounded">
                 ADMIN
@@ -325,10 +297,10 @@ export function AdminProfile() {
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-text-secondary" />
               <span className="text-text-secondary">
-                Member since{" "}
+                Member since{' '}
                 {user?.metadata?.creationTime
                   ? new Date(user.metadata.creationTime).toLocaleDateString()
-                  : "N/A"}
+                  : 'N/A'}
               </span>
             </div>
           </div>
@@ -342,9 +314,7 @@ export function AdminProfile() {
             <MapPin className="w-5 h-5 text-green-600" />
           </div>
           <div>
-            <h2 className="text-lg font-medium text-text-primary">
-              Office Location
-            </h2>
+            <h2 className="text-lg font-medium text-text-primary">Office Location</h2>
             <p className="text-sm text-text-secondary">
               Set your admin office location (used for heatmap center)
             </p>
@@ -369,7 +339,7 @@ export function AdminProfile() {
             {addressQuery && (
               <button
                 onClick={() => {
-                  setAddressQuery("");
+                  setAddressQuery('');
                   setLocation(null);
                   if (markerRef.current && mapRef.current) {
                     mapRef.current.removeLayer(markerRef.current);
@@ -443,21 +413,17 @@ export function AdminProfile() {
                      disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100
                      focus:outline-none focus:ring-2 focus:ring-[#4285F4] focus:ring-offset-2"
         >
-          {isSaving ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4" />
-          )}
-          {isSaving ? "Saving..." : "Save Location"}
+          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {isSaving ? 'Saving...' : 'Save Location'}
         </button>
 
-        {saveStatus === "success" && (
+        {saveStatus === 'success' && (
           <span className="inline-flex items-center gap-1.5 text-sm text-[#34A853] font-medium bg-[#34A853]/10 px-3 py-1.5 rounded-full">
             <span className="w-2 h-2 bg-[#34A853] rounded-full animate-pulse"></span>
             Location saved successfully
           </span>
         )}
-        {saveStatus === "error" && (
+        {saveStatus === 'error' && (
           <span className="inline-flex items-center gap-1.5 text-sm text-[#EA4335] font-medium bg-[#EA4335]/10 px-3 py-1.5 rounded-full">
             <span className="w-2 h-2 bg-[#EA4335] rounded-full"></span>
             Failed to save location

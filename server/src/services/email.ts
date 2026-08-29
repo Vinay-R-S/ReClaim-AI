@@ -6,31 +6,38 @@
 
 import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
+import { createLogger } from '../utils/logger.js';
+import { env } from '../config/env.js';
+
+const log = createLogger('email');
 
 // ============ RESEND CONFIGURATION ============
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const RESEND_API_KEY = env.email.resendApiKey;
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 // Use Resend's test sender or your verified domain
-const RESEND_FROM_EMAIL = process.env.FROM_EMAIL || 'ReClaim AI <onboarding@resend.dev>';
+const RESEND_FROM_EMAIL = env.email.fromEmail || 'ReClaim AI <onboarding@resend.dev>';
 
 // ============ NODEMAILER CONFIGURATION (Fallback) ============
-const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587');
-const SMTP_USER = process.env.SMTP_USER || process.env.VITE_ADMIN_EMAIL;
-const SMTP_PASS = process.env.SMTP_PASS || process.env.VITE_ADMIN_PASSWORD;
-const NODEMAILER_FROM_EMAIL = process.env.FROM_EMAIL || '"ReClaim AI" <noreply@reclaim.ai>';
+const SMTP_HOST = env.email.smtpHost;
+const SMTP_PORT = env.email.smtpPort;
+const SMTP_USER = env.email.smtpUser;
+const SMTP_PASS = env.email.smtpPass;
+const NODEMAILER_FROM_EMAIL = env.email.fromEmail || '"ReClaim AI" <noreply@reclaim.ai>';
 
 // Create NodeMailer transporter (only if credentials exist)
-const transporter = SMTP_USER && SMTP_PASS ? nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: SMTP_PORT === 465,
-  auth: {
-    user: SMTP_USER,
-    pass: SMTP_PASS,
-  },
-}) : null;
+const transporter =
+  SMTP_USER && SMTP_PASS
+    ? nodemailer.createTransport({
+        host: SMTP_HOST,
+        port: SMTP_PORT,
+        secure: SMTP_PORT === 465,
+        auth: {
+          user: SMTP_USER,
+          pass: SMTP_PASS,
+        },
+      })
+    : null;
 
 export interface EmailOptions {
   to: string | string[];
@@ -48,7 +55,7 @@ async function sendViaResend(options: EmailOptions): Promise<boolean> {
   }
 
   try {
-    console.log('Attempting to send email via Resend:', { to: options.to, subject: options.subject });
+    log.debug('Sending email via Resend', { subject: options.subject });
 
     const { data, error } = await resend.emails.send({
       from: RESEND_FROM_EMAIL,
@@ -59,14 +66,14 @@ async function sendViaResend(options: EmailOptions): Promise<boolean> {
     });
 
     if (error) {
-      console.error('Resend error:', error);
+      log.error('Resend error:', error);
       return false;
     }
 
-    console.log('Email sent successfully via Resend:', data?.id);
+    log.info('Email sent via Resend', { messageId: data?.id });
     return true;
   } catch (error) {
-    console.error('Resend send failed:', error);
+    log.error('Resend send failed:', error);
     return false;
   }
 }
@@ -76,12 +83,12 @@ async function sendViaResend(options: EmailOptions): Promise<boolean> {
  */
 async function sendViaNodeMailer(options: EmailOptions): Promise<boolean> {
   if (!transporter || !SMTP_USER || !SMTP_PASS) {
-    console.warn('NodeMailer not configured, skipping fallback');
+    log.warn('NodeMailer not configured, skipping fallback');
     return false;
   }
 
   try {
-    console.log('Attempting to send email via NodeMailer (fallback):', { to: options.to, subject: options.subject });
+    log.debug('Sending email via NodeMailer fallback', { subject: options.subject });
 
     const info = await transporter.sendMail({
       from: NODEMAILER_FROM_EMAIL,
@@ -91,10 +98,10 @@ async function sendViaNodeMailer(options: EmailOptions): Promise<boolean> {
       text: options.text,
     });
 
-    console.log('Email sent successfully via NodeMailer:', info.messageId);
+    log.info('Email sent via NodeMailer', { messageId: info.messageId });
     return true;
   } catch (error) {
-    console.error('NodeMailer send failed:', error);
+    log.error('NodeMailer send failed:', error);
     return false;
   }
 }
@@ -109,7 +116,7 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     if (resendResult) {
       return true;
     }
-    console.log('Resend failed, trying NodeMailer fallback...');
+    log.info('Resend failed, trying NodeMailer fallback...');
   }
 
   // Fallback to NodeMailer
@@ -120,7 +127,7 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     }
   }
 
-  console.warn('All email methods failed. Email not sent to:', options.to);
+  log.warn('All email transports failed, message not sent', { subject: options.subject });
   return false;
 }
 
@@ -131,7 +138,7 @@ export async function sendMatchNotification(
   userEmail: string,
   itemName: string,
   matchScore: number,
-  collectionPoint?: string
+  collectionPoint?: string,
 ): Promise<boolean> {
   const html = `
     <!DOCTYPE html>
@@ -158,7 +165,7 @@ export async function sendMatchNotification(
           <p><span class="match-badge">${matchScore}% Match</span></p>
           ${collectionPoint ? `<p><strong>Collection Point:</strong> ${collectionPoint}</p>` : ''}
           <p>Log in to ReClaim AI to view details and confirm if this is your item.</p>
-          <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}/app" class="cta-button">View Match</a>
+          <a href="${env.clientUrl}/app" class="cta-button">View Match</a>
         </div>
         <div class="footer">
           <p>ReClaim AI - Connecting Lost Items with Their Owners</p>
@@ -182,7 +189,7 @@ export async function sendMatchNotification(
 export async function sendClaimConfirmation(
   userEmail: string,
   itemName: string,
-  collectionPoint: string
+  collectionPoint: string,
 ): Promise<boolean> {
   const html = `
     <!DOCTYPE html>
@@ -234,7 +241,7 @@ export async function sendCreditsNotification(
   userEmail: string,
   creditsEarned: number,
   reason: string,
-  totalCredits: number
+  totalCredits: number,
 ): Promise<boolean> {
   const html = `
     <!DOCTYPE html>
@@ -283,7 +290,7 @@ export async function sendVerificationSuccessEmail(
   itemName: string,
   confidenceScore: number,
   collectionPoint: string,
-  collectionInstructions?: string
+  collectionInstructions?: string,
 ): Promise<boolean> {
   const html = `
     <!DOCTYPE html>
@@ -356,7 +363,7 @@ export async function sendVerificationSuccessEmail(
 export async function sendLoginNotification(
   userEmail: string,
   userName: string,
-  loginTime: string
+  loginTime: string,
 ): Promise<boolean> {
   const html = `
     <!DOCTYPE html>
@@ -389,7 +396,7 @@ export async function sendHandoverCodeToLostPerson(
   finderEmail: string,
   collectionAddress: string,
   code: string,
-  expiresAt: string
+  expiresAt: string,
 ): Promise<boolean> {
   const html = `
     <!DOCTYPE html>
@@ -454,7 +461,7 @@ export async function sendHandoverCodeToLostPerson(
 export async function sendHandoverLinkToFoundPerson(
   email: string,
   itemName: string,
-  verificationUrl: string
+  verificationUrl: string,
 ): Promise<boolean> {
   const html = `
     <!DOCTYPE html>

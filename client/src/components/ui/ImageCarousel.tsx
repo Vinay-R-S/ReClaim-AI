@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { cn } from "../../lib/utils";
+import { useState, useCallback } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 interface ImageCarouselProps {
   images: string[];
@@ -17,9 +17,9 @@ interface ImageCarouselProps {
  */
 export function ImageCarousel({
   images,
-  alt = "Image",
-  className = "",
-  imageClassName = "",
+  alt = 'Image',
+  className = '',
+  imageClassName = '',
   showDots = true,
   showArrows = true,
 }: ImageCarouselProps) {
@@ -51,7 +51,7 @@ export function ImageCarousel({
     return (
       <div
         className={cn(
-          "w-full h-48 bg-gray-100 rounded-xl flex items-center justify-center",
+          'w-full h-48 bg-gray-100 rounded-xl flex items-center justify-center',
           className,
         )}
       >
@@ -66,23 +66,19 @@ export function ImageCarousel({
       <img
         src={images[0]}
         alt={alt}
-        className={cn(
-          "w-full h-48 object-cover rounded-xl",
-          className,
-          imageClassName,
-        )}
+        className={cn('w-full h-48 object-cover rounded-xl', className, imageClassName)}
       />
     );
   }
 
   return (
-    <div className={cn("relative group", className)}>
+    <div className={cn('relative group', className)}>
       {/* Main Image */}
       <img
         src={images[currentIndex]}
         alt={`${alt} ${currentIndex + 1}`}
         className={cn(
-          "w-full h-48 object-cover rounded-xl transition-opacity duration-300",
+          'w-full h-48 object-cover rounded-xl transition-opacity duration-300',
           imageClassName,
         )}
       />
@@ -115,10 +111,8 @@ export function ImageCarousel({
               key={index}
               onClick={(e) => goToIndex(e, index)}
               className={cn(
-                "w-2 h-2 rounded-full transition-all",
-                index === currentIndex
-                  ? "bg-white scale-110"
-                  : "bg-white/50 hover:bg-white/75",
+                'w-2 h-2 rounded-full transition-all',
+                index === currentIndex ? 'bg-white scale-110' : 'bg-white/50 hover:bg-white/75',
               )}
               aria-label={`Go to image ${index + 1}`}
             />

@@ -4,11 +4,11 @@
  * Uses Leaflet with the existing Geoapify tiles
  */
 
-import { useState, useEffect, useRef } from "react";
-import { MapPin, Map as MapIcon, Loader2 } from "lucide-react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { getItems, type Item } from "@/services/itemService";
+import { useState, useEffect, useRef } from 'react';
+import { MapPin, Map as MapIcon, Loader2 } from 'lucide-react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { getItems, type Item } from '@/services/itemService';
 
 interface ItemHeatmapProps {
   radiusKm?: number;
@@ -17,7 +17,7 @@ interface ItemHeatmapProps {
 // Custom marker icons using divIcon for better performance
 const createMarkerIcon = (color: string, borderColor: string) =>
   L.divIcon({
-    className: "custom-marker",
+    className: 'custom-marker',
     html: `<div style="
       width: 14px;
       height: 14px;
@@ -31,17 +31,15 @@ const createMarkerIcon = (color: string, borderColor: string) =>
     popupAnchor: [0, -10],
   });
 
-const lostMarkerIcon = createMarkerIcon("#EA4335", "#B91C1C");
-const foundMarkerIcon = createMarkerIcon("#34A853", "#166534");
+const lostMarkerIcon = createMarkerIcon('#EA4335', '#B91C1C');
+const foundMarkerIcon = createMarkerIcon('#34A853', '#166534');
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
-  const [center, setCenter] = useState<{ lat: number; lng: number } | null>(
-    null,
-  );
+  const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -57,9 +55,7 @@ export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
         // Fetch items and settings in parallel
         const [allItems, settingsResponse] = await Promise.all([
           getItems(),
-          fetch(`${API_BASE_URL}/api/settings`).then((r) =>
-            r.ok ? r.json() : null,
-          ),
+          fetch(`${API_BASE_URL}/api/settings`).then((r) => (r.ok ? r.json() : null)),
         ]);
 
         // Filter items that have coordinates
@@ -72,32 +68,25 @@ export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
         // 1. Saved mapCenter from settings
         // 2. Average of item coordinates
         // 3. Default (Bangalore)
-        if (
-          settingsResponse?.mapCenter?.lat &&
-          settingsResponse?.mapCenter?.lng
-        ) {
+        if (settingsResponse?.mapCenter?.lat && settingsResponse?.mapCenter?.lng) {
           setCenter({
             lat: settingsResponse.mapCenter.lat,
             lng: settingsResponse.mapCenter.lng,
           });
         } else if (itemsWithCoords.length > 0) {
           const avgLat =
-            itemsWithCoords.reduce(
-              (sum, item) => sum + (item.coordinates?.lat || 0),
-              0,
-            ) / itemsWithCoords.length;
+            itemsWithCoords.reduce((sum, item) => sum + (item.coordinates?.lat || 0), 0) /
+            itemsWithCoords.length;
           const avgLng =
-            itemsWithCoords.reduce(
-              (sum, item) => sum + (item.coordinates?.lng || 0),
-              0,
-            ) / itemsWithCoords.length;
+            itemsWithCoords.reduce((sum, item) => sum + (item.coordinates?.lng || 0), 0) /
+            itemsWithCoords.length;
           setCenter({ lat: avgLat, lng: avgLng });
         } else {
           // Default to Bangalore if no items
           setCenter({ lat: 12.9716, lng: 77.5946 });
         }
       } catch (error) {
-        console.error("Failed to fetch data for heatmap:", error);
+        console.error('Failed to fetch data for heatmap:', error);
         setCenter({ lat: 12.9716, lng: 77.5946 });
       } finally {
         setLoading(false);
@@ -124,28 +113,25 @@ export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
 
     // Add tile layer
     if (apiKey) {
-      L.tileLayer(
-        `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${apiKey}`,
-        {
-          maxZoom: 18,
-          attribution: "© Geoapify © OpenMapTiles © OpenStreetMap",
-        },
-      ).addTo(mapRef.current);
+      L.tileLayer(`https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${apiKey}`, {
+        maxZoom: 18,
+        attribution: '© Geoapify © OpenMapTiles © OpenStreetMap',
+      }).addTo(mapRef.current);
     } else {
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: "© OpenStreetMap",
+        attribution: '© OpenStreetMap',
       }).addTo(mapRef.current);
     }
 
     // Add radius circle
     circleRef.current = L.circle([center.lat, center.lng], {
       radius: radiusKm * 1000, // Convert km to meters
-      color: "#4285F4",
-      fillColor: "#4285F4",
+      color: '#4285F4',
+      fillColor: '#4285F4',
       fillOpacity: 0.08,
       weight: 2,
-      dashArray: "8, 8",
+      dashArray: '8, 8',
     }).addTo(mapRef.current);
 
     // Cleanup
@@ -169,19 +155,15 @@ export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
     items.forEach((item) => {
       if (!item.coordinates?.lat || !item.coordinates?.lng) return;
 
-      const icon = item.type === "Lost" ? lostMarkerIcon : foundMarkerIcon;
+      const icon = item.type === 'Lost' ? lostMarkerIcon : foundMarkerIcon;
       const marker = L.marker([item.coordinates.lat, item.coordinates.lng], {
         icon,
       }).addTo(mapRef.current!);
 
       // Create popup content
       const statusColor =
-        item.status === "Matched"
-          ? "#22c55e"
-          : item.status === "Claimed"
-            ? "#8b5cf6"
-            : "#f59e0b";
-      const typeColor = item.type === "Lost" ? "#EA4335" : "#34A853";
+        item.status === 'Matched' ? '#22c55e' : item.status === 'Claimed' ? '#8b5cf6' : '#f59e0b';
+      const typeColor = item.type === 'Lost' ? '#EA4335' : '#34A853';
 
       marker.bindPopup(`
         <div style="min-width: 180px; font-family: system-ui, sans-serif;">
@@ -207,7 +189,7 @@ export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
             ">${item.status}</span>
           </div>
           <div style="font-size: 12px; color: #6b7280; line-clamp: 2; overflow: hidden;">
-            ${item.location || "No location specified"}
+            ${item.location || 'No location specified'}
           </div>
         </div>
       `);
@@ -217,8 +199,8 @@ export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
   }, [items]);
 
   // Count items by type
-  const lostCount = items.filter((i) => i.type === "Lost").length;
-  const foundCount = items.filter((i) => i.type === "Found").length;
+  const lostCount = items.filter((i) => i.type === 'Lost').length;
+  const foundCount = items.filter((i) => i.type === 'Found').length;
 
   if (loading) {
     return (
@@ -236,9 +218,7 @@ export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <MapIcon className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold text-text-primary">
-            Item Location Heatmap
-          </h3>
+          <h3 className="font-semibold text-text-primary">Item Location Heatmap</h3>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">

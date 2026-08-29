@@ -1,49 +1,45 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import { Suspense, lazy } from "react";
-import { AuthProvider } from "./context/AuthContext";
-import { ProtectedRoute } from "./components/auth/ProtectedRoute";
-import { AdminRoute } from "./components/auth/AdminRoute";
-import "./index.css";
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Suspense, lazy } from 'react';
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { AdminRoute } from './components/auth/AdminRoute';
+import './index.css';
 
 // Lazy load page components for better code splitting
 const LandingPage = lazy(() =>
-  import("./pages/LandingPage").then((m) => ({ default: m.LandingPage })),
+  import('./pages/LandingPage').then((m) => ({ default: m.LandingPage })),
 );
-const AuthPage = lazy(() =>
-  import("./pages/AuthPage").then((m) => ({ default: m.AuthPage })),
-);
-const HomePage = lazy(() =>
-  import("./pages/user/HomePage").then((m) => ({ default: m.HomePage })),
-);
+const AuthPage = lazy(() => import('./pages/AuthPage').then((m) => ({ default: m.AuthPage })));
+const HomePage = lazy(() => import('./pages/user/HomePage').then((m) => ({ default: m.HomePage })));
 const MyReportsPage = lazy(() =>
-  import("./pages/user/MyReportsPage").then((m) => ({
+  import('./pages/user/MyReportsPage').then((m) => ({
     default: m.MyReportsPage,
   })),
 );
 const ProfilePage = lazy(() =>
-  import("./pages/user/ProfilePage").then((m) => ({ default: m.ProfilePage })),
+  import('./pages/user/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 );
 const HowItWorksPage = lazy(() =>
-  import("./pages/user/HowItWorksPage").then((m) => ({
+  import('./pages/user/HowItWorksPage').then((m) => ({
     default: m.HowItWorksPage,
   })),
 );
 const HandoversPage = lazy(() =>
-  import("./pages/user/HandoversPage").then((m) => ({
+  import('./pages/user/HandoversPage').then((m) => ({
     default: m.HandoversPage,
   })),
 );
 const AdminPage = lazy(() =>
-  import("./pages/admin/AdminPage").then((m) => ({ default: m.AdminPage })),
+  import('./pages/admin/AdminPage').then((m) => ({ default: m.AdminPage })),
 );
 const UnderConstruction = lazy(() =>
-  import("./pages/UnderConstruction").then((m) => ({
+  import('./pages/UnderConstruction').then((m) => ({
     default: m.UnderConstruction,
   })),
 );
-const VerifyHandoverPage = lazy(() => import("./pages/VerifyHandoverPage"));
+const VerifyHandoverPage = lazy(() => import('./pages/VerifyHandoverPage'));
 const WelcomePage = lazy(() =>
-  import("./pages/WelcomePage").then((m) => ({ default: m.WelcomePage })),
+  import('./pages/WelcomePage').then((m) => ({ default: m.WelcomePage })),
 );
 
 // Loading fallback component
@@ -73,11 +69,7 @@ function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/welcome" element={<WelcomePage />} />
             <Route path="/auth" element={<AuthPage />} />
-            <Route
-              path="/verify/:matchId"
-              element={<VerifyHandoverPage />}
-            />{" "}
-            {/* [NEW] */}
+            <Route path="/verify/:matchId" element={<VerifyHandoverPage />} /> {/* [NEW] */}
             <Route path="/under-construction" element={<UnderConstruction />} />
             {/* Protected User Routes */}
             <Route

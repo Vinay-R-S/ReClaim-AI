@@ -1,17 +1,17 @@
-import { useState, useEffect } from "react";
-import { ArrowUp, ArrowDown, Package } from "lucide-react";
-import { cn } from "../../lib/utils";
-import { type Item, getItems } from "../../services/itemService";
-import { ItemDetailModal } from "../../components/admin/ItemDetailModal";
-import { AddItemModal } from "../../components/admin/AddItemModal";
-import { Timestamp } from "firebase/firestore";
+import { useState, useEffect } from 'react';
+import { ArrowUp, ArrowDown, Package } from 'lucide-react';
+import { cn } from '../../lib/utils';
+import { type Item, getItems } from '../../services/itemService';
+import { ItemDetailModal } from '../../components/admin/ItemDetailModal';
+import { AddItemModal } from '../../components/admin/AddItemModal';
+import { Timestamp } from 'firebase/firestore';
 
 interface StatsCardProps {
   title: string;
   value: string | number;
   trend?: {
     value: string;
-    direction: "up" | "down";
+    direction: 'up' | 'down';
   };
 }
 
@@ -23,11 +23,11 @@ function StatsCard({ title, value, trend }: StatsCardProps) {
       {trend && (
         <div
           className={cn(
-            "stats-trend flex items-center gap-1",
-            trend.direction === "up" ? "stats-trend-up" : "stats-trend-down",
+            'stats-trend flex items-center gap-1',
+            trend.direction === 'up' ? 'stats-trend-up' : 'stats-trend-down',
           )}
         >
-          {trend.direction === "up" ? (
+          {trend.direction === 'up' ? (
             <ArrowUp className="w-3 h-3" />
           ) : (
             <ArrowDown className="w-3 h-3" />
@@ -52,7 +52,7 @@ export function AdminDashboard() {
       const data = await getItems();
       setItems(data);
     } catch (err) {
-      console.error("Error fetching items:", err);
+      console.error('Error fetching items:', err);
     } finally {
       setLoading(false);
     }
@@ -65,18 +65,14 @@ export function AdminDashboard() {
   // Format date for display
   const formatDate = (date: Timestamp | Date | unknown) => {
     try {
-      if (!date) return "N/A";
+      if (!date) return 'N/A';
 
       let d: Date;
       if (date instanceof Timestamp) {
         d = date.toDate();
       } else if (date instanceof Date) {
         d = date;
-      } else if (
-        typeof date === "object" &&
-        date !== null &&
-        "seconds" in date
-      ) {
+      } else if (typeof date === 'object' && date !== null && 'seconds' in date) {
         // Handle Firestore Timestamp-like object
         d = new Date((date as { seconds: number }).seconds * 1000);
       } else {
@@ -85,24 +81,24 @@ export function AdminDashboard() {
 
       // Check if date is valid
       if (isNaN(d.getTime())) {
-        return "N/A";
+        return 'N/A';
       }
 
-      return d.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
+      return d.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
       });
     } catch {
-      return "N/A";
+      return 'N/A';
     }
   };
 
   // Calculate stats
-  const totalLost = items.filter((i) => i.type === "Lost").length;
-  const totalFound = items.filter((i) => i.type === "Found").length;
-  const totalMatched = items.filter((i) => i.status === "Matched").length;
-  const totalPending = items.filter((i) => i.status === "Pending").length;
+  const totalLost = items.filter((i) => i.type === 'Lost').length;
+  const totalFound = items.filter((i) => i.type === 'Found').length;
+  const totalMatched = items.filter((i) => i.status === 'Matched').length;
+  const totalPending = items.filter((i) => i.status === 'Pending').length;
 
   return (
     <div className="space-y-6">
@@ -121,10 +117,7 @@ export function AdminDashboard() {
           <div className="flex items-center gap-2">
             <button className="btn-pill btn-secondary text-sm">Filter</button>
             <button className="btn-pill btn-secondary text-sm">Export</button>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="btn-pill btn-primary text-sm"
-            >
+            <button onClick={() => setShowAddModal(true)} className="btn-pill btn-primary text-sm">
               + Add Item
             </button>
           </div>
@@ -138,9 +131,7 @@ export function AdminDashboard() {
             </div>
           ) : items.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-text-secondary">
-                No items found. Add your first item!
-              </p>
+              <p className="text-text-secondary">No items found. Add your first item!</p>
             </div>
           ) : (
             <table className="w-full">
@@ -190,37 +181,29 @@ export function AdminDashboard() {
                           </div>
                         )}
                         <div>
-                          <p className="text-sm font-medium text-text-primary">
-                            {item.name}
-                          </p>
+                          <p className="text-sm font-medium text-text-primary">{item.name}</p>
                         </div>
                       </div>
                     </td>
+                    <td className="py-3 px-4 text-sm text-text-primary">{item.type}</td>
                     <td className="py-3 px-4 text-sm text-text-primary">
-                      {item.type}
+                      {item.location.split(',').slice(0, 2).join(', ')}
                     </td>
-                    <td className="py-3 px-4 text-sm text-text-primary">
-                      {item.location.split(",").slice(0, 2).join(", ")}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-text-primary">
-                      {formatDate(item.date)}
-                    </td>
+                    <td className="py-3 px-4 text-sm text-text-primary">{formatDate(item.date)}</td>
                     <td className="py-3 px-4">
                       <span
                         className={cn(
-                          "badge",
-                          item.status === "Matched" && "badge-matched",
-                          item.status === "Pending" && "badge-pending",
-                          item.status === "Claimed" && "badge-claimed",
+                          'badge',
+                          item.status === 'Matched' && 'badge-matched',
+                          item.status === 'Pending' && 'badge-pending',
+                          item.status === 'Claimed' && 'badge-claimed',
                         )}
                       >
                         {item.status}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm font-bold text-text-primary">
-                      {item.matchScore !== undefined
-                        ? `${item.matchScore}%`
-                        : "-"}
+                      {item.matchScore !== undefined ? `${item.matchScore}%` : '-'}
                     </td>
                     <td className="py-3 px-4">
                       <button
