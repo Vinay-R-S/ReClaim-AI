@@ -18,6 +18,7 @@ import { cn } from '../../lib/utils';
 import { useAuth } from '../../context/AuthContext';
 import { getItems } from '../../services/itemService';
 import { getAllMatches } from '../../services/matchService';
+import { authFetch } from '../../lib/authApi';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -28,8 +29,6 @@ interface SidebarCounts {
   matches: number;
   pendingItems: number;
 }
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const location = useLocation();
@@ -74,7 +73,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/settings`);
+        const response = await authFetch('/api/settings');
         if (response.ok) {
           const data = await response.json();
           setCctvEnabled(data.cctvEnabled !== false);

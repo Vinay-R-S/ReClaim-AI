@@ -16,8 +16,7 @@ import {
 import { Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db } from '../../lib/firebase';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { authFetch } from '../../lib/authApi';
 
 interface UserStats {
   totalReports: number;
@@ -82,7 +81,7 @@ export function ProfilePage() {
         }
 
         // Fetch user's items
-        const itemsResponse = await fetch(`${API_URL}/api/items?reportedBy=${user.uid}`);
+        const itemsResponse = await authFetch(`/api/items?reportedBy=${user.uid}`);
         if (itemsResponse.ok) {
           const itemsData = await itemsResponse.json();
           const items: Item[] = itemsData.items || [];
@@ -105,7 +104,7 @@ export function ProfilePage() {
         }
 
         // Fetch credits
-        const creditsResponse = await fetch(`${API_URL}/api/credits/${user.uid}`);
+        const creditsResponse = await authFetch(`/api/credits/${user.uid}`);
         if (creditsResponse.ok) {
           const creditsData = await creditsResponse.json();
           setStats((prev) => ({
@@ -255,15 +254,13 @@ export function ProfilePage() {
       const compressedBase64 = await compressImage(file);
 
       // Upload to server (Cloudinary)
-      const response = await fetch(`${API_URL}/api/settings/profile-picture`, {
+      const response = await authFetch('/api/settings/profile-picture', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          userId: user.uid,
-          imageData: compressedBase64,
-        }),
+        // The server derives the uid from the ID token, so it is not sent here.
+        body: JSON.stringify({ imageData: compressedBase64 }),
       });
 
       if (!response.ok) {

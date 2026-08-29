@@ -1,63 +1,64 @@
 /**
  * Role-Based Access Control Middleware
+ *
+ * All of these run AFTER `authMiddleware`, which has already resolved the
+ * caller's role and status from Firestore, so none of them read Firestore
+ * again.
  */
 
 import { Response, NextFunction } from 'express';
-import { AuthRequest } from './auth.middleware.js';
-import { collections } from '../utils/firebase-admin.js';
-import { createLogger } from '../utils/logger.js';
-import { AppError } from './errorHandler.middleware.js';
+import { AuthRequest, AuthUser } from './auth.middleware.js';
 
-const log = createLogger('role');
+function requireAuthenticated(req: AuthRequest, res: Response): AuthUser | null {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return null;
+  }
+  return req.user;
+}
+
+/**
+ * A Firebase account with no `users/{uid}` document cannot be role-checked or
+ * blocked, so every guard here refuses it rather than defaulting it to an
+ * active user. This keeps the 404 the previous implementation returned, and
+ * covers a profile deleted out of band.
+ */
+function rejectIncomplete(user: AuthUser, res: Response): boolean {
+  if (!user.profileExists) {
+    res.status(404).json({ error: 'User not found' });
+    return true;
+  }
+
+  if (user.status === 'blocked') {
+    res.status(403).json({
+      error: 'Account blocked',
+      message: 'Your account has been blocked due to policy violations.',
+    });
+    return true;
+  }
+
+  return false;
+}
 
 /**
  * Require specific role(s) to access a route
  * Must be used AFTER authMiddleware
  */
 export function requireRole(...allowedRoles: string[]) {
-  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      if (!req.user) {
-        res.status(401).json({ error: 'Authentication required' });
-        return;
-      }
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    const user = requireAuthenticated(req, res);
+    if (!user) return;
+    if (rejectIncomplete(user, res)) return;
 
-      // Fetch fresh user data from Firestore to get current role/status
-      const userDoc = await collections.users.doc(req.user.uid).get();
-
-      if (!userDoc.exists) {
-        res.status(404).json({ error: 'User not found' });
-        return;
-      }
-
-      const userData = userDoc.data()!;
-
-      // Check if user is blocked
-      if (userData.status === 'blocked') {
-        res.status(403).json({
-          error: 'Account blocked',
-          message: 'Your account has been blocked due to policy violations.',
-        });
-        return;
-      }
-
-      // Check role
-      const userRole = userData.role || 'user';
-      if (!allowedRoles.includes(userRole)) {
-        res.status(403).json({
-          error: 'Access denied',
-          message: 'You do not have permission to access this resource.',
-        });
-        return;
-      }
-
-      // Attach role to request for downstream use
-      req.user.role = userRole;
-      next();
-    } catch (error) {
-      log.error('Role check failed', { error });
-      next(new AppError('Authorization check failed', 500));
+    if (!allowedRoles.includes(user.role)) {
+      res.status(403).json({
+        error: 'Access denied',
+        message: 'You do not have permission to access this resource.',
+      });
+      return;
     }
+
+    next();
   };
 }
 
@@ -70,39 +71,12 @@ export const requireAdmin = requireRole('admin');
  * Require user to be active (not blocked)
  * Must be used AFTER authMiddleware
  */
-export async function requireActiveUser(
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    if (!req.user) {
-      res.status(401).json({ error: 'Authentication required' });
-      return;
-    }
+export function requireActiveUser(req: AuthRequest, res: Response, next: NextFunction): void {
+  const user = requireAuthenticated(req, res);
+  if (!user) return;
+  if (rejectIncomplete(user, res)) return;
 
-    const userDoc = await collections.users.doc(req.user.uid).get();
-
-    if (!userDoc.exists) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    const userData = userDoc.data()!;
-
-    if (userData.status === 'blocked') {
-      res.status(403).json({
-        error: 'Account blocked',
-        message: 'Your account has been blocked due to policy violations.',
-      });
-      return;
-    }
-
-    next();
-  } catch (error) {
-    log.error('Active user check failed', { error });
-    next(new AppError('User status check failed', 500));
-  }
+  next();
 }
 
 /**
@@ -110,11 +84,10 @@ export async function requireActiveUser(
  * Useful for user-specific resource access
  */
 export function requireOwnership(getUserIdFromReq: (req: AuthRequest) => string | undefined) {
-  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-    if (!req.user) {
-      res.status(401).json({ error: 'Authentication required' });
-      return;
-    }
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    const user = requireAuthenticated(req, res);
+    if (!user) return;
+    if (rejectIncomplete(user, res)) return;
 
     const resourceUserId = getUserIdFromReq(req);
 
@@ -124,13 +97,13 @@ export function requireOwnership(getUserIdFromReq: (req: AuthRequest) => string 
     }
 
     // Admins can access any resource
-    if (req.user.role === 'admin') {
+    if (user.role === 'admin') {
       next();
       return;
     }
 
     // Regular users can only access their own resources
-    if (req.user.uid !== resourceUserId) {
+    if (user.uid !== resourceUserId) {
       res.status(403).json({
         error: 'Access denied',
         message: 'You can only access your own resources.',
@@ -140,4 +113,17 @@ export function requireOwnership(getUserIdFromReq: (req: AuthRequest) => string 
 
     next();
   };
+}
+
+/**
+ * Ownership of a resource whose owner is only known after a database read,
+ * such as an item's `reportedBy`. Admins pass regardless.
+ */
+export function assertOwnerOrAdmin(
+  user: AuthUser | undefined,
+  ownerId: string | undefined,
+): boolean {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  return Boolean(ownerId) && user.uid === ownerId;
 }

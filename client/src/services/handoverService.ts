@@ -1,3 +1,5 @@
+import { authFetch } from '../lib/authApi';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export interface HandoverStatus {
@@ -25,6 +27,14 @@ export const handoverService = {
       },
       body: JSON.stringify({ matchId, code }),
     });
+
+    // A 429 from the verify limiter carries no `success` field, so without this
+    // it would read as a wrong code.
+    if (response.status === 429) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || 'Too many attempts. Please try again later.');
+    }
+
     return response.json();
   },
 
@@ -44,7 +54,7 @@ export const handoverService = {
    * Get history of all handovers (Admin)
    */
   getHistory: async () => {
-    const response = await fetch(`${API_URL}/api/handover/history`);
+    const response = await authFetch('/api/handover/history');
     if (!response.ok) {
       throw new Error('Failed to get handover history');
     }

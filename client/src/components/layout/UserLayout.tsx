@@ -3,8 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { HelpCircle, LogOut, User, Settings, Menu, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../context/AuthContext';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { authFetch } from '../../lib/authApi';
 
 interface UserLayoutProps {
   children: React.ReactNode;
@@ -74,7 +73,7 @@ export function UserLayout({ children }: UserLayoutProps) {
     }
 
     // Fetch fresh credits
-    fetch(`${API_URL}/api/credits/${user.uid}`)
+    authFetch(`/api/credits/${user.uid}`)
       .then((res) => res.json())
       .then((data) => {
         const newCredits = data.credits || 0;

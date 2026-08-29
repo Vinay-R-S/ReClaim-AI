@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { UserLayout } from '../../components/layout/UserLayout';
 import { useAuth } from '../../context/AuthContext';
 import { Package, Calendar, User, ExternalLink } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { authFetch } from '../../lib/authApi';
 
 interface HandoverRecord {
   id: string;
@@ -38,7 +37,7 @@ export function HandoversPage() {
     if (!user?.uid) return;
 
     // Fetch user's handovers
-    fetch(`${API_URL}/api/handovers/user/${user.uid}`)
+    authFetch(`/api/handovers/user/${user.uid}`)
       .then((res) => res.json())
       .then((data) => {
         setHandovers(data.handovers || []);

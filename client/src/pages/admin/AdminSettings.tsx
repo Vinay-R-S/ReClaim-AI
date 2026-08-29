@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Save, Bot, Loader2, MapPin, X, Search, Video, Users, RefreshCw } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { authFetch } from '../../lib/authApi';
 
 type AIProvider = 'groq_only' | 'gemini_only' | 'groq_with_fallback' | 'gemini_with_fallback';
 
@@ -48,8 +49,6 @@ const AI_PROVIDER_OPTIONS: {
     description: 'Primary: Gemini. Fallback to Groq if Gemini fails.',
   },
 ];
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // Default marker icon
 const defaultIcon = L.icon({
@@ -97,7 +96,7 @@ export function AdminSettings() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/settings`);
+        const response = await authFetch('/api/settings');
         if (response.ok) {
           const data = await response.json();
           // Ensure booleans are properly set to avoid controlled/uncontrolled input issues
@@ -112,7 +111,7 @@ export function AdminSettings() {
         }
 
         // Fetch analytics (visitor count)
-        const analyticsResponse = await fetch(`${API_BASE_URL}/api/settings/analytics`);
+        const analyticsResponse = await authFetch('/api/settings/analytics');
         if (analyticsResponse.ok) {
           const analyticsData = await analyticsResponse.json();
           setVisitorCount(analyticsData.visitorCount || 0);
@@ -297,7 +296,7 @@ export function AdminSettings() {
     setSaveStatus('idle');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/settings`, {
+      const response = await authFetch('/api/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -557,7 +556,7 @@ export function AdminSettings() {
             onClick={async () => {
               setIsLoadingAnalytics(true);
               try {
-                const response = await fetch(`${API_BASE_URL}/api/settings/analytics`);
+                const response = await authFetch('/api/settings/analytics');
                 if (response.ok) {
                   const data = await response.json();
                   setVisitorCount(data.visitorCount || 0);

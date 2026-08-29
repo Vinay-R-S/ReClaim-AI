@@ -7,7 +7,13 @@ import { collections, auth } from '../utils/firebase-admin.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import { uploadImage, isCloudinaryConfigured } from '../services/cloudinary.js';
 import { createLogger } from '../utils/logger.js';
-import { asyncHandler } from '../middleware/index.js';
+import {
+  AuthRequest,
+  asyncHandler,
+  authMiddleware,
+  requireActiveUser,
+  requireAdmin,
+} from '../middleware/index.js';
 import { AppError } from '../middleware/index.js';
 
 const log = createLogger('settings');
@@ -46,6 +52,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
  */
 router.get(
   '/',
+  authMiddleware,
   asyncHandler(async (_req: Request, res: Response) => {
     const doc = await collections.settings.doc(SETTINGS_DOC_ID).get();
 
@@ -64,6 +71,8 @@ router.get(
  */
 router.put(
   '/',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const { aiProvider, mapCenter, cctvEnabled, testingMode } = req.body;
 
@@ -108,22 +117,17 @@ router.put(
  */
 router.post(
   '/profile-picture',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { userId, imageData } = req.body as {
-      userId: string;
-      imageData: string; // Base64 encoded image
-    };
-
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID required' });
-    }
+  authMiddleware,
+  requireActiveUser,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    // The uid comes from the verified token. A `userId` in the body is ignored,
+    // otherwise anyone could overwrite another user's avatar (SEC-07).
+    const userId = req.user!.uid;
+    const { imageData } = req.body as { imageData: string };
 
     if (!imageData) {
       return res.status(400).json({ error: 'Image data required' });
     }
-
-    // Note: User is already authenticated on client side, so we trust the userId
-    // No need for strict verification - proceed with upload
 
     // Upload to Cloudinary if configured
     let photoURL = '';
@@ -209,6 +213,8 @@ router.post(
  */
 router.get(
   '/analytics',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (_req: Request, res: Response) => {
     const doc = await collections.settings.doc('analytics').get();
 

@@ -6,7 +6,12 @@ import express from 'express';
 import { sendLoginNotification } from '../services/email.js';
 import { collections } from '../utils/firebase-admin.js';
 import { createLogger } from '../utils/logger.js';
-import { asyncHandler } from '../middleware/index.js';
+import {
+  asyncHandler,
+  authMiddleware,
+  AuthRequest,
+  requireActiveUser,
+} from '../middleware/index.js';
 import { AppError } from '../middleware/index.js';
 
 const log = createLogger('auth');
@@ -19,13 +24,14 @@ const router = express.Router();
  */
 router.post(
   '/login-notification',
-  asyncHandler(async (req, res) => {
-    const { userId, loginTime } = req.body;
+  authMiddleware,
+  requireActiveUser,
+  asyncHandler(async (req: AuthRequest, res) => {
+    // The uid comes from the verified token, so this endpoint can no longer be
+    // used as a user-existence probe or an email spam trigger (SEC-14).
+    const userId = req.user!.uid;
+    const { loginTime } = req.body;
     log.debug('Login notification requested', { userId });
-
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
-    }
 
     // Get user details from Firestore instead of Firebase Admin Auth
     const userDoc = await collections.users.doc(userId).get();

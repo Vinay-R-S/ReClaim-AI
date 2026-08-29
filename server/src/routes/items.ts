@@ -17,10 +17,14 @@ import { updateUserItemCounts } from '../services/userStats.js';
 import { triggerAutoMatching } from '../services/autoMatch.service.js';
 import { createItemEmbeddingString } from '../utils/embeddings.js';
 import {
+  assertOwnerOrAdmin,
+  asyncHandler,
   authMiddleware,
   AuthRequest,
   itemCreateLimiter,
-  asyncHandler,
+  optionalAuthMiddleware,
+  requireAdmin,
+  requireOwnership,
 } from '../middleware/index.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -34,8 +38,16 @@ const router = Router();
  */
 router.get(
   '/',
-  asyncHandler(async (req: Request, res: Response) => {
+  optionalAuthMiddleware,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     const { type, status, reportedBy, limit = '50' } = req.query;
+
+    // The browse list is public, but filtering by owner is not: without this,
+    // `?reportedBy=<victim-uid>` would enumerate another user's reports and
+    // walk straight around the ownership guard on GET /user/:userId.
+    if (reportedBy && !assertOwnerOrAdmin(req.user, reportedBy as string)) {
+      return res.status(403).json({ error: 'You can only list your own reports' });
+    }
 
     let query = collections.items.orderBy('createdAt', 'desc');
 
@@ -90,6 +102,8 @@ router.get(
  */
 router.get(
   '/user/:userId',
+  authMiddleware,
+  requireOwnership((req) => req.params.userId),
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
 
@@ -240,6 +254,11 @@ router.put(
       return res.status(404).json({ error: 'Item not found' });
     }
 
+    const existing = docSnapshot.data() as Item;
+    if (!assertOwnerOrAdmin(req.user, existing.reportedBy)) {
+      return res.status(403).json({ error: 'You can only edit your own reports' });
+    }
+
     // Prepare update data
     const updateData: Record<string, unknown> = {
       ...updates,
@@ -284,6 +303,7 @@ router.put(
 router.put(
   '/:id/status',
   authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { status, matchedUserId } = req.body;
@@ -319,6 +339,10 @@ router.delete(
     }
 
     const item = doc.data() as Item;
+
+    if (!assertOwnerOrAdmin(req.user, item.reportedBy)) {
+      return res.status(403).json({ error: 'You can only delete your own reports' });
+    }
 
     // Delete images from Cloudinary
     if (item.cloudinaryUrls) {
