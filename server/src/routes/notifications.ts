@@ -10,7 +10,7 @@ import {
   isEmailConfigured,
 } from '../services/email.js';
 import { getUserCredits, getCreditHistory } from '../services/credits.js';
-import { asyncHandler } from '../middleware/index.js';
+import { asyncHandler, authMiddleware, requireAdmin } from '../middleware/index.js';
 
 const router = Router();
 
@@ -20,6 +20,8 @@ const router = Router();
  */
 router.get(
   '/status',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     return res.json({
       email: isEmailConfigured(),
@@ -34,6 +36,8 @@ router.get(
  */
 router.post(
   '/send-match',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const { email, itemName, matchScore, collectionPoint } = req.body;
 
@@ -53,6 +57,8 @@ router.post(
  */
 router.post(
   '/send-claim',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const { email, itemName, collectionPoint } = req.body;
 
@@ -72,6 +78,8 @@ router.post(
  */
 router.get(
   '/credits/:userId',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
 

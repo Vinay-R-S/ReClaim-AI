@@ -6,7 +6,12 @@ import { Router, Request, Response } from 'express';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { collections, auth } from '../utils/firebase-admin.js';
 import { createLogger } from '../utils/logger.js';
-import { asyncHandler } from '../middleware/index.js';
+import {
+  asyncHandler,
+  authMiddleware,
+  requireAdmin,
+  requireOwnership,
+} from '../middleware/index.js';
 
 const log = createLogger('credits');
 
@@ -20,6 +25,8 @@ const DEFAULT_CREDITS = 10;
  */
 router.get(
   '/:userId',
+  authMiddleware,
+  requireOwnership((req) => req.params.userId),
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
 
@@ -50,6 +57,8 @@ router.get(
  */
 router.put(
   '/:userId',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { amount, reason } = req.body as { amount: number; reason?: string };
@@ -117,47 +126,13 @@ router.put(
 );
 
 /**
- * POST /api/credits/signup-bonus
- * Award signup bonus to new user (already handled in signup - this just logs transaction)
- */
-router.post(
-  '/signup-bonus',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { userId } = req.body;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
-
-    // Check if transaction already exists
-    const existingTx = await collections.creditTransactions
-      .where('userId', '==', userId)
-      .where('reason', '==', 'signup_bonus')
-      .limit(1)
-      .get();
-
-    if (!existingTx.empty) {
-      return res.json({ success: true, message: 'Bonus already awarded' });
-    }
-
-    // Create transaction record
-    await collections.creditTransactions.add({
-      userId,
-      amount: 10,
-      reason: 'signup_bonus',
-      createdAt: FieldValue.serverTimestamp(),
-    });
-
-    log.info(`Signup bonus transaction logged for ${userId}`);
-    return res.json({ success: true });
-  }),
-);
-
-/**
  * GET /api/credits/history/:userId
  * Get credit transaction history
  */
 router.get(
   '/history/:userId',
+  authMiddleware,
+  requireOwnership((req) => req.params.userId),
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
 

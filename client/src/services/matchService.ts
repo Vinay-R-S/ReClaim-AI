@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
+import { authFetch } from '../lib/authApi';
 
 export interface Match {
   id: string;
@@ -14,14 +15,12 @@ export interface Match {
   claimedAt?: Timestamp;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 /**
  * Get only active matches (not yet claimed)
  */
 export const getAllMatches = async (): Promise<Match[]> => {
   try {
-    const response = await fetch(`${API_URL}/api/matches`);
+    const response = await authFetch('/api/matches');
     if (!response.ok) {
       throw new Error(`Failed to fetch matches: ${response.statusText}`);
     }
@@ -39,7 +38,7 @@ export const getAllMatches = async (): Promise<Match[]> => {
  */
 export const getAllMatchesWithHistory = async (): Promise<Match[]> => {
   try {
-    const response = await fetch(`${API_URL}/api/matches/all`);
+    const response = await authFetch('/api/matches/all');
     if (!response.ok) {
       throw new Error(`Failed to fetch all matches: ${response.statusText}`);
     }

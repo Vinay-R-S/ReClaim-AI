@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authMiddleware, AuthRequest, asyncHandler } from '../middleware/index.js';
+import { asyncHandler, authMiddleware, AuthRequest, requireAdmin } from '../middleware/index.js';
 import { createLogger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 
@@ -14,6 +14,7 @@ const YOLO_SERVICE_URL = env.yolo.serviceUrl;
 router.get(
   '/classes',
   authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     try {
       const response = await fetch(`${YOLO_SERVICE_URL}/classes`);
@@ -33,6 +34,7 @@ router.get(
 router.post(
   '/detect',
   authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { image, targetClasses, targetClass } = req.body;
     if (!image) return res.status(400).json({ error: 'Image data is required' });
@@ -60,6 +62,7 @@ router.post(
 router.post(
   '/analyze',
   authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { frames, targetClass, itemName, itemDescription } = req.body;
     if (!frames || !Array.isArray(frames) || frames.length === 0) {
@@ -187,6 +190,7 @@ Respond in JSON format:
 router.post(
   '/describe',
   authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { image, detectedClass } = req.body;
     if (!image) return res.status(400).json({ error: 'Image data is required' });

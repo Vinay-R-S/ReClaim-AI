@@ -9,6 +9,7 @@ import { MapPin, Map as MapIcon, Loader2 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getItems, type Item } from '@/services/itemService';
+import { authFetch } from '../../lib/authApi';
 
 interface ItemHeatmapProps {
   radiusKm?: number;
@@ -34,8 +35,6 @@ const createMarkerIcon = (color: string, borderColor: string) =>
 const lostMarkerIcon = createMarkerIcon('#EA4335', '#B91C1C');
 const foundMarkerIcon = createMarkerIcon('#34A853', '#166534');
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +54,11 @@ export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
         // Fetch items and settings in parallel
         const [allItems, settingsResponse] = await Promise.all([
           getItems(),
-          fetch(`${API_BASE_URL}/api/settings`).then((r) => (r.ok ? r.json() : null)),
+          authFetch('/api/settings')
+            .then((r) => (r.ok ? r.json() : null))
+            // Settings are decoration here; a rejected token refresh must not
+            // discard the items that loaded alongside them.
+            .catch(() => null),
         ]);
 
         // Filter items that have coordinates

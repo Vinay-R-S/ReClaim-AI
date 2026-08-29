@@ -7,8 +7,7 @@ import { EditReportModal } from '../../components/user/EditReportModal';
 import { ImageCarousel } from '../../components/ui/ImageCarousel';
 import { Package, MapPin, Calendar, Edit2, Eye } from 'lucide-react';
 import { cn } from '../../lib/utils';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { authFetch } from '../../lib/authApi';
 
 export function MyReportsPage() {
   const { user } = useAuth();
@@ -23,7 +22,7 @@ export function MyReportsPage() {
 
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/items/user/${user.uid}`);
+      const response = await authFetch(`/api/items/user/${user.uid}`);
       if (response.ok) {
         const data = await response.json();
         setItems(data.items || []);

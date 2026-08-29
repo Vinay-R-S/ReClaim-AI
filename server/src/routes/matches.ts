@@ -7,9 +7,18 @@ import { findMatchesForLostItem, findMatchesForFoundItem } from '../services/mat
 import { awardMatchCredits, penalizeFalseClaim } from '../services/credits.js';
 import { sendMatchNotification, sendClaimConfirmation } from '../services/email.js';
 import { collections } from '../utils/firebase-admin.js';
+import { Item } from '../types/index.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import { initiateHandover } from '../services/handover.service.js';
-import { asyncHandler } from '../middleware/index.js';
+import {
+  assertOwnerOrAdmin,
+  AuthRequest,
+  asyncHandler,
+  authMiddleware,
+  requireActiveUser,
+  requireAdmin,
+  requireOwnership,
+} from '../middleware/index.js';
 
 const router = Router();
 
@@ -19,6 +28,8 @@ const router = Router();
  */
 router.post(
   '/search',
+  authMiddleware,
+  requireActiveUser,
   asyncHandler(async (req: Request, res: Response) => {
     const { type, name, description, tags, coordinates, date, imageBase64 } = req.body;
 
@@ -50,11 +61,17 @@ router.post(
  */
 router.post(
   '/claim',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { userId, userEmail, itemId, lostItemId } = req.body;
+  authMiddleware,
+  requireActiveUser,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    // A claim is always made by the caller, never on behalf of a body-supplied
+    // user id (SEC-01).
+    const userId = req.user!.uid;
+    const userEmail = req.user!.email;
+    const { itemId, lostItemId } = req.body;
 
-    if (!userId || !itemId) {
-      return res.status(400).json({ error: 'User ID and Item ID required' });
+    if (!itemId) {
+      return res.status(400).json({ error: 'Item ID required' });
     }
 
     // Get the found item
@@ -73,8 +90,20 @@ router.post(
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    // If there's a corresponding lost item, update it too
+    // If there's a corresponding lost item, update it too. It has to be the
+    // caller's own report: otherwise any active user could flip a stranger's
+    // lost item to Matched and point it at an unrelated found item.
     if (lostItemId) {
+      const lostItemDoc = await collections.items.doc(lostItemId).get();
+      if (!lostItemDoc.exists) {
+        return res.status(404).json({ error: 'Lost item not found' });
+      }
+
+      const lostItem = lostItemDoc.data() as Item;
+      if (!assertOwnerOrAdmin(req.user, lostItem.reportedBy)) {
+        return res.status(403).json({ error: 'You can only claim against your own lost report' });
+      }
+
       await collections.items.doc(lostItemId).update({
         status: 'Matched',
         matchedItemId: itemId,
@@ -106,8 +135,14 @@ router.post(
 
 router.post(
   '/verify',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { itemId, claimUserId, isValid, adminId } = req.body;
+  authMiddleware,
+  requireAdmin,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    // The verifying admin is whoever holds the token, not whoever the body
+    // names. Trusting the body also meant a missing adminId wrote `undefined`
+    // into Firestore and threw, after the handover emails had already gone out.
+    const adminId = req.user!.uid;
+    const { itemId, claimUserId, isValid } = req.body;
 
     if (!itemId || !claimUserId || isValid === undefined) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -210,6 +245,8 @@ router.post(
  */
 router.get(
   '/',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const snapshot = await collections.matches.orderBy('createdAt', 'desc').get();
 
@@ -228,6 +265,8 @@ router.get(
  */
 router.get(
   '/all',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     // Get active matches
     const activeSnapshot = await collections.matches.orderBy('createdAt', 'desc').get();
@@ -260,6 +299,8 @@ router.get(
  */
 router.get(
   '/item/:itemId',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
 
@@ -283,6 +324,8 @@ router.get(
  */
 router.get(
   '/user/:userId',
+  authMiddleware,
+  requireOwnership((req) => req.params.userId),
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
 

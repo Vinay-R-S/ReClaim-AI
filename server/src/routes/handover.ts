@@ -5,7 +5,13 @@ import {
   getHandoverStatus,
 } from '../services/handover.service.js';
 import { collections } from '../utils/firebase-admin.js';
-import { asyncHandler } from '../middleware/index.js';
+import {
+  asyncHandler,
+  authMiddleware,
+  handoverVerifyLimiter,
+  handoverStatusLimiter,
+  requireAdmin,
+} from '../middleware/index.js';
 
 const router = Router();
 
@@ -16,6 +22,8 @@ const router = Router();
  */
 router.post(
   '/initiate',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const { matchId, lostItemId, foundItemId } = req.body;
 
@@ -39,6 +47,7 @@ router.post(
  */
 router.post(
   '/verify',
+  handoverVerifyLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { matchId, code } = req.body;
 
@@ -60,6 +69,7 @@ router.post(
  */
 router.get(
   '/status/:matchId',
+  handoverStatusLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { matchId } = req.params;
     const status = await getHandoverStatus(matchId);
@@ -78,6 +88,8 @@ router.get(
  */
 router.get(
   '/history',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const snapshot = await collections.handovers.orderBy('handoverTime', 'desc').get();
 

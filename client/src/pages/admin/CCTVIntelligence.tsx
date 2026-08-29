@@ -27,8 +27,7 @@ import {
 } from '../../services/cctvService';
 import { AddItemModal } from '../../components/admin/AddItemModal';
 import { Link } from 'react-router-dom';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { authFetch } from '../../lib/authApi';
 
 export function CCTVIntelligence() {
   // Feature toggle state
@@ -68,7 +67,7 @@ export function CCTVIntelligence() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/settings`);
+        const response = await authFetch('/api/settings');
         if (response.ok) {
           const data = await response.json();
           setCctvEnabled(data.cctvEnabled !== false);

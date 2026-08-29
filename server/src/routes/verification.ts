@@ -13,7 +13,14 @@ import {
 import { sendVerificationSuccessEmail } from '../services/email.js';
 import { collections } from '../utils/firebase-admin.js';
 import { Item } from '../types/index.js';
-import { asyncHandler } from '../middleware/index.js';
+import {
+  assertOwnerOrAdmin,
+  asyncHandler,
+  authMiddleware,
+  AuthRequest,
+  requireActiveUser,
+  requireAdmin,
+} from '../middleware/index.js';
 import { AppError } from '../middleware/index.js';
 
 const router = Router();
@@ -24,11 +31,23 @@ const router = Router();
  */
 router.post(
   '/start',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { itemId, userId, email } = req.body;
+  authMiddleware,
+  requireActiveUser,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    // Claimant identity comes from the verified token. Taking it from the body
+    // let an anonymous caller open a verification attributed to any uid and
+    // route the success email, with the collection point in it, anywhere
+    // (SEC-10).
+    const userId = req.user!.uid;
+    const email = req.user!.email;
+    const { itemId } = req.body;
 
-    if (!itemId || !userId || !email) {
-      return res.status(400).json({ error: 'Missing required fields: itemId, userId, email' });
+    if (!itemId) {
+      return res.status(400).json({ error: 'Missing required field: itemId' });
+    }
+
+    if (!email) {
+      return res.status(400).json({ error: 'Your account has no email address' });
     }
 
     // Check if item exists and is claimable
@@ -64,12 +83,25 @@ router.post(
  */
 router.post(
   '/:id/answer',
-  asyncHandler(async (req: Request, res: Response) => {
+  authMiddleware,
+  requireActiveUser,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { questionIndex, answer } = req.body;
 
     if (questionIndex === undefined || !answer) {
       return res.status(400).json({ error: 'Missing required fields: questionIndex, answer' });
+    }
+
+    const session = await getVerification(id);
+    if (!session) {
+      return res.status(404).json({ error: 'Verification not found' });
+    }
+
+    // Session ids are guessable, and passing the questions resolves the item
+    // and emails the collection point, so only the claimant may answer.
+    if (!assertOwnerOrAdmin(req.user, session.claimantUserId)) {
+      return res.status(403).json({ error: 'This verification belongs to another user' });
     }
 
     const result = await submitVerificationAnswer(id, questionIndex, answer);
@@ -120,12 +152,18 @@ router.post(
  */
 router.get(
   '/:id',
-  asyncHandler(async (req: Request, res: Response) => {
+  authMiddleware,
+  requireActiveUser,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const verification = await getVerification(id);
     if (!verification) {
       return res.status(404).json({ error: 'Verification not found' });
+    }
+
+    if (!assertOwnerOrAdmin(req.user, verification.claimantUserId)) {
+      return res.status(403).json({ error: 'This verification belongs to another user' });
     }
 
     return res.json({
@@ -151,6 +189,8 @@ router.get(
  */
 router.get(
   '/item/:itemId',
+  authMiddleware,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
 

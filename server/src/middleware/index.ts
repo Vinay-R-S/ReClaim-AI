@@ -2,13 +2,21 @@
  * Middleware barrel export
  */
 
-export { authMiddleware, optionalAuthMiddleware, type AuthRequest } from './auth.middleware.js';
+export {
+  authMiddleware,
+  optionalAuthMiddleware,
+  type AuthRequest,
+  type AuthUser,
+  type UserRole,
+} from './auth.middleware.js';
 export {
   authLimiter,
   apiLimiter,
   resetLimiter,
   itemCreateLimiter,
   testingApiLimiter,
+  handoverVerifyLimiter,
+  handoverStatusLimiter,
 } from './rateLimit.middleware.js';
 export {
   validate,
@@ -27,6 +35,7 @@ export {
   requireAdmin,
   requireActiveUser,
   requireOwnership,
+  assertOwnerOrAdmin,
 } from './role.middleware.js';
 export {
   errorHandler,

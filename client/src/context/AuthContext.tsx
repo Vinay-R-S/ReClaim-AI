@@ -11,31 +11,21 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../lib/firebase';
+import { authFetch } from '../lib/authApi';
 
-// Helper function to send login notification
-const sendLoginNotification = async (userId: string) => {
+// Helper function to send login notification.
+// The endpoint now derives the uid from the ID token, so nothing is sent in the body.
+const sendLoginNotification = async () => {
   try {
-    console.log('Attempting to send login notification for user:', userId);
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-    const response = await fetch(`${API_URL}/api/auth/login-notification`, {
+    const response = await authFetch('/api/auth/login-notification', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({
-        userId,
         loginTime: new Date().toLocaleString(),
       }),
     });
 
-    const result = await response.json();
-    console.log('Login notification response:', result);
-
     if (!response.ok) {
-      console.error('Failed to send login notification:', result);
-    } else {
-      console.log('Login notification sent successfully:', result);
+      console.error('Failed to send login notification');
     }
   } catch (error) {
     console.error('Error sending login notification:', error);
@@ -156,18 +146,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         };
         await setDoc(userRef, newUser);
         setRole('user');
-
-        // Log credit transaction in backend
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        try {
-          await fetch(`${API_URL}/api/credits/signup-bonus`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.uid }),
-          });
-        } catch (err) {
-          console.error('Failed to log signup bonus:', err);
-        }
       } else {
         // Existing user - update last login
         await setDoc(
@@ -191,7 +169,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(true);
       await signInWithPopup(auth, googleProvider).then(async (result) => {
         if (result.user) {
-          await sendLoginNotification(result.user.uid);
+          await sendLoginNotification();
         }
       });
     } catch (err: any) {
@@ -209,7 +187,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(true);
       const result = await signInWithEmailAndPassword(auth, email, password);
       if (result.user) {
-        await sendLoginNotification(result.user.uid);
+        await sendLoginNotification();
       }
     } catch (err: any) {
       const errorMessage = getAuthErrorMessage(err.code);
@@ -252,22 +230,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
           },
           { merge: true },
         );
-
-        // Log credit transaction
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        try {
-          await fetch(`${API_URL}/api/credits/signup-bonus`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: result.user.uid }),
-          });
-        } catch (err) {
-          console.error('Failed to log signup bonus:', err);
-        }
       }
 
       if (result.user) {
-        await sendLoginNotification(result.user.uid);
+        await sendLoginNotification();
       }
     } catch (err: any) {
       const errorMessage = getAuthErrorMessage(err.code);

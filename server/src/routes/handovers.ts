@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { collections } from '../utils/firebase-admin.js';
-import { asyncHandler } from '../middleware/index.js';
+import { asyncHandler, authMiddleware, requireOwnership } from '../middleware/index.js';
 
 const router = Router();
 
@@ -10,6 +10,8 @@ const router = Router();
  */
 router.get(
   '/user/:userId',
+  authMiddleware,
+  requireOwnership((req) => req.params.userId),
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
 

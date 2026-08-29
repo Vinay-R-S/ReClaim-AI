@@ -8,8 +8,7 @@ import { User, MapPin, Mail, Calendar, Save, Loader2, Search, X } from 'lucide-r
 import { useAuth } from '@/context/AuthContext';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { authFetch } from '../../lib/authApi';
 
 // Default marker icon
 const defaultIcon = L.icon({
@@ -56,7 +55,7 @@ export function AdminProfile() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/settings`);
+        const response = await authFetch('/api/settings');
         if (response.ok) {
           const data = await response.json();
           if (data.mapCenter) {
@@ -215,7 +214,7 @@ export function AdminProfile() {
     setSaveStatus('idle');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/settings`, {
+      const response = await authFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
