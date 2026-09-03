@@ -11,7 +11,10 @@ import {
   authMiddleware,
   requireAdmin,
   requireOwnership,
+  validate,
+  validateParams,
 } from '../middleware/index.js';
+import { creditAdjustmentSchema, userIdParamsSchema } from '../schemas/index.js';
 
 const log = createLogger('credits');
 
@@ -26,13 +29,10 @@ const DEFAULT_CREDITS = 10;
 router.get(
   '/:userId',
   authMiddleware,
+  validateParams(userIdParamsSchema),
   requireOwnership((req) => req.params.userId),
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID required' });
-    }
 
     // Get credits from users collection
     const userDoc = await collections.users.doc(userId).get();
@@ -59,17 +59,11 @@ router.put(
   '/:userId',
   authMiddleware,
   requireAdmin,
+  validateParams(userIdParamsSchema),
+  validate(creditAdjustmentSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { amount, reason } = req.body as { amount: number; reason?: string };
-
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID required' });
-    }
-
-    if (typeof amount !== 'number') {
-      return res.status(400).json({ error: 'Amount must be a number' });
-    }
 
     // Get current credits (or create default)
     const creditsDoc = await collections.credits.doc(userId).get();
@@ -132,6 +126,7 @@ router.put(
 router.get(
   '/history/:userId',
   authMiddleware,
+  validateParams(userIdParamsSchema),
   requireOwnership((req) => req.params.userId),
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;

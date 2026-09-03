@@ -11,7 +11,9 @@ import {
   authMiddleware,
   AuthRequest,
   requireActiveUser,
+  validate,
 } from '../middleware/index.js';
+import { loginNotificationSchema } from '../schemas/index.js';
 import { AppError } from '../middleware/index.js';
 
 const log = createLogger('auth');
@@ -26,6 +28,7 @@ router.post(
   '/login-notification',
   authMiddleware,
   requireActiveUser,
+  validate(loginNotificationSchema),
   asyncHandler(async (req: AuthRequest, res) => {
     // The uid comes from the verified token, so this endpoint can no longer be
     // used as a user-existence probe or an email spam trigger (SEC-14).

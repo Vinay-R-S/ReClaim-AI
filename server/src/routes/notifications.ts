@@ -10,7 +10,18 @@ import {
   isEmailConfigured,
 } from '../services/email.js';
 import { getUserCredits, getCreditHistory } from '../services/credits.js';
-import { asyncHandler, authMiddleware, requireAdmin } from '../middleware/index.js';
+import {
+  asyncHandler,
+  authMiddleware,
+  requireAdmin,
+  validate,
+  validateParams,
+} from '../middleware/index.js';
+import {
+  sendClaimNotificationSchema,
+  sendMatchNotificationSchema,
+  userIdParamsSchema,
+} from '../schemas/index.js';
 
 const router = Router();
 
@@ -38,12 +49,9 @@ router.post(
   '/send-match',
   authMiddleware,
   requireAdmin,
+  validate(sendMatchNotificationSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { email, itemName, matchScore, collectionPoint } = req.body;
-
-    if (!email || !itemName) {
-      return res.status(400).json({ error: 'Email and item name required' });
-    }
 
     const success = await sendMatchNotification(email, itemName, matchScore || 80, collectionPoint);
 
@@ -59,12 +67,9 @@ router.post(
   '/send-claim',
   authMiddleware,
   requireAdmin,
+  validate(sendClaimNotificationSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { email, itemName, collectionPoint } = req.body;
-
-    if (!email || !itemName || !collectionPoint) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
 
     const success = await sendClaimConfirmation(email, itemName, collectionPoint);
 
@@ -80,6 +85,7 @@ router.get(
   '/credits/:userId',
   authMiddleware,
   requireAdmin,
+  validateParams(userIdParamsSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
 

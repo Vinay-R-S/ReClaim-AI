@@ -107,6 +107,12 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
       return;
     }
 
+    // The server requires a usable description for matching
+    if (formData.description.trim().length < 10) {
+      alert('Please describe the item in at least 10 characters');
+      return;
+    }
+
     try {
       setLoading(true);
 

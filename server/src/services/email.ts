@@ -8,6 +8,7 @@ import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
 import { createLogger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+import { escapeHtml } from '../utils/html.js';
 
 const log = createLogger('email');
 
@@ -161,9 +162,9 @@ export async function sendMatchNotification(
         </div>
         <div class="content">
           <p>Great news! We've found a potential match for your item:</p>
-          <h2>${itemName}</h2>
+          <h2>${escapeHtml(itemName)}</h2>
           <p><span class="match-badge">${matchScore}% Match</span></p>
-          ${collectionPoint ? `<p><strong>Collection Point:</strong> ${collectionPoint}</p>` : ''}
+          ${collectionPoint ? `<p><strong>Collection Point:</strong> ${escapeHtml(collectionPoint)}</p>` : ''}
           <p>Log in to ReClaim AI to view details and confirm if this is your item.</p>
           <a href="${env.clientUrl}/app" class="cta-button">View Match</a>
         </div>
@@ -211,9 +212,9 @@ export async function sendClaimConfirmation(
         </div>
         <div class="content">
           <p>Your claim for the following item has been confirmed:</p>
-          <h2>${itemName}</h2>
+          <h2>${escapeHtml(itemName)}</h2>
           <div class="info-box">
-            <p><strong>Collection Point:</strong> ${collectionPoint}</p>
+            <p><strong>Collection Point:</strong> ${escapeHtml(collectionPoint)}</p>
             <p><strong>What to bring:</strong> A valid ID for verification</p>
           </div>
           <p>Please visit the collection point during operating hours to pick up your item.</p>
@@ -263,7 +264,7 @@ export async function sendCreditsNotification(
         </div>
         <div class="content">
           <p class="credits">+${creditsEarned}</p>
-          <p><strong>Reason:</strong> ${reason}</p>
+          <p><strong>Reason:</strong> ${escapeHtml(reason)}</p>
           <p>Your total credits: <strong>${totalCredits}</strong></p>
         </div>
         <div class="footer">
@@ -317,12 +318,12 @@ export async function sendVerificationSuccessEmail(
         </div>
         <div class="content">
           <p>Great news! Your ownership of the following item has been verified:</p>
-          <h2 style="color: #4285f4; margin: 15px 0;">${itemName}</h2>
+          <h2 style="color: #4285f4; margin: 15px 0;">${escapeHtml(itemName)}</h2>
           
           <div class="info-box">
             <p style="margin: 0;"><strong>Collection Point:</strong></p>
-            <p style="margin: 5px 0 0 0; font-size: 16px;">${collectionPoint}</p>
-            ${collectionInstructions ? `<p style="margin: 10px 0 0 0; color: #666;"><em>${collectionInstructions}</em></p>` : ''}
+            <p style="margin: 5px 0 0 0; font-size: 16px;">${escapeHtml(collectionPoint)}</p>
+            ${collectionInstructions ? `<p style="margin: 10px 0 0 0; color: #666;"><em>${escapeHtml(collectionInstructions)}</em></p>` : ''}
           </div>
 
           <div class="steps">
@@ -371,8 +372,8 @@ export async function sendLoginNotification(
       <body style="margin:0; padding:0; background-color:#f6f7f9; font-family: Arial, Helvetica, sans-serif;">
         <div style="padding:20px; background-color:#fff; border-radius:8px;">
           <h2>Login Alert</h2>
-          <p>Dear ${userName},</p>
-          <p>A new login was detected on your account at ${loginTime}.</p>
+          <p>Dear ${escapeHtml(userName)},</p>
+          <p>A new login was detected on your account at ${escapeHtml(loginTime)}.</p>
           <p>If this wasn't you, please secure your account immediately.</p>
         </div>
       </body>
@@ -420,21 +421,21 @@ export async function sendHandoverCodeToLostPerson(
           <h1>🤝 Verification Code</h1>
         </div>
         <div class="content">
-          <p>Your item <strong>${itemName}</strong> has been found! Used the code below to claim it.</p>
+          <p>Your item <strong>${escapeHtml(itemName)}</strong> has been found! Used the code below to claim it.</p>
           
           <div class="code-box">
-            <div class="code">${code}</div>
-            <p style="font-size: 12px; color: #666; margin-top: 5px;">Valid until ${expiresAt}</p>
+            <div class="code">${escapeHtml(code)}</div>
+            <p style="font-size: 12px; color: #666; margin-top: 5px;">Valid until ${escapeHtml(expiresAt)}</p>
           </div>
 
           <h3>Collection Details</h3>
           <div class="info-row">
             <div class="label">Finder's Contact:</div>
-            <div>${finderEmail}</div>
+            <div>${escapeHtml(finderEmail)}</div>
           </div>
           <div class="info-row">
             <div class="label">Collection Address:</div>
-            <div>${collectionAddress}</div>
+            <div>${escapeHtml(collectionAddress)}</div>
           </div>
 
           <p><strong>Instructions:</strong> Meet the finder at the address above. When you receive your item, give them the 6-digit code above. They will enter it to confirm the handover.</p>
@@ -482,12 +483,12 @@ export async function sendHandoverLinkToFoundPerson(
           <h1>Item Handover</h1>
         </div>
         <div class="content">
-          <p>You are about to hand over the found item: <strong>${itemName}</strong>.</p>
+          <p>You are about to hand over the found item: <strong>${escapeHtml(itemName)}</strong>.</p>
           <p>When you meet the owner, ask them for their <strong>6-digit verification code</strong>.</p>
           <p>Click the button below to verify the code and complete the process:</p>
           
           <div style="text-align: center;">
-            <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer" class="cta-button">Verify Code & Confirm Handover</a>
+            <a href="${escapeHtml(verificationUrl)}" target="_blank" rel="noopener noreferrer" class="cta-button">Verify Code & Confirm Handover</a>
           </div>
 
           <p><em>Important: Only hand over the item after the code is successfully verified.</em></p>

@@ -7,6 +7,7 @@ import { collections } from '../utils/firebase-admin.js';
 import { CREDIT_VALUES, CreditTransaction, User } from '../types/index.js';
 import { sendCreditsNotification } from './email.js';
 import { createLogger } from '../utils/logger.js';
+import { stripUndefined } from '../utils/firestore.js';
 
 const log = createLogger('credits');
 
@@ -65,7 +66,9 @@ export async function updateCredits(
       createdAt: FieldValue.serverTimestamp() as any,
     };
 
-    await collections.creditTransactions.add(transaction);
+    // relatedItemId is optional, and Firestore rejects an undefined value, so
+    // the key is dropped rather than written as a hole.
+    await collections.creditTransactions.add(stripUndefined(transaction));
 
     // Send notification if credits increased and user has email
     if (sendNotification && amount > 0 && userData.email) {

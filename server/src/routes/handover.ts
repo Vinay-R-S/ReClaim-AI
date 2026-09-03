@@ -11,7 +11,14 @@ import {
   handoverVerifyLimiter,
   handoverStatusLimiter,
   requireAdmin,
+  validate,
+  validateParams,
 } from '../middleware/index.js';
+import {
+  handoverInitiateSchema,
+  handoverVerifySchema,
+  matchIdParamsSchema,
+} from '../schemas/index.js';
 
 const router = Router();
 
@@ -24,12 +31,9 @@ router.post(
   '/initiate',
   authMiddleware,
   requireAdmin,
+  validate(handoverInitiateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { matchId, lostItemId, foundItemId } = req.body;
-
-    if (!matchId || !lostItemId || !foundItemId) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
 
     const result = await initiateHandover(matchId, lostItemId, foundItemId);
 
@@ -48,12 +52,9 @@ router.post(
 router.post(
   '/verify',
   handoverVerifyLimiter,
+  validate(handoverVerifySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { matchId, code } = req.body;
-
-    if (!matchId || !code) {
-      return res.status(400).json({ error: 'Missing matchId or code' });
-    }
 
     const result = await verifyHandoverCode(matchId, code);
 
@@ -70,6 +71,7 @@ router.post(
 router.get(
   '/status/:matchId',
   handoverStatusLimiter,
+  validateParams(matchIdParamsSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { matchId } = req.params;
     const status = await getHandoverStatus(matchId);

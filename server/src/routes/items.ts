@@ -25,7 +25,22 @@ import {
   optionalAuthMiddleware,
   requireAdmin,
   requireOwnership,
+  validate,
+  validateParams,
+  validateQuery,
 } from '../middleware/index.js';
+import {
+  idParamsSchema,
+  itemInputSchema,
+  itemListQuerySchema,
+  itemStatusUpdateSchema,
+  itemUpdateSchema,
+  userIdParamsSchema,
+  type ItemListQuery,
+  type ItemStatusUpdateBody,
+  type ItemUpdateBody,
+} from '../schemas/index.js';
+import { stripUndefined } from '../utils/firestore.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('items');
@@ -39,13 +54,14 @@ const router = Router();
 router.get(
   '/',
   optionalAuthMiddleware,
+  validateQuery(itemListQuerySchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { type, status, reportedBy, limit = '50' } = req.query;
+    const { type, status, reportedBy, limit } = req.query as unknown as ItemListQuery;
 
     // The browse list is public, but filtering by owner is not: without this,
     // `?reportedBy=<victim-uid>` would enumerate another user's reports and
     // walk straight around the ownership guard on GET /user/:userId.
-    if (reportedBy && !assertOwnerOrAdmin(req.user, reportedBy as string)) {
+    if (reportedBy && !assertOwnerOrAdmin(req.user, reportedBy)) {
       return res.status(403).json({ error: 'You can only list your own reports' });
     }
 
@@ -61,7 +77,7 @@ router.get(
       query = query.where('reportedBy', '==', reportedBy);
     }
 
-    const snapshot = await query.limit(parseInt(limit as string)).get();
+    const snapshot = await query.limit(limit).get();
 
     const items = snapshot.docs.map((doc) => ({
       id: doc.id,
@@ -78,6 +94,7 @@ router.get(
  */
 router.get(
   '/:id',
+  validateParams(idParamsSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
@@ -103,6 +120,7 @@ router.get(
 router.get(
   '/user/:userId',
   authMiddleware,
+  validateParams(userIdParamsSchema),
   requireOwnership((req) => req.params.userId),
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
@@ -129,6 +147,7 @@ router.post(
   '/',
   authMiddleware,
   itemCreateLimiter,
+  validate(itemInputSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     // Use authenticated user ID instead of body parameter
     const userId = req.user!.uid;
@@ -242,12 +261,11 @@ router.post(
 router.put(
   '/:id',
   authMiddleware,
+  validateParams(idParamsSchema),
+  validate(itemUpdateSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    const { updates, images } = req.body as {
-      updates: Partial<ItemInput>;
-      images?: string[]; // New base64 images
-    };
+    const { updates, images } = req.body as ItemUpdateBody;
 
     const docSnapshot = await collections.items.doc(id).get();
     if (!docSnapshot.exists) {
@@ -259,15 +277,45 @@ router.put(
       return res.status(403).json({ error: 'You can only edit your own reports' });
     }
 
-    // Prepare update data
-    const updateData: Record<string, unknown> = {
-      ...updates,
-      updatedAt: FieldValue.serverTimestamp(),
-    };
+    const fields = updates ?? {};
+    const isAdmin = req.user?.role === 'admin';
 
-    // Convert date if provided
-    if (updates.date) {
-      updateData.date = Timestamp.fromDate(new Date(updates.date));
+    // Explicit allowlist rather than a spread of the request body: everything
+    // not named here is server owned (reportedBy, matchedItemId, matchedUserId,
+    // claimedBy, verifiedAt, verificationConfidence) and stays out of reach.
+    const updateData: Record<string, unknown> = stripUndefined({
+      name: fields.name,
+      description: fields.description,
+      location: fields.location,
+      category: fields.category,
+      color: fields.color,
+      tags: fields.tags,
+      collectionLocation: fields.collectionLocation,
+      coordinates: fields.coordinates,
+      date: fields.date ? Timestamp.fromDate(new Date(fields.date)) : undefined,
+      // Lifecycle fields are an admin action, not something an owner can set on
+      // their own report.
+      status: isAdmin ? fields.status : undefined,
+      type: isAdmin ? fields.type : undefined,
+      matchScore: isAdmin ? fields.matchScore : undefined,
+    });
+
+    updateData.updatedAt = FieldValue.serverTimestamp();
+
+    const existingUrls = existing.cloudinaryUrls || [];
+    // The edit form lists the legacy single imageUrl alongside cloudinaryUrls,
+    // so both count as URLs the item already owns.
+    const ownedUrls = existing.imageUrl ? [...existingUrls, existing.imageUrl] : existingUrls;
+
+    // cloudinaryUrls is only accepted as a removal: the edit form sends the
+    // remaining URLs after the user deletes an image. Anything not already on
+    // the item would let a caller point the record at an arbitrary URL.
+    if (fields.cloudinaryUrls) {
+      const unknownUrl = fields.cloudinaryUrls.find((url) => !ownedUrls.includes(url));
+      if (unknownUrl) {
+        return res.status(400).json({ error: 'Images can only be removed, not replaced by URL' });
+      }
+      updateData.cloudinaryUrls = fields.cloudinaryUrls;
     }
 
     // Upload new images if provided
@@ -275,9 +323,8 @@ router.put(
       try {
         const results = await uploadMultipleImages(images);
         const newUrls = results.map((r) => r.url);
-        // Append to existing or replace
-        const existingItem = docSnapshot.data() as Item;
-        updateData.cloudinaryUrls = [...(existingItem.cloudinaryUrls || []), ...newUrls];
+        const keptUrls = (updateData.cloudinaryUrls as string[] | undefined) ?? existingUrls;
+        updateData.cloudinaryUrls = [...keptUrls, ...newUrls];
       } catch (uploadError) {
         log.error('Image upload failed:', uploadError);
         // Continue without new images
@@ -304,18 +351,18 @@ router.put(
   '/:id/status',
   authMiddleware,
   requireAdmin,
+  validateParams(idParamsSchema),
+  validate(itemStatusUpdateSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    const { status, matchedUserId } = req.body;
+    const { status, matchedUserId } = req.body as ItemStatusUpdateBody;
 
-    const validStatuses = ['Pending', 'Matched', 'Claimed', 'Resolved'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
-    }
+    // matchedUserId is optional, and Firestore rejects an undefined value, so
+    // the key is dropped rather than written as a hole.
+    const updateData = stripUndefined({ status, matchedUserId });
 
     await collections.items.doc(id).update({
-      status,
-      matchedUserId,
+      ...updateData,
       updatedAt: FieldValue.serverTimestamp(),
     });
 
@@ -330,6 +377,7 @@ router.put(
 router.delete(
   '/:id',
   authMiddleware,
+  validateParams(idParamsSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
