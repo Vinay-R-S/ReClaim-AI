@@ -1,5 +1,12 @@
 import { Router, Response } from 'express';
-import { asyncHandler, authMiddleware, AuthRequest, requireAdmin } from '../middleware/index.js';
+import {
+  asyncHandler,
+  authMiddleware,
+  AuthRequest,
+  requireAdmin,
+  validate,
+} from '../middleware/index.js';
+import { cctvAnalyzeSchema, cctvDescribeSchema, cctvDetectSchema } from '../schemas/index.js';
 import { createLogger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 
@@ -35,9 +42,9 @@ router.post(
   '/detect',
   authMiddleware,
   requireAdmin,
+  validate(cctvDetectSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { image, targetClasses, targetClass } = req.body;
-    if (!image) return res.status(400).json({ error: 'Image data is required' });
 
     try {
       const response = await fetch(`${YOLO_SERVICE_URL}/detect`, {
@@ -63,11 +70,9 @@ router.post(
   '/analyze',
   authMiddleware,
   requireAdmin,
+  validate(cctvAnalyzeSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { frames, targetClass, itemName, itemDescription } = req.body;
-    if (!frames || !Array.isArray(frames) || frames.length === 0) {
-      return res.status(400).json({ error: 'Frames array is required' });
-    }
 
     // Call Python YOLO service
     let yoloResult: any;
@@ -191,9 +196,9 @@ router.post(
   '/describe',
   authMiddleware,
   requireAdmin,
+  validate(cctvDescribeSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { image, detectedClass } = req.body;
-    if (!image) return res.status(400).json({ error: 'Image data is required' });
 
     const groqApiKey = env.llm.groqApiKey;
     const defaultResponse = {

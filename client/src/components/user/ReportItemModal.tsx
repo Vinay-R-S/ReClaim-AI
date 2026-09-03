@@ -180,6 +180,12 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
       return;
     }
 
+    // The server requires a usable description for matching
+    if (formData.description.trim().length < 10) {
+      alert('Please describe the item in at least 10 characters');
+      return;
+    }
+
     // For Found: collection location is mandatory
     if (type === 'Found' && !formData.collectionLocation) {
       alert('Please enter a collection location');

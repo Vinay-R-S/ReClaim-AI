@@ -13,7 +13,9 @@ import {
   authMiddleware,
   requireActiveUser,
   requireAdmin,
+  validate,
 } from '../middleware/index.js';
+import { profilePictureSchema, settingsUpdateSchema } from '../schemas/index.js';
 import { AppError } from '../middleware/index.js';
 
 const log = createLogger('settings');
@@ -73,19 +75,9 @@ router.put(
   '/',
   authMiddleware,
   requireAdmin,
+  validate(settingsUpdateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { aiProvider, mapCenter, cctvEnabled, testingMode } = req.body;
-
-    // Validate aiProvider
-    const validProviders: AIProvider[] = [
-      'groq_only',
-      'gemini_only',
-      'groq_with_fallback',
-      'gemini_with_fallback',
-    ];
-    if (!validProviders.includes(aiProvider)) {
-      return res.status(400).json({ error: 'Invalid AI provider' });
-    }
 
     const settings: SystemSettings = {
       aiProvider,
@@ -95,7 +87,7 @@ router.put(
     };
 
     // Add mapCenter if provided
-    if (mapCenter && mapCenter.lat && mapCenter.lng) {
+    if (typeof mapCenter?.lat === 'number' && typeof mapCenter?.lng === 'number') {
       settings.mapCenter = {
         address: mapCenter.address || '',
         lat: mapCenter.lat,
@@ -119,15 +111,12 @@ router.post(
   '/profile-picture',
   authMiddleware,
   requireActiveUser,
+  validate(profilePictureSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     // The uid comes from the verified token. A `userId` in the body is ignored,
     // otherwise anyone could overwrite another user's avatar (SEC-07).
     const userId = req.user!.uid;
     const { imageData } = req.body as { imageData: string };
-
-    if (!imageData) {
-      return res.status(400).json({ error: 'Image data required' });
-    }
 
     // Upload to Cloudinary if configured
     let photoURL = '';

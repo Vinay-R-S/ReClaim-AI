@@ -18,7 +18,16 @@ import {
   requireActiveUser,
   requireAdmin,
   requireOwnership,
+  validate,
+  validateParams,
 } from '../middleware/index.js';
+import {
+  itemIdParamsSchema,
+  matchClaimSchema,
+  matchSearchSchema,
+  matchVerifySchema,
+  userIdParamsSchema,
+} from '../schemas/index.js';
 
 const router = Router();
 
@@ -30,12 +39,9 @@ router.post(
   '/search',
   authMiddleware,
   requireActiveUser,
+  validate(matchSearchSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { type, name, description, tags, coordinates, date, imageBase64 } = req.body;
-
-    if (!name) {
-      return res.status(400).json({ error: 'Item name required' });
-    }
 
     const searchParams = {
       name,
@@ -63,16 +69,13 @@ router.post(
   '/claim',
   authMiddleware,
   requireActiveUser,
+  validate(matchClaimSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     // A claim is always made by the caller, never on behalf of a body-supplied
     // user id (SEC-01).
     const userId = req.user!.uid;
     const userEmail = req.user!.email;
     const { itemId, lostItemId } = req.body;
-
-    if (!itemId) {
-      return res.status(400).json({ error: 'Item ID required' });
-    }
 
     // Get the found item
     const itemDoc = await collections.items.doc(itemId).get();
@@ -137,16 +140,13 @@ router.post(
   '/verify',
   authMiddleware,
   requireAdmin,
+  validate(matchVerifySchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     // The verifying admin is whoever holds the token, not whoever the body
     // names. Trusting the body also meant a missing adminId wrote `undefined`
     // into Firestore and threw, after the handover emails had already gone out.
     const adminId = req.user!.uid;
     const { itemId, claimUserId, isValid } = req.body;
-
-    if (!itemId || !claimUserId || isValid === undefined) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
 
     const itemDoc = await collections.items.doc(itemId).get();
     if (!itemDoc.exists) {
@@ -301,6 +301,7 @@ router.get(
   '/item/:itemId',
   authMiddleware,
   requireAdmin,
+  validateParams(itemIdParamsSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
 
@@ -325,6 +326,7 @@ router.get(
 router.get(
   '/user/:userId',
   authMiddleware,
+  validateParams(userIdParamsSchema),
   requireOwnership((req) => req.params.userId),
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;

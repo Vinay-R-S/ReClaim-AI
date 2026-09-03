@@ -28,7 +28,7 @@ export async function detectObjectsInFrame(
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.details || err.error || 'Detection failed');
+    throw new Error(err.error || err.details || 'Detection failed');
   }
   return response.json();
 }
@@ -65,7 +65,7 @@ export async function describeItemImage(
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.details || err.error || 'Description failed');
+    throw new Error(err.error || err.details || 'Description failed');
   }
   return response.json();
 }
@@ -187,7 +187,7 @@ export async function analyzeVideoForItem(
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.details || err.error || 'Video analysis failed');
+    throw new Error(err.error || err.details || 'Video analysis failed');
   }
   return response.json();
 }

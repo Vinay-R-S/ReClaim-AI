@@ -18,18 +18,7 @@ export {
   handoverVerifyLimiter,
   handoverStatusLimiter,
 } from './rateLimit.middleware.js';
-export {
-  validate,
-  validateQuery,
-  validateParams,
-  signupSchema,
-  loginSchema,
-  itemInputSchema,
-  itemUpdateSchema,
-  userIdSchema,
-  sanitizeString,
-  sanitizeObject,
-} from './validation.middleware.js';
+export { validate, validateQuery, validateParams } from './validation.middleware.js';
 export {
   requireRole,
   requireAdmin,

@@ -20,7 +20,15 @@ import {
   AuthRequest,
   requireActiveUser,
   requireAdmin,
+  validate,
+  validateParams,
 } from '../middleware/index.js';
+import {
+  idParamsSchema,
+  itemIdParamsSchema,
+  verificationAnswerSchema,
+  verificationStartSchema,
+} from '../schemas/index.js';
 import { AppError } from '../middleware/index.js';
 
 const router = Router();
@@ -33,6 +41,7 @@ router.post(
   '/start',
   authMiddleware,
   requireActiveUser,
+  validate(verificationStartSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     // Claimant identity comes from the verified token. Taking it from the body
     // let an anonymous caller open a verification attributed to any uid and
@@ -41,10 +50,6 @@ router.post(
     const userId = req.user!.uid;
     const email = req.user!.email;
     const { itemId } = req.body;
-
-    if (!itemId) {
-      return res.status(400).json({ error: 'Missing required field: itemId' });
-    }
 
     if (!email) {
       return res.status(400).json({ error: 'Your account has no email address' });
@@ -85,13 +90,11 @@ router.post(
   '/:id/answer',
   authMiddleware,
   requireActiveUser,
+  validateParams(idParamsSchema),
+  validate(verificationAnswerSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { questionIndex, answer } = req.body;
-
-    if (questionIndex === undefined || !answer) {
-      return res.status(400).json({ error: 'Missing required fields: questionIndex, answer' });
-    }
 
     const session = await getVerification(id);
     if (!session) {
@@ -154,6 +157,7 @@ router.get(
   '/:id',
   authMiddleware,
   requireActiveUser,
+  validateParams(idParamsSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
@@ -191,6 +195,7 @@ router.get(
   '/item/:itemId',
   authMiddleware,
   requireAdmin,
+  validateParams(itemIdParamsSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
 
