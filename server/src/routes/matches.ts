@@ -4,7 +4,7 @@
 
 import { Router, Request, Response } from 'express';
 import { findMatchesForLostItem, findMatchesForFoundItem } from '../services/matching.js';
-import { awardMatchCredits, penalizeFalseClaim } from '../services/credits.js';
+import { penalizeFalseClaim } from '../services/credits.js';
 import { sendMatchNotification, sendClaimConfirmation } from '../services/email.js';
 import { collections } from '../utils/firebase-admin.js';
 import { Item } from '../types/index.js';

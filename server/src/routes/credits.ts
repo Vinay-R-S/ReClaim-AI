@@ -1,11 +1,14 @@
 /**
- * Credits API Routes - User credit balance management
+ * Credits API Routes - user credit balances
+ *
+ * Every read and write goes through the credits service, so `users/{uid}.credits`
+ * plus the `creditTransactions` ledger stay the only store. This route used to
+ * write a separate `credits/{uid}` document that nothing ever read (LOG-01).
  */
 
 import { Router, Request, Response } from 'express';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { collections, auth } from '../utils/firebase-admin.js';
-import { createLogger } from '../utils/logger.js';
+import { collections } from '../utils/firebase-admin.js';
+import { adjustCredits, getCreditHistory } from '../services/credits.js';
 import {
   asyncHandler,
   authMiddleware,
@@ -15,16 +18,13 @@ import {
   validateParams,
 } from '../middleware/index.js';
 import { creditAdjustmentSchema, userIdParamsSchema } from '../schemas/index.js';
-
-const log = createLogger('credits');
+import { AppError } from '../middleware/index.js';
 
 const router = Router();
 
-const DEFAULT_CREDITS = 10;
-
 /**
  * GET /api/credits/:userId
- * Get user's credit balance from users collection
+ * Get a user's credit balance
  */
 router.get(
   '/:userId',
@@ -34,26 +34,23 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
 
-    // Get credits from users collection
     const userDoc = await collections.users.doc(userId).get();
 
     if (!userDoc.exists) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const userData = userDoc.data();
-
     return res.json({
       userId,
-      email: userData?.email || '',
-      credits: userData?.credits || 0,
+      email: userDoc.data()?.email || '',
+      credits: userDoc.data()?.credits ?? 0,
     });
   }),
 );
 
 /**
  * PUT /api/credits/:userId
- * Add credits to user balance
+ * Adjust a user's balance by a delta
  */
 router.put(
   '/:userId',
@@ -65,55 +62,21 @@ router.put(
     const { userId } = req.params;
     const { amount, reason } = req.body as { amount: number; reason?: string };
 
-    // Get current credits (or create default)
-    const creditsDoc = await collections.credits.doc(userId).get();
-
-    let currentCredits = DEFAULT_CREDITS;
-    let userEmail = '';
-
-    if (creditsDoc.exists) {
-      const data = creditsDoc.data();
-      currentCredits = data?.credits || 0;
-      userEmail = data?.email || '';
-    } else {
-      // Get email from auth
-      try {
-        const userRecord = await auth.getUser(userId);
-        userEmail = userRecord.email || '';
-      } catch {
-        // User not found in auth
-      }
+    const userDoc = await collections.users.doc(userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    const newCredits = currentCredits + amount;
+    const result = await adjustCredits(userId, amount, reason);
 
-    await collections.credits.doc(userId).set(
-      {
-        email: userEmail,
-        credits: newCredits,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-
-    // Log transaction
-    await collections.creditTransactions.add({
-      userId,
-      email: userEmail,
-      amount,
-      reason: reason || 'Manual update',
-      balanceAfter: newCredits,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-
-    log.info(
-      `Credits updated for ${userId}: ${amount > 0 ? '+' : ''}${amount}, new balance: ${newCredits}`,
-    );
+    if (!result.success) {
+      throw new AppError('Failed to adjust credits', 500);
+    }
 
     return res.json({
       userId,
-      email: userEmail,
-      credits: newCredits,
+      email: userDoc.data()?.email || '',
+      credits: result.newBalance,
       added: amount,
     });
   }),
@@ -129,25 +92,7 @@ router.get(
   validateParams(userIdParamsSchema),
   requireOwnership((req) => req.params.userId),
   asyncHandler(async (req: Request, res: Response) => {
-    const { userId } = req.params;
-
-    const snapshot = await collections.creditTransactions
-      .where('userId', '==', userId)
-      .limit(50)
-      .get();
-
-    const history = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    // Sort by createdAt descending
-    history.sort((a: any, b: any) => {
-      const dateA = a.createdAt?.toDate?.() || new Date(0);
-      const dateB = b.createdAt?.toDate?.() || new Date(0);
-      return dateB.getTime() - dateA.getTime();
-    });
-
+    const history = await getCreditHistory(req.params.userId, 50);
     return res.json({ history });
   }),
 );
