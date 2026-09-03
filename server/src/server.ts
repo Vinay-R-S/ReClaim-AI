@@ -13,12 +13,6 @@ const log = createLogger('server');
 
 env.warnings.forEach((warning) => log.warn(`Configuration warning: ${warning}`));
 
-if (env.deprecatedVarsInUse.length > 0) {
-  log.warn('Deprecated VITE_ prefixed variables are supplying server config', {
-    variables: env.deprecatedVarsInUse,
-  });
-}
-
 const app = createApp();
 
 const server = app.listen(env.port, () => {

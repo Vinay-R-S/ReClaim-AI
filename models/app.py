@@ -1,13 +1,56 @@
 import cv2
 import numpy as np
 import base64
+import hmac
 import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from ultralytics import YOLO
 
 app = Flask(__name__)
-CORS(app)
+
+# Only the Express server talks to this service. CORS is scoped to that origin
+# rather than left open, and the browser never calls these endpoints directly.
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("ALLOWED_ORIGINS", "http://localhost:3001").split(",")
+    if origin.strip()
+]
+CORS(app, origins=ALLOWED_ORIGINS)
+
+# Shared secret with the Express proxy. Without it every inference endpoint
+# refuses, because this service has no user accounts of its own and burns GPU
+# time on whoever can reach the port.
+SERVICE_TOKEN = os.environ.get("YOLO_SERVICE_TOKEN", "").strip()
+TOKEN_HEADER = "X-Service-Token"
+
+
+def is_authorized():
+    if not SERVICE_TOKEN:
+        return False
+    # Werkzeug decodes headers as latin-1, and compare_digest raises TypeError
+    # on a str with a byte above 0x7F. Comparing bytes turns that into a plain
+    # mismatch instead of a 500.
+    supplied = request.headers.get(TOKEN_HEADER, "").encode("utf-8", "ignore")
+    return hmac.compare_digest(supplied, SERVICE_TOKEN.encode("utf-8"))
+
+
+@app.before_request
+def require_service_token():
+    # /health stays open so a load balancer can probe it.
+    if request.method == "OPTIONS" or request.path == "/health":
+        return None
+
+    if not SERVICE_TOKEN:
+        return jsonify({
+            "error": "Service not configured",
+            "details": "YOLO_SERVICE_TOKEN is not set, so every request is refused."
+        }), 503
+
+    if not is_authorized():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    return None
 
 # Get the directory where this script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -212,4 +255,15 @@ def analyze_video():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    # The Werkzeug debugger is remote code execution for anyone who can reach
+    # the port, so it is opt-in and off by default.
+    debug = os.environ.get('FLASK_DEBUG', 'false').strip().lower() in ('1', 'true', 'yes')
+    # Still binds every interface by default, because a container or a separate
+    # host has to reach it. The shared secret is what gates access now, not the
+    # bind address.
+    host = os.environ.get('HOST', '0.0.0.0')
+
+    if not SERVICE_TOKEN:
+        print('WARNING: YOLO_SERVICE_TOKEN is not set. Every request will be refused with 503.')
+
+    app.run(host=host, port=port, debug=debug)

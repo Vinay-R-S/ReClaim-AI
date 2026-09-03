@@ -1,0 +1,107 @@
+rules_version = '2';
+
+// ReClaim AI Firestore rules
+//
+// The server holds a service account and bypasses every rule below, so these
+// rules describe what the BROWSER may do. The rule of thumb: the browser may
+// read what belongs to it, and may write nothing that decides authority,
+// money, or item state. Those go through the API, where the request is
+// authenticated, validated and logged.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // One document read per evaluation. Admin is a Firestore field rather than
+    // a custom claim, because that is where the app stores it.
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /users/{userId} {
+      // A profile is private to its owner and to admins, who need the list for
+      // the users screen.
+      allow get: if isSelf(userId) || isAdmin();
+      allow list: if isAdmin();
+
+      // Profile creation is a server action (POST /api/auth/profile): the
+      // browser used to write role, status and credits here itself.
+      allow create: if false;
+      allow delete: if false;
+
+      // No client writes at all. Display fields go through the API like
+      // everything else; a field denylist here would still let a signed-in
+      // user add arbitrary new keys to their own document.
+      allow update: if false;
+    }
+
+    // Items are created, edited and deleted through the API, which enforces
+    // ownership, validates the payload and keeps the server-owned fields
+    // (status, matchScore, matchedItemId, verifiedAt) out of reach.
+    //
+    // Reads are admin only: item documents carry reporter emails, coordinates
+    // and the collection point, and every direct read in the client is an admin
+    // screen. The public browse list is `GET /api/items`, which is served by the
+    // Admin SDK, rate limited and bounded by a `limit`.
+    match /items/{itemId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Everything below is read through the API. None of it is a client write.
+    match /matches/{matchId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /matchHistory/{matchId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /handovers/{handoverId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Codes are hashed, but there is no reason for a browser to enumerate them.
+    match /handoverCodes/{codeId} {
+      allow read, write: if false;
+    }
+
+    match /verifications/{verificationId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /credits/{userId} {
+      allow read: if isSelf(userId) || isAdmin();
+      allow write: if false;
+    }
+
+    match /creditTransactions/{transactionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // `settings/system` is read by the admin screens; `settings/analytics`
+    // holds the visitor counter and is admin only. Both are written by the API.
+    match /settings/{docId} {
+      allow read: if docId == 'system' ? isSignedIn() : isAdmin();
+      allow write: if false;
+    }
+
+    // Anything not named above is server-only.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

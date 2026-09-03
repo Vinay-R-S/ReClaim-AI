@@ -10,12 +10,31 @@ export interface LLMMessage {
   content: string;
 }
 
+export interface LLMImage {
+  base64: string;
+  mimeType?: string;
+}
+
 export interface LLMOptions {
   provider?: LLMProvider;
   temperature?: number;
   maxTokens?: number;
+  /** Single image, kept for the existing callers. */
   imageBase64?: string;
   imageMimeType?: string;
+  /** Several images of the same subject, analysed together. */
+  images?: LLMImage[];
+}
+
+/**
+ * Collapse the single-image and multi-image options into one list
+ */
+function collectImages(options: LLMOptions): LLMImage[] {
+  if (options.images && options.images.length > 0) return options.images;
+  if (options.imageBase64) {
+    return [{ base64: options.imageBase64, mimeType: options.imageMimeType }];
+  }
+  return [];
 }
 
 interface LLMResponse {
@@ -39,21 +58,20 @@ async function callGroq(messages: LLMMessage[], options: LLMOptions = {}): Promi
     throw new Error('Groq API key not configured');
   }
 
-  const { temperature = 0.3, maxTokens = 2048, imageBase64, imageMimeType } = options;
+  const { temperature = 0.3, maxTokens = 2048 } = options;
+  const images = collectImages(options);
 
-  // Build messages with optional image
+  // Build messages with optional images
   const formattedMessages = messages.map((msg) => {
-    if (msg.role === 'user' && imageBase64) {
+    if (msg.role === 'user' && images.length > 0) {
       return {
         role: msg.role,
         content: [
           { type: 'text', text: msg.content },
-          {
+          ...images.map((image) => ({
             type: 'image_url',
-            image_url: {
-              url: `data:${imageMimeType || 'image/jpeg'};base64,${imageBase64}`,
-            },
-          },
+            image_url: { url: `data:${image.mimeType || 'image/jpeg'};base64,${image.base64}` },
+          })),
         ],
       };
     }
@@ -93,21 +111,20 @@ async function callGrok(messages: LLMMessage[], options: LLMOptions = {}): Promi
     throw new Error('Grok API key not configured');
   }
 
-  const { temperature = 0.3, maxTokens = 2048, imageBase64, imageMimeType } = options;
+  const { temperature = 0.3, maxTokens = 2048 } = options;
+  const images = collectImages(options);
 
-  // Build messages with optional image (OpenAI-compatible format)
+  // Build messages with optional images (OpenAI-compatible format)
   const formattedMessages = messages.map((msg) => {
-    if (msg.role === 'user' && imageBase64) {
+    if (msg.role === 'user' && images.length > 0) {
       return {
         role: msg.role,
         content: [
           { type: 'text', text: msg.content },
-          {
+          ...images.map((image) => ({
             type: 'image_url',
-            image_url: {
-              url: `data:${imageMimeType || 'image/jpeg'};base64,${imageBase64}`,
-            },
-          },
+            image_url: { url: `data:${image.mimeType || 'image/jpeg'};base64,${image.base64}` },
+          })),
         ],
       };
     }
@@ -147,7 +164,8 @@ async function callGemini(messages: LLMMessage[], options: LLMOptions = {}): Pro
     throw new Error('Gemini API key not configured');
   }
 
-  const { temperature = 0.3, maxTokens = 2048, imageBase64, imageMimeType } = options;
+  const { temperature = 0.3, maxTokens = 2048 } = options;
+  const images = collectImages(options);
 
   // Build parts for Gemini
   const parts: any[] = [];
@@ -164,12 +182,12 @@ async function callGemini(messages: LLMMessage[], options: LLMOptions = {}): Pro
     parts.push({ text: `${prefix}: ${msg.content}\n` });
   }
 
-  // Add image if provided
-  if (imageBase64) {
+  // Add images if provided
+  for (const image of images) {
     parts.push({
       inline_data: {
-        mime_type: imageMimeType || 'image/jpeg',
-        data: imageBase64,
+        mime_type: image.mimeType || 'image/jpeg',
+        data: image.base64,
       },
     });
   }

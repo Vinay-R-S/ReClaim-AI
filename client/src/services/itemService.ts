@@ -1,18 +1,5 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  orderBy,
-  serverTimestamp,
-  Timestamp,
-} from 'firebase/firestore';
-import { ref, deleteObject } from 'firebase/storage';
-import { db, storage } from '../lib/firebase';
+import { collection, doc, getDocs, getDoc, query, orderBy, Timestamp } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { authFetch } from '../lib/authApi';
 
 // Item type definition
@@ -89,53 +76,6 @@ export async function getItemById(id: string): Promise<Item | null> {
     id: docSnap.id,
     ...docSnap.data(),
   } as Item;
-}
-
-// Add new item
-export async function addItem(item: ItemInput): Promise<string> {
-  const itemsRef = collection(db, ITEMS_COLLECTION);
-
-  const docRef = await addDoc(itemsRef, {
-    ...item,
-    date: Timestamp.fromDate(item.date),
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-
-  return docRef.id;
-}
-
-// Update existing item
-export async function updateItem(id: string, updates: Partial<ItemInput>): Promise<void> {
-  const docRef = doc(db, ITEMS_COLLECTION, id);
-
-  const updateData: Record<string, unknown> = {
-    ...updates,
-    updatedAt: serverTimestamp(),
-  };
-
-  // Convert date if provided
-  if (updates.date) {
-    updateData.date = Timestamp.fromDate(updates.date);
-  }
-
-  await updateDoc(docRef, updateData);
-}
-
-// Delete item
-export async function deleteItem(id: string, imageUrl?: string): Promise<void> {
-  // Delete image from storage if exists
-  if (imageUrl) {
-    try {
-      const imageRef = ref(storage, imageUrl);
-      await deleteObject(imageRef);
-    } catch (err) {
-      console.warn('Error deleting image:', err);
-    }
-  }
-
-  const docRef = doc(db, ITEMS_COLLECTION, id);
-  await deleteDoc(docRef);
 }
 
 // Update item via server API (requires authentication)

@@ -25,3 +25,21 @@ export const loginSchema = z.object({
 export const loginNotificationSchema = z.object({
   loginTime: optionalText(100),
 });
+
+/**
+ * Everything that decides authority (role, status, credits) is set by the
+ * server, so the caller may only supply display fields.
+ *
+ * Both are dropped rather than rejected when they do not fit. This is the only
+ * route that creates `users/{uid}`, and every other authenticated endpoint 404s
+ * without that document, so a 55-character Google display name must not be able
+ * to wedge an account out of the app permanently.
+ */
+export const profileBootstrapSchema = z.object({
+  displayName: z
+    .string()
+    .transform((value) => value.trim().slice(0, 50))
+    .optional()
+    .catch(undefined),
+  photoURL: z.string().url().max(2048).optional().catch(undefined),
+});

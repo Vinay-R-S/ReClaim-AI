@@ -9,9 +9,45 @@ import {
   updateProfile,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, googleProvider, db } from '../lib/firebase';
+import { auth, googleProvider } from '../lib/firebase';
 import { authFetch } from '../lib/authApi';
+
+interface UserProfile {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  role: 'user' | 'admin';
+  status: 'active' | 'blocked';
+  credits: number;
+}
+
+/**
+ * Create or refresh the caller's profile document.
+ *
+ * The browser used to write `users/{uid}` itself, including `role`, `status`
+ * and `credits`, so anyone could self-assign `role: "admin"` (defect SEC-17).
+ * The Firestore rules now deny those fields to the client and the server owns
+ * them. A 403 means the account is blocked.
+ */
+const loadProfile = async (user: User): Promise<UserProfile | 'blocked'> => {
+  const response = await authFetch('/api/auth/profile', {
+    method: 'POST',
+    body: JSON.stringify({
+      displayName: user.displayName ?? undefined,
+      photoURL: user.photoURL ?? undefined,
+    }),
+  });
+
+  if (response.status === 403) return 'blocked';
+
+  if (!response.ok) {
+    throw new Error('Failed to load user profile');
+  }
+
+  const data = (await response.json()) as { profile: UserProfile };
+  return data.profile;
+};
 
 // Helper function to send login notification.
 // The endpoint now derives the uid from the ID token, so nothing is sent in the body.
@@ -70,8 +106,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUser(user);
-        // Fetch user role from Firestore
-        await fetchUserRole(user.uid);
+        await loadUserProfile(user);
       } else {
         setUser(null);
         setRole(null);
@@ -84,81 +119,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => unsubscribe();
   }, []);
 
-  // Fetch user role and status
-  const fetchUserRole = async (uid: string) => {
+  // Resolve the signed-in user's role and status
+  const loadUserProfile = async (currentUser: User) => {
     try {
-      const userDoc = await getDoc(doc(db, 'users', uid));
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        const status = userData.status || 'active';
-        setRole(userData.role || 'user');
-        setUserStatus(status);
+      const profile = await loadProfile(currentUser);
 
-        // Check if user is blocked - HARD BLOCK
-        if (status === 'blocked') {
-          setBlockedError('Your account has been blocked due to policy violations.');
-          // Immediately sign out the blocked user
-          await firebaseSignOut(auth);
-          setUser(null);
-          setRole(null);
-          setUserStatus(null);
-          setLoading(false);
-          return;
-        }
-
-        // Update last login only for active users
-        await setDoc(doc(db, 'users', uid), { lastLoginAt: serverTimestamp() }, { merge: true });
-      } else {
-        // New user - handled by saveUserToFirestore
-        await saveUserToFirestore(auth.currentUser!);
-        setUserStatus('active'); // New users are active by default
+      if (profile === 'blocked') {
+        setBlockedError('Your account has been blocked due to policy violations.');
+        await firebaseSignOut(auth);
+        setUser(null);
+        setRole(null);
+        setUserStatus(null);
+        return;
       }
+
+      setRole(profile.role);
+      setUserStatus(profile.status);
     } catch (err) {
-      console.error('Error fetching user role:', err);
-      setRole('user'); // Default to user on error
-      setUserStatus('active'); // Default to active on error
+      console.error('Error loading user profile:', err);
+      // Leave role and status unresolved rather than asserting an active user:
+      // the server is the authority and refuses a blocked account on every
+      // endpoint, so claiming 'active' here would only be a false UI signal.
+      setRole(null);
+      setUserStatus(null);
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Save user data to Firestore
-  const saveUserToFirestore = async (user: User) => {
-    try {
-      const userRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
-
-      if (!userSnap.exists()) {
-        // New user - create document with default 'user' role AND credits
-        const newUser = {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-          role: 'user',
-          status: 'active',
-          credits: 10, // Initialize with 10 credits
-          lostItemsCount: 0, // Initialize counts
-          foundItemsCount: 0,
-          totalItemsCount: 0,
-          createdAt: serverTimestamp(),
-          lastLoginAt: serverTimestamp(),
-        };
-        await setDoc(userRef, newUser);
-        setRole('user');
-      } else {
-        // Existing user - update last login
-        await setDoc(
-          userRef,
-          {
-            lastLoginAt: serverTimestamp(),
-          },
-          { merge: true },
-        );
-        // Role is set in fetchUserRole
-      }
-    } catch (err) {
-      console.error('Error saving user to Firestore:', err);
     }
   };
 
@@ -167,11 +152,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setError(null);
       setLoading(true);
-      await signInWithPopup(auth, googleProvider).then(async (result) => {
-        if (result.user) {
-          await sendLoginNotification();
-        }
-      });
+      const result = await signInWithPopup(auth, googleProvider);
+
+      if (result.user) {
+        // Google sign-in is also the signup path, so make sure the profile
+        // exists before calling an endpoint that requires one.
+        await loadUserProfile(result.user);
+        await sendLoginNotification();
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to sign in with Google');
       throw err;
@@ -209,27 +197,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Update Firebase Auth profile with displayName
         await updateProfile(result.user, { displayName });
 
-        // Also update Firestore directly with the displayName
-        // (since onAuthStateChanged might fire before updateProfile completes)
-        const userRef = doc(db, 'users', result.user.uid);
-        await setDoc(
-          userRef,
-          {
-            uid: result.user.uid,
-            email: result.user.email,
-            displayName: displayName,
-            photoURL: result.user.photoURL,
-            role: 'user',
-            status: 'active',
-            credits: 10, // Initialize with 10 credits
-            lostItemsCount: 0, // Initialize counts
-            foundItemsCount: 0,
-            totalItemsCount: 0,
-            createdAt: serverTimestamp(),
-            lastLoginAt: serverTimestamp(),
-          },
-          { merge: true },
-        );
+        // onAuthStateChanged may have already created the profile from a user
+        // object that had no displayName yet, so send it explicitly. The
+        // endpoint is idempotent and fills the name in if it is still blank.
+        await loadUserProfile(result.user);
       }
 
       if (result.user) {

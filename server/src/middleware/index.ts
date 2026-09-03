@@ -17,6 +17,7 @@ export {
   testingApiLimiter,
   handoverVerifyLimiter,
   handoverStatusLimiter,
+  profileLimiter,
 } from './rateLimit.middleware.js';
 export { validate, validateQuery, validateParams } from './validation.middleware.js';
 export {

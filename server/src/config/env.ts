@@ -75,6 +75,7 @@ const rawSchema = z.object({
   SMTP_PASS: optionalString,
 
   YOLO_SERVICE_URL: withDefault(z.string().url().default('http://localhost:5000')),
+  YOLO_SERVICE_TOKEN: optionalString,
 
   BLOCKCHAIN_ENABLED: z
     .string()
@@ -83,14 +84,6 @@ const rawSchema = z.object({
   SEPOLIA_RPC_URL: optionalString,
   CONTRACT_ADDRESS: optionalString,
   ADMIN_PRIVATE_KEY: optionalString,
-
-  // Deprecated client-prefixed fallbacks. Track A phase 5 removes these; until
-  // then they are still live reads, so they are declared rather than ignored.
-  VITE_GROQ_API_KEY: optionalString,
-  VITE_GEMINI_API_KEY: optionalString,
-  VITE_GROK_API_KEY: optionalString,
-  VITE_ADMIN_EMAIL: optionalString,
-  VITE_ADMIN_PASSWORD: optionalString,
 });
 
 type RawEnv = z.infer<typeof rawSchema>;
@@ -145,6 +138,7 @@ export interface AppEnv {
   };
   yolo: {
     serviceUrl: string;
+    serviceToken?: string;
   };
   blockchain: {
     enabled: boolean;
@@ -152,8 +146,6 @@ export interface AppEnv {
     contractAddress?: string;
     adminPrivateKey?: string;
   };
-  /** Deprecated `VITE_*` names that are actually supplying a value right now. */
-  deprecatedVarsInUse: string[];
   /** Non-fatal configuration problems, logged once at boot in every environment. */
   warnings: string[];
 }
@@ -201,26 +193,25 @@ function collectRequirementProblems(raw: RawEnv): string[] {
     );
   }
 
-  const hasLlmKey = Boolean(
-    raw.GROQ_API_KEY ||
-    raw.VITE_GROQ_API_KEY ||
-    raw.GEMINI_API_KEY ||
-    raw.VITE_GEMINI_API_KEY ||
-    raw.GROK_API_KEY ||
-    raw.VITE_GROK_API_KEY,
-  );
+  const hasLlmKey = Boolean(raw.GROQ_API_KEY || raw.GEMINI_API_KEY || raw.GROK_API_KEY);
   if (!hasLlmKey) {
     problems.push(
       'No LLM provider key is set. At least one of GROQ_API_KEY, GEMINI_API_KEY or GROK_API_KEY is required for matching and CCTV description.',
     );
   }
 
-  const smtpUser = raw.SMTP_USER ?? raw.VITE_ADMIN_EMAIL;
-  const smtpPass = raw.SMTP_PASS ?? raw.VITE_ADMIN_PASSWORD;
-  const hasEmailTransport = Boolean(raw.RESEND_API_KEY || (smtpUser && smtpPass));
+  const hasEmailTransport = Boolean(
+    raw.RESEND_API_KEY || (raw.SMTP_USER && raw.SMTP_PASS),
+  );
   if (!hasEmailTransport) {
     problems.push(
       'No email transport is configured. Set RESEND_API_KEY, or both SMTP_USER and SMTP_PASS, or handover codes cannot be delivered.',
+    );
+  }
+
+  if (!raw.YOLO_SERVICE_TOKEN) {
+    problems.push(
+      'YOLO_SERVICE_TOKEN is not set. The Flask vision service rejects every request without it, so CCTV detection is unavailable.',
     );
   }
 
@@ -243,20 +234,6 @@ function collectBlockchainProblems(raw: RawEnv): string[] {
     problems.push('BLOCKCHAIN_ENABLED is true but ADMIN_PRIVATE_KEY is not set.');
   }
   return problems;
-}
-
-function collectDeprecatedVarsInUse(raw: RawEnv): string[] {
-  const deprecated: Array<[string, string | undefined, string | undefined]> = [
-    ['VITE_GROQ_API_KEY', raw.VITE_GROQ_API_KEY, raw.GROQ_API_KEY],
-    ['VITE_GEMINI_API_KEY', raw.VITE_GEMINI_API_KEY, raw.GEMINI_API_KEY],
-    ['VITE_GROK_API_KEY', raw.VITE_GROK_API_KEY, raw.GROK_API_KEY],
-    ['VITE_ADMIN_EMAIL', raw.VITE_ADMIN_EMAIL, raw.SMTP_USER],
-    ['VITE_ADMIN_PASSWORD', raw.VITE_ADMIN_PASSWORD, raw.SMTP_PASS],
-  ];
-
-  return deprecated
-    .filter(([, fallbackValue, preferredValue]) => Boolean(fallbackValue) && !preferredValue)
-    .map(([name]) => name);
 }
 
 function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
@@ -295,9 +272,9 @@ function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
       ),
     }),
     llm: Object.freeze({
-      groqApiKey: raw.GROQ_API_KEY ?? raw.VITE_GROQ_API_KEY,
-      geminiApiKey: raw.GEMINI_API_KEY ?? raw.VITE_GEMINI_API_KEY,
-      grokApiKey: raw.GROK_API_KEY ?? raw.VITE_GROK_API_KEY,
+      groqApiKey: raw.GROQ_API_KEY,
+      geminiApiKey: raw.GEMINI_API_KEY,
+      grokApiKey: raw.GROK_API_KEY,
     }),
     clarifai: Object.freeze({
       apiKey: raw.CLARIFAI_API_KEY,
@@ -311,11 +288,12 @@ function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
       fromEmail: raw.FROM_EMAIL,
       smtpHost: raw.SMTP_HOST,
       smtpPort: raw.SMTP_PORT,
-      smtpUser: raw.SMTP_USER ?? raw.VITE_ADMIN_EMAIL,
-      smtpPass: raw.SMTP_PASS ?? raw.VITE_ADMIN_PASSWORD,
+      smtpUser: raw.SMTP_USER,
+      smtpPass: raw.SMTP_PASS,
     }),
     yolo: Object.freeze({
       serviceUrl: raw.YOLO_SERVICE_URL,
+      serviceToken: raw.YOLO_SERVICE_TOKEN,
     }),
     blockchain: Object.freeze({
       enabled: raw.BLOCKCHAIN_ENABLED,
@@ -323,7 +301,6 @@ function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
       contractAddress: raw.CONTRACT_ADDRESS,
       adminPrivateKey: raw.ADMIN_PRIVATE_KEY,
     }),
-    deprecatedVarsInUse: Object.freeze(collectDeprecatedVarsInUse(raw)) as string[],
     warnings: Object.freeze(problems) as string[],
   });
 }

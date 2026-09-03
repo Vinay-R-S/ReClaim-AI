@@ -1,7 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { X, Upload, Image as ImageIcon, Loader2, Sparkles, Camera } from 'lucide-react';
 import { uploadItemImage, type ItemInput } from '../../services/itemService';
-import { analyzeItemImage, getAvailableProviders, type AIProvider } from '../../services/aiService';
+import { analyzeItemImages, isAiAvailable } from '../../services/aiService';
 import { LazyLocationPicker } from '../ui/LazyLocationPicker';
 import { authFetch } from '../../lib/authApi';
 
@@ -24,11 +24,21 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
   const [imagePreviews, setImagePreviews] = useState<string[]>(
     initialData?.imageUrl ? [initialData.imageUrl] : [],
   );
-  const [aiProvider, setAiProvider] = useState<AIProvider>('gemini');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [aiAvailable, setAiAvailable] = useState(true);
 
-  const availableProviders = getAvailableProviders();
+  // Provider keys live on the server, so availability is a server answer.
+  useEffect(() => {
+    let active = true;
+    isAiAvailable().then((available) => {
+      if (active) setAiAvailable(available);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
 
   const [formData, setFormData] = useState<Omit<ItemInput, 'imageUrl'>>({
     name: initialData?.name || '',
@@ -78,8 +88,9 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
       setStep('analyzing');
       setLoading(true);
 
-      // Analyze image with AI (Use first image)
-      const analysis = await analyzeItemImage(imageFiles[0], aiProvider);
+      // Analyze image with AI. The server picks the provider from the admin
+      // setting, so there is nothing to choose here.
+      const analysis = await analyzeItemImages(imageFiles.slice(0, 1));
 
       // Update form with AI results
       setFormData((prev) => ({
@@ -327,44 +338,9 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
                 />
               </div>
 
-              {/* AI Provider Selection */}
-              {availableProviders.length > 0 && (
-                <div className="mb-6">
-                  <label className="text-sm text-text-secondary mb-2 block">AI Provider</label>
-                  <div className="flex gap-2">
-                    {availableProviders.includes('gemini') && (
-                      <button
-                        type="button"
-                        onClick={() => setAiProvider('gemini')}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === 'gemini'
-                            ? 'border-primary bg-primary/10 text-primary'
-                            : 'border-border hover:bg-gray-50'
-                        }`}
-                      >
-                        Gemini
-                      </button>
-                    )}
-                    {availableProviders.includes('groq') && (
-                      <button
-                        type="button"
-                        onClick={() => setAiProvider('groq')}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === 'groq'
-                            ? 'border-primary bg-primary/10 text-primary'
-                            : 'border-border hover:bg-gray-50'
-                        }`}
-                      >
-                        Groq
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {availableProviders.length === 0 && (
+              {!aiAvailable && (
                 <p className="text-sm text-google-red mt-2 text-center">
-                  No AI providers configured. Add API keys to .env file.
+                  AI analysis is unavailable. Ask an admin to configure a provider key.
                 </p>
               )}
 

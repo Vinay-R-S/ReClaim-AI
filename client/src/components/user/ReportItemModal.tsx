@@ -12,13 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ImageCarousel } from '../ui/ImageCarousel';
-import {
-  analyzeItemImage,
-  analyzeMultipleImages,
-  enhanceTextDescription,
-  getAvailableProviders,
-  type AIProvider,
-} from '../../services/aiService';
+import { analyzeItemImages, enhanceTextDescription } from '../../services/aiService';
 import { LazyLocationPicker } from '../ui/LazyLocationPicker';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -39,11 +33,9 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
   const [loading, setLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [aiProvider, setAiProvider] = useState<AIProvider>('gemini');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const availableProviders = getAvailableProviders();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -119,11 +111,7 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
         setLoading(true);
 
         // Use AI to enhance description and generate tags
-        const enhanced = await enhanceTextDescription(
-          formData.name,
-          formData.description,
-          aiProvider,
-        );
+        const enhanced = await enhanceTextDescription(formData.name, formData.description);
 
         setFormData((prev) => ({
           ...prev,
@@ -148,11 +136,9 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
       setStep('analyzing');
       setLoading(true);
 
-      // Analyze image(s) with AI - use multi-image if more than one
-      const analysis =
-        imageFiles.length > 1
-          ? await analyzeMultipleImages(imageFiles, 'groq')
-          : await analyzeItemImage(imageFiles[0], aiProvider);
+      // Analyze image(s) with AI. The server picks the provider from the
+      // admin setting, so there is nothing to choose here.
+      const analysis = await analyzeItemImages(imageFiles);
 
       // Update form with AI results
       setFormData((prev) => ({
@@ -548,43 +534,6 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
                   />
                 </div>
               </div>
-
-              {/* AI Provider Selection */}
-              {availableProviders.length > 0 && (
-                <div className="mb-6">
-                  <label className="text-sm text-text-secondary mb-2 block font-medium">
-                    AI Provider
-                  </label>
-                  <div className="flex gap-2">
-                    {availableProviders.includes('gemini') && (
-                      <button
-                        type="button"
-                        onClick={() => setAiProvider('gemini')}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === 'gemini'
-                            ? 'border-primary bg-primary/10 text-primary'
-                            : 'border-border hover:bg-gray-50'
-                        }`}
-                      >
-                        Gemini
-                      </button>
-                    )}
-                    {availableProviders.includes('groq') && (
-                      <button
-                        type="button"
-                        onClick={() => setAiProvider('groq')}
-                        className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
-                          aiProvider === 'groq'
-                            ? 'border-primary bg-primary/10 text-primary'
-                            : 'border-border hover:bg-gray-50'
-                        }`}
-                      >
-                        Groq
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {/* Submit/Analyze Button */}
               <button

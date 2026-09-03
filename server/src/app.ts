@@ -21,8 +21,11 @@ import handoversRoutes from './routes/handovers.js';
 import creditsRoutes from './routes/credits.js';
 import authRoutes from './routes/auth.js';
 import cctvRoutes from './routes/cctv.js';
+import aiRoutes from './routes/ai.js';
+import usersRoutes from './routes/users.js';
 import {
   authLimiter,
+  profileLimiter,
   apiLimiter,
   testingApiLimiter,
   errorHandler,
@@ -93,8 +96,12 @@ export function createApp(): express.Express {
     }),
   );
 
-  // Rate limiting on auth routes (stricter)
-  app.use('/api/auth', authLimiter);
+  // Rate limiting on auth routes (stricter). The profile bootstrap is exempt:
+  // it runs on every app mount rather than per credential attempt.
+  app.use('/api/auth', (req: Request, res: Response, next: NextFunction) => {
+    if (req.path === '/profile') return profileLimiter(req, res, next);
+    return authLimiter(req, res, next);
+  });
 
   // Conditional testing mode rate limiting (400 calls/day when enabled)
   app.use('/api', async (req: Request, res: Response, next: NextFunction) => {
@@ -131,6 +138,8 @@ export function createApp(): express.Express {
   app.use('/api/credits', creditsRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/cctv', cctvRoutes);
+  app.use('/api/ai', aiRoutes);
+  app.use('/api/users', usersRoutes);
 
   // ERROR HANDLING
 
