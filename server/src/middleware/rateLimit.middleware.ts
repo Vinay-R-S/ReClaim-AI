@@ -9,6 +9,24 @@ import { Request } from 'express';
  * Auth routes: 5 requests per 15 minutes per IP
  * Prevents brute-force login attempts
  */
+/**
+ * Profile bootstrap: 300 requests per 15 minutes per IP
+ *
+ * `POST /api/auth/profile` runs on every app mount, so it cannot share the
+ * credential limiter below: a handful of refreshes would 429, and a 429 on a
+ * new account means the profile document is never created at all. It is still
+ * bounded, and the general API limiter applies on top.
+ */
+export const profileLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: {
+    error: 'Too many profile requests. Please try again shortly.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5,

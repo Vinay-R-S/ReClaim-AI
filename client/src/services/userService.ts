@@ -1,14 +1,6 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
-  updateDoc,
-  query,
-  orderBy,
-  Timestamp,
-} from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { authPut } from '../lib/authApi';
 import { getItems } from './itemService';
 
 export interface User {
@@ -28,9 +20,8 @@ export interface User {
 
 const USERS_COLLECTION = 'users';
 
-// Get all users (excluding admin email from env)
+// Get all users (admins are managed elsewhere and excluded from this list)
 export async function getUsers(): Promise<User[]> {
-  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
   const usersRef = collection(db, USERS_COLLECTION);
 
   const q = query(usersRef, orderBy('createdAt', 'desc'));
@@ -48,12 +39,10 @@ export async function getUsers(): Promise<User[]> {
     } as User;
   });
 
-  // Filter out admin email if specified
-  if (adminEmail) {
-    return users.filter((user) => user.email !== adminEmail);
-  }
-
-  return users;
+  // Filter by role rather than by a build-time admin email: the email was
+  // compiled into the bundle and went stale the moment a second admin existed
+  // (defect SEC-21).
+  return users.filter((user) => user.role !== 'admin');
 }
 
 // Get single user by ID
@@ -77,11 +66,11 @@ export async function getUserById(uid: string): Promise<User | null> {
 }
 
 // Update user status (block/unblock)
+//
+// `status` is server owned and denied to the browser by the Firestore rules,
+// so this goes through the API where the admin role is actually checked.
 export async function updateUserStatus(uid: string, status: 'active' | 'blocked'): Promise<void> {
-  const docRef = doc(db, USERS_COLLECTION, uid);
-  await updateDoc(docRef, {
-    status,
-  });
+  await authPut(`/api/users/${uid}/status`, { status });
 }
 
 // Get items count for a user (by userId if exists, or by email)

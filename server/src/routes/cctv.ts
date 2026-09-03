@@ -17,6 +17,48 @@ const router = Router();
 // Python YOLO service URL
 const YOLO_SERVICE_URL = env.yolo.serviceUrl;
 
+/**
+ * The Flask service is reachable on the network and has no user accounts, so
+ * the two processes share a secret instead. Flask refuses anything without it
+ * (SEC-20).
+ */
+function yoloHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const token = env.yolo.serviceToken;
+  return token ? { ...extra, 'X-Service-Token': token } : extra;
+}
+
+/**
+ * Turn a failed proxy call into something an operator can act on.
+ *
+ * A rejected shared secret and an unreachable process are different problems,
+ * and telling someone to check that a running service is running wastes their
+ * time.
+ */
+function yoloFailure(res: Response, error: unknown) {
+  const status = (error as { yoloStatus?: number }).yoloStatus;
+
+  if (status === 401 || status === 403 || status === 503) {
+    return res.status(502).json({
+      error: 'YOLO Detection Service rejected the request',
+      details:
+        'The shared secret did not match. Check that YOLO_SERVICE_TOKEN is the same in server/.env and in the models environment.',
+    });
+  }
+
+  return res.status(503).json({
+    error: 'YOLO Detection Service unavailable',
+    details: 'Please ensure python app.py is running on port 5000',
+  });
+}
+
+function yoloError(response: { status: number }): Error {
+  const error = new Error(`Python service responded with ${response.status}`) as Error & {
+    yoloStatus: number;
+  };
+  error.yoloStatus = response.status;
+  return error;
+}
+
 // GET /api/cctv/classes - Get all YOLO class names for dropdown
 router.get(
   '/classes',
@@ -24,15 +66,12 @@ router.get(
   requireAdmin,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     try {
-      const response = await fetch(`${YOLO_SERVICE_URL}/classes`);
-      if (!response.ok) throw new Error(`Python service responded with ${response.status}`);
+      const response = await fetch(`${YOLO_SERVICE_URL}/classes`, { headers: yoloHeaders() });
+      if (!response.ok) throw yoloError(response);
       return res.json(await response.json());
     } catch (connError: any) {
       log.error('YOLO service error:', connError.message);
-      return res.status(503).json({
-        error: 'YOLO Detection Service unavailable',
-        details: 'Please ensure python app.py is running on port 5000',
-      });
+      return yoloFailure(res, connError);
     }
   }),
 );
@@ -49,18 +88,15 @@ router.post(
     try {
       const response = await fetch(`${YOLO_SERVICE_URL}/detect`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: yoloHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ image, targetClasses, targetClass }),
       });
 
-      if (!response.ok) throw new Error(`Python service responded with ${response.status}`);
+      if (!response.ok) throw yoloError(response);
       return res.json(await response.json());
     } catch (connError: any) {
       log.error('YOLO service error:', connError.message);
-      return res.status(503).json({
-        error: 'YOLO Detection Service unavailable',
-        details: 'Please ensure python app.py is running on port 5000',
-      });
+      return yoloFailure(res, connError);
     }
   }),
 );
@@ -79,7 +115,7 @@ router.post(
     try {
       const response = await fetch(`${YOLO_SERVICE_URL}/analyze-video`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: yoloHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           frames,
           targetClass: targetClass || '',
@@ -87,14 +123,11 @@ router.post(
           itemDescription: itemDescription || '',
         }),
       });
-      if (!response.ok) throw new Error(`Python service responded with ${response.status}`);
+      if (!response.ok) throw yoloError(response);
       yoloResult = await response.json();
     } catch (connError: any) {
       log.error('YOLO service error:', connError.message);
-      return res.status(503).json({
-        error: 'YOLO Detection Service unavailable',
-        details: 'Please ensure python app.py is running on port 5000',
-      });
+      return yoloFailure(res, connError);
     }
 
     // Call Groq for AI analysis

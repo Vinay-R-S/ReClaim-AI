@@ -13,7 +13,7 @@ import {
   Loader2,
   Clock,
 } from 'lucide-react';
-import { Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { Timestamp, doc, getDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db } from '../../lib/firebase';
 import { authFetch } from '../../lib/authApi';
@@ -272,11 +272,6 @@ export function ProfilePage() {
 
       // Update Firebase Auth profile locally
       await updateProfile(user, { photoURL: data.photoURL });
-
-      // Update Firestore user document locally
-      await updateDoc(doc(db, 'users', user.uid), {
-        photoURL: data.photoURL,
-      });
 
       // Clear preview after successful upload
       setPhotoPreview(null);
