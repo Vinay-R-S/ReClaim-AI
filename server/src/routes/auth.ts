@@ -7,6 +7,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { sendLoginNotification } from '../services/email.js';
 import { collections } from '../utils/firebase-admin.js';
 import { stripUndefined } from '../utils/firestore.js';
+import { awardSignupBonus } from '../services/credits.js';
 import { createLogger } from '../utils/logger.js';
 import {
   asyncHandler,
@@ -21,8 +22,6 @@ import { AppError } from '../middleware/index.js';
 const log = createLogger('auth');
 
 const router = express.Router();
-
-const SIGNUP_CREDITS = 10;
 
 interface CreatedProfile {
   uid: string;
@@ -44,6 +43,9 @@ async function createProfile(
   displayName: string | undefined,
   photoURL: string | undefined,
 ): Promise<CreatedProfile | null> {
+  // Balance starts at zero. The welcome bonus is awarded by the credits
+  // service straight after, so it lands in the ledger like every other credit
+  // movement instead of being a literal written here (LOG-01b).
   const profile: CreatedProfile = {
     uid,
     email: email ?? null,
@@ -51,7 +53,7 @@ async function createProfile(
     photoURL: photoURL ?? null,
     role: 'user',
     status: 'active',
-    credits: SIGNUP_CREDITS,
+    credits: 0,
   };
 
   try {
@@ -100,7 +102,12 @@ router.post(
     const created = await createProfile(userRef, uid, email, req.body.displayName, req.body.photoURL);
     if (created) {
       log.info('User profile created', { userId: uid });
-      return res.status(201).json({ created: true, profile: created });
+
+      const bonus = await awardSignupBonus(uid);
+      return res.status(201).json({
+        created: true,
+        profile: { ...created, credits: bonus.success ? bonus.newBalance : created.credits },
+      });
     }
 
     const snapshot = await userRef.get();
@@ -114,6 +121,17 @@ router.post(
           message: 'Your account has been blocked due to policy violations.',
         });
       }
+
+      // Self-heal a profile whose creation succeeded while the award did not.
+      //
+      // The zero-balance condition is what makes this safe to deploy before the
+      // backfill has run. Every profile created before this phase carries a
+      // literal `credits: 10` with no ledger entry, so an idempotency check
+      // alone would pay all of them a second time on their next sign-in. Only a
+      // profile still sitting at zero can be missing its bonus.
+      const needsBonus =
+        data.signupBonusAwarded !== true && ((data.credits as number | undefined) ?? 0) === 0;
+      const bonus = needsBonus ? await awardSignupBonus(uid) : null;
 
       // Email/password signup sets the display name a moment after the account
       // exists, so the first call can arrive without one. Fill it in rather
@@ -136,7 +154,7 @@ router.post(
           photoURL: data.photoURL ?? null,
           role: data.role === 'admin' ? 'admin' : 'user',
           status: data.status ?? 'active',
-          credits: data.credits ?? 0,
+          credits: bonus?.success ? bonus.newBalance : (data.credits ?? 0),
         },
       });
     }

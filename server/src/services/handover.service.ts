@@ -98,6 +98,31 @@ function toDate(val: any): Date {
 }
 
 /**
+ * Report what actually happened to a credit award.
+ *
+ * A failed transaction returns `success: false` with the intended amount still
+ * on the result, so branching only on `alreadyApplied` logged an award that was
+ * never written and left nothing to reconcile from.
+ */
+function logCreditOutcome(
+  role: string,
+  userId: string,
+  result: { success: boolean; alreadyApplied: boolean; amount: number },
+): void {
+  if (!result.success) {
+    log.error(`Credit award FAILED for ${role} ${userId}, balance unchanged`);
+    return;
+  }
+
+  if (result.alreadyApplied) {
+    log.info(`Credits already recorded for ${role} ${userId}`);
+    return;
+  }
+
+  log.info(`Credits awarded to ${role} ${userId}: +${result.amount}`);
+}
+
+/**
  * Initiate Handover Process
  */
 export async function initiateHandover(
@@ -386,25 +411,25 @@ async function completeHandover(matchId: string, codeDocId: string, data: Handov
     const foundUserId = foundItem.reportedBy;
 
     if (lostUserId && foundUserId) {
-      // Import updateCredits at top of file
-      const { updateCredits } = await import('./credits.js');
+      const { awardOwnerCredits, awardFinderCredits } = await import('./credits.js');
 
       // Check if users are admins - admins don't get credits
       const lostUserRole = lostUser?.role;
       const foundUserRole = foundUser?.role;
 
-      // Award 10 credits to lost person (claimer) - only if not admin
+      // Award the claimer, unless they are an admin. Keyed on the item, so a
+      // retried handover cannot pay out twice.
       if (lostUserRole !== 'admin') {
-        await updateCredits(lostUserId, 'SUCCESSFUL_MATCH_OWNER', data.lostItemId);
-        log.info(`Credits awarded to lost person ${lostUserId}: +10`);
+        const result = await awardOwnerCredits(lostUserId, data.lostItemId);
+        logCreditOutcome('lost person', lostUserId, result);
       } else {
         log.info(`Skipping credits for admin user ${lostUserId}`);
       }
 
-      // Award 20 credits to found person (finder) - only if not admin
+      // Award the finder, unless they are an admin
       if (foundUserRole !== 'admin') {
-        await updateCredits(foundUserId, 'SUCCESSFUL_MATCH_FINDER', data.foundItemId);
-        log.info(`Credits awarded to found person ${foundUserId}: +20`);
+        const result = await awardFinderCredits(foundUserId, data.foundItemId);
+        logCreditOutcome('found person', foundUserId, result);
       } else {
         log.info(`Skipping credits for admin user ${foundUserId}`);
       }

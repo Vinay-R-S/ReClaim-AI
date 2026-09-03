@@ -49,7 +49,6 @@ export const auth = getAuth(app);
 export const collections = {
   users: db.collection('users'),
   items: db.collection('items'),
-  credits: db.collection('credits'), // User credit balances
   creditTransactions: db.collection('creditTransactions'),
   collectionPoints: db.collection('collectionPoints'),
   verifications: db.collection('verifications'),

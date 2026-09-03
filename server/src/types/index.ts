@@ -9,6 +9,8 @@ export interface User {
   role: 'user' | 'admin';
   status: 'active' | 'blocked';
   credits: number;
+  /** Set once the welcome bonus has landed in the ledger. */
+  signupBonusAwarded?: boolean;
   createdAt?: Timestamp;
   lastLoginAt?: Timestamp;
   // Item submission counts
@@ -160,8 +162,13 @@ export interface CreditTransaction {
     | 'report_found'
     | 'successful_match_finder'
     | 'successful_match_owner'
-    | 'false_claim';
+    | 'false_claim'
+    | 'manual_adjustment';
   relatedItemId?: string;
+  /** Balance after this entry was applied. */
+  balanceAfter?: number;
+  /** Free text, set on a manual admin adjustment. */
+  note?: string;
   createdAt: Timestamp;
 }
 

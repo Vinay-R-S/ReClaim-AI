@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "test": "vitest",
     "deploy-contract": "tsx scripts/deploy-contract.ts",
+    "migrate:credits": "tsx scripts/migrate-credits.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
