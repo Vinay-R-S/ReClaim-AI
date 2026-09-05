@@ -32,4 +32,8 @@ export const matchVerifySchema = z.object({
   itemId: idString,
   claimUserId: idString,
   isValid: z.boolean({ required_error: 'isValid is required' }),
+  // A manual admin verification may proceed despite failing the strict
+  // distance, day and time handover checks. Recorded in the audit trail.
+  overrideCriteria: z.boolean().optional(),
+  overrideReason: optionalMultilineText(500),
 });

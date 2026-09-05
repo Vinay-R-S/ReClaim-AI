@@ -27,13 +27,31 @@ const log = createLogger('autoMatch');
 // ============================================================================
 
 /**
- * Convert Firestore Timestamp to Date
+ * Convert a Firestore timestamp to a Date, or null when there is no value.
+ *
+ * Falling back to `new Date()` made an item with no date pass the time window
+ * filter as if it had been reported this instant.
  */
-function toDate(timestamp: any): Date {
-  if (timestamp instanceof Date) return timestamp;
-  if (timestamp?.toDate) return timestamp.toDate();
-  if (timestamp?.seconds) return new Date(timestamp.seconds * 1000);
-  return new Date(timestamp);
+function toDate(timestamp: unknown): Date | null {
+  if (timestamp instanceof Date) return Number.isNaN(timestamp.getTime()) ? null : timestamp;
+
+  if (timestamp && typeof timestamp === 'object') {
+    const candidate = timestamp as { toDate?: () => Date; seconds?: number };
+
+    if (typeof candidate.toDate === 'function') {
+      const converted = candidate.toDate();
+      return Number.isNaN(converted.getTime()) ? null : converted;
+    }
+
+    if (typeof candidate.seconds === 'number') return new Date(candidate.seconds * 1000);
+  }
+
+  if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+    const parsed = new Date(timestamp);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
 }
 
 /**
@@ -178,8 +196,14 @@ export async function triggerAutoMatching(
     let highestScore = 0;
     let bestMatchId = '';
 
-    // Get item date
-    const itemDate = itemData.date || new Date();
+    // An item with no date cannot be scored on time, and treating the missing
+    // value as "now" made every candidate look same-day. Stop instead.
+    const itemDate = toDate(itemData.date);
+
+    if (!itemDate) {
+      log.warn(`[AUTO-MATCH] Item ${itemId} has no report date, skipping matching`);
+      return { highestScore: 0 };
+    }
 
     // Compare with each candidate
     for (const candidateDoc of candidates) {
@@ -224,6 +248,12 @@ export async function triggerAutoMatching(
 
       // Filter 3: Time within max window
       const candidateDate = toDate(candidateData.date);
+
+      if (!candidateDate) {
+        log.info(`[FILTER] Candidate has no report date - skipping`);
+        continue;
+      }
+
       const timeDiff = calculateTimeDifference(itemDate, candidateDate);
 
       if (timeDiff > MATCH_CONFIG.REQUIREMENTS.maxTimeDiff) {

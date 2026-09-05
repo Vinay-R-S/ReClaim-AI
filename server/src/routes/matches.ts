@@ -146,7 +146,7 @@ router.post(
     // names. Trusting the body also meant a missing adminId wrote `undefined`
     // into Firestore and threw, after the handover emails had already gone out.
     const adminId = req.user!.uid;
-    const { itemId, claimUserId, isValid } = req.body;
+    const { itemId, claimUserId, isValid, overrideCriteria, overrideReason } = req.body;
 
     const itemDoc = await collections.items.doc(itemId).get();
     if (!itemDoc.exists) {
@@ -158,8 +158,18 @@ router.post(
     if (isValid) {
       // VERIFIED MATCH - Initiate Handover
 
-      // 1. Find or Create Match Record
+      // 1. Both item ids must be known before anything is written. Checking
+      //    after the match record was created left an orphan behind.
+      const lostItemId = item.type === 'Lost' ? itemId : item.matchedItemId;
+      const foundItemId = item.type === 'Found' ? itemId : item.matchedItemId;
+
+      if (!lostItemId || !foundItemId) {
+        return res.status(400).json({ error: 'Cannot initiate handover: missing linked item ID' });
+      }
+
+      // 2. Find or Create Match Record
       let matchId = '';
+      let createdMatchId = '';
       // Check if match exists (using item as either lost or found)
       const matchQuery = await collections.matches
         .where('foundItemId', '==', itemId)
@@ -191,21 +201,26 @@ router.post(
           createdAt: FieldValue.serverTimestamp(),
         });
         matchId = newMatch.id;
+        createdMatchId = newMatch.id;
       }
 
-      // 2. Initiate Handover
-      // We need both item IDs.
-      const lostItemId = item.type === 'Lost' ? itemId : item.matchedItemId;
-      const foundItemId = item.type === 'Found' ? itemId : item.matchedItemId;
-
-      if (!lostItemId || !foundItemId) {
-        return res.status(400).json({ error: 'Cannot initiate handover: missing linked item ID' });
-      }
-
-      const result = await initiateHandover(matchId, lostItemId, foundItemId);
+      // 3. Initiate Handover
+      const result = await initiateHandover(matchId, lostItemId, foundItemId, {
+        actorId: adminId,
+        overrideCriteria,
+        overrideReason,
+      });
 
       if (!result.success) {
-        return res.status(400).json({ error: result.message });
+        // A refusal is now a routine outcome, so a match record this request
+        // invented must not survive it.
+        if (createdMatchId) {
+          await collections.matches.doc(createdMatchId).delete();
+        }
+
+        return res
+          .status(400)
+          .json({ error: result.message, criteriaFailure: result.criteriaFailure });
       }
 
       // Update item verification status but keep as Matched/Pending until handover

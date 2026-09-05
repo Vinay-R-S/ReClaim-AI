@@ -44,6 +44,15 @@ const lowercased = <T extends z.ZodTypeAny>(schema: T) =>
     return trimmed === '' ? undefined : trimmed;
   }, schema);
 
+/** Anything shorter is not worth calling a key, so it counts as unset. */
+const MIN_HANDOVER_SECRET_LENGTH = 32;
+
+/**
+ * Only ever used outside production. It keeps codes issued before a restart
+ * verifiable on a developer machine; production boot fails without a real key.
+ */
+const DEVELOPMENT_HANDOVER_SECRET = 'reclaim-development-handover-code-secret';
+
 const rawSchema = z.object({
   NODE_ENV: lowercased(z.enum(['development', 'test', 'production']).default('development')),
   PORT: withDefault(z.coerce.number().int().positive().max(65535).default(3001)),
@@ -52,6 +61,8 @@ const rawSchema = z.object({
 
   FIREBASE_SERVICE_ACCOUNT_KEY: optionalString,
   FIREBASE_PROJECT_ID: withDefault(z.string().min(1).default('reclaim-ai-bc273')),
+
+  HANDOVER_CODE_SECRET: optionalString,
 
   CLOUDINARY_CLOUD_NAME: optionalString,
   CLOUDINARY_API_KEY: optionalString,
@@ -109,6 +120,11 @@ export interface AppEnv {
   firebase: {
     serviceAccountKey?: string;
     projectId: string;
+  };
+  handover: {
+    /** HMAC key for handover code hashes. Never logged, never sent anywhere. */
+    codeSecret: string;
+    isConfigured: boolean;
   };
   cloudinary: {
     cloudName?: string;
@@ -171,6 +187,12 @@ function collectCriticalProblems(raw: RawEnv): string[] {
     problems.push('CLIENT_URL still points at localhost, so CORS and outbound email links break.');
   }
 
+  if (!raw.HANDOVER_CODE_SECRET || raw.HANDOVER_CODE_SECRET.length < MIN_HANDOVER_SECRET_LENGTH) {
+    problems.push(
+      `HANDOVER_CODE_SECRET must be set to at least ${MIN_HANDOVER_SECRET_LENGTH} characters. Handover codes are only six digits, so without a server-side HMAC key a leaked hash is reversible by brute force.`,
+    );
+  }
+
   return problems;
 }
 
@@ -180,6 +202,15 @@ function collectCriticalProblems(raw: RawEnv): string[] {
  */
 function collectRequirementProblems(raw: RawEnv): string[] {
   const problems: string[] = [];
+
+  if (
+    raw.NODE_ENV !== 'production' &&
+    (!raw.HANDOVER_CODE_SECRET || raw.HANDOVER_CODE_SECRET.length < MIN_HANDOVER_SECRET_LENGTH)
+  ) {
+    problems.push(
+      `HANDOVER_CODE_SECRET is not set (or is shorter than ${MIN_HANDOVER_SECRET_LENGTH} characters). Handover codes fall back to a well-known development key, which is fine locally and fatal in production.`,
+    );
+  }
 
   if (raw.NODE_ENV !== 'production' && !raw.FIREBASE_SERVICE_ACCOUNT_KEY) {
     problems.push(
@@ -200,9 +231,7 @@ function collectRequirementProblems(raw: RawEnv): string[] {
     );
   }
 
-  const hasEmailTransport = Boolean(
-    raw.RESEND_API_KEY || (raw.SMTP_USER && raw.SMTP_PASS),
-  );
+  const hasEmailTransport = Boolean(raw.RESEND_API_KEY || (raw.SMTP_USER && raw.SMTP_PASS));
   if (!hasEmailTransport) {
     problems.push(
       'No email transport is configured. Set RESEND_API_KEY, or both SMTP_USER and SMTP_PASS, or handover codes cannot be delivered.',
@@ -246,6 +275,9 @@ function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
   }
 
   const raw = parsed.data;
+  const handoverSecretConfigured = Boolean(
+    raw.HANDOVER_CODE_SECRET && raw.HANDOVER_CODE_SECRET.length >= MIN_HANDOVER_SECRET_LENGTH,
+  );
   const fatal = collectCriticalProblems(raw);
 
   if (fatal.length > 0) throw new EnvValidationError(fatal);
@@ -262,6 +294,12 @@ function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
     firebase: Object.freeze({
       serviceAccountKey: raw.FIREBASE_SERVICE_ACCOUNT_KEY,
       projectId: raw.FIREBASE_PROJECT_ID,
+    }),
+    handover: Object.freeze({
+      codeSecret: handoverSecretConfigured
+        ? (raw.HANDOVER_CODE_SECRET as string)
+        : DEVELOPMENT_HANDOVER_SECRET,
+      isConfigured: handoverSecretConfigured,
     }),
     cloudinary: Object.freeze({
       cloudName: raw.CLOUDINARY_CLOUD_NAME,
