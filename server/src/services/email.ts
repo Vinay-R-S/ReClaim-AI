@@ -510,6 +510,59 @@ export async function sendHandoverLinkToFoundPerson(
 }
 
 /**
+ * Notify both parties and the admins that a handover session was blocked.
+ *
+ * Sent once per session, when the attempt cap is reached. No account is
+ * blocked, so the message says what actually happened and who can undo it.
+ */
+export async function sendHandoverBlockedNotice(
+  email: string,
+  itemName: string,
+  maxAttempts: number,
+): Promise<boolean> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #ea4335, #fbbc05); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; }
+        .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
+        .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ea4335; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Handover Paused</h1>
+        </div>
+        <div class="content">
+          <p>The handover for <strong>${escapeHtml(itemName)}</strong> has been paused after ${maxAttempts} incorrect verification codes.</p>
+          <div class="info-box">
+            <p style="margin: 0;">No account has been suspended. The verification link is simply no longer accepting codes.</p>
+            <p style="margin: 10px 0 0 0;">An administrator can review the match and issue a new code.</p>
+          </div>
+          <p>If you were trying to complete this handover, please contact support so a new code can be issued.</p>
+        </div>
+        <div class="footer">
+          <p>ReClaim AI - Secure Handover</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `Handover paused: ${itemName}`,
+    html,
+    text: `The handover for "${itemName}" was paused after ${maxAttempts} incorrect codes. No account has been suspended. An administrator can issue a new code.`,
+  });
+}
+
+/**
  * Check if email service is configured (either Resend or NodeMailer)
  */
 export function isEmailConfigured(): boolean {

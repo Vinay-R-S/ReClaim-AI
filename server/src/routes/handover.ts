@@ -5,6 +5,7 @@ import {
   getHandoverStatus,
 } from '../services/handover.service.js';
 import { collections } from '../utils/firebase-admin.js';
+import type { AuthRequest } from '../middleware/auth.middleware.js';
 import {
   asyncHandler,
   authMiddleware,
@@ -16,6 +17,7 @@ import {
 } from '../middleware/index.js';
 import {
   handoverInitiateSchema,
+  handoverReissueSchema,
   handoverVerifySchema,
   matchIdParamsSchema,
 } from '../schemas/index.js';
@@ -32,13 +34,50 @@ router.post(
   authMiddleware,
   requireAdmin,
   validate(handoverInitiateSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const { matchId, lostItemId, foundItemId } = req.body;
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { matchId, lostItemId, foundItemId, overrideCriteria, overrideReason } = req.body;
 
-    const result = await initiateHandover(matchId, lostItemId, foundItemId);
+    const result = await initiateHandover(matchId, lostItemId, foundItemId, {
+      actorId: req.user?.uid,
+      overrideCriteria,
+      overrideReason,
+    });
 
     if (!result.success) {
-      return res.status(400).json({ error: result.message });
+      return res
+        .status(400)
+        .json({ error: result.message, criteriaFailure: result.criteriaFailure });
+    }
+
+    return res.json(result);
+  }),
+);
+
+/**
+ * POST /api/handover/reissue
+ * Admin: issue a fresh code for a session blocked by failed attempts.
+ * A blocked session cannot be reopened any other way, and every re-issue is
+ * recorded in the handover audit trail.
+ */
+router.post(
+  '/reissue',
+  authMiddleware,
+  requireAdmin,
+  validate(handoverReissueSchema),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { matchId, lostItemId, foundItemId, overrideCriteria, overrideReason } = req.body;
+
+    const result = await initiateHandover(matchId, lostItemId, foundItemId, {
+      actorId: req.user?.uid,
+      overrideCriteria,
+      overrideReason,
+      reissueBlocked: true,
+    });
+
+    if (!result.success) {
+      return res
+        .status(400)
+        .json({ error: result.message, criteriaFailure: result.criteriaFailure });
     }
 
     return res.json(result);

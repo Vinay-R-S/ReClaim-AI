@@ -57,6 +57,7 @@ export const collections = {
   matchHistory: db.collection('matchHistory'), // Completed matches (persisted)
   handovers: db.collection('handovers'),
   handoverCodes: db.collection('handoverCodes'),
+  handoverAudit: db.collection('handoverAudit'), // Admin overrides and code re-issues
 } as const;
 
 export default app;
