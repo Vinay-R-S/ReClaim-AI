@@ -2,6 +2,22 @@ import { collection, doc, getDocs, getDoc, query, orderBy, Timestamp } from 'fir
 import { db } from '../lib/firebase';
 import { authFetch } from '../lib/authApi';
 
+/** Admin review state, independent of the match status. */
+export type ModerationStatus = 'pending' | 'approved' | 'rejected';
+
+export type AdminAuditAction =
+  'item_approved' | 'item_rejected' | 'match_verified' | 'match_rejected';
+
+export interface AdminAuditEntry {
+  id: string;
+  action: AdminAuditAction;
+  targetId: string;
+  actorId: string;
+  reason?: string;
+  details?: Record<string, unknown>;
+  createdAt?: { _seconds?: number; seconds?: number };
+}
+
 // Item type definition
 export interface Item {
   id: string;
@@ -14,10 +30,16 @@ export interface Item {
   coordinates?: { lat: number; lng: number };
   date: Timestamp | Date;
   status: 'Pending' | 'Matched' | 'Claimed';
+  /** Absent on items reported before review existed, which read as approved. */
+  moderation?: ModerationStatus;
+  moderatedBy?: string;
+  moderatedAt?: Timestamp;
+  moderationReason?: string;
   matchScore?: number;
   /** Best score seen while matching when nothing crossed the threshold. */
   bestCandidateScore?: number;
   tags?: string[];
+  color?: string;
   category?: string;
   images?: string[];
   contactEmail?: string; // Email for contact
@@ -25,8 +47,11 @@ export interface Item {
   reportedByEmail?: string; // For notifications
   matchedItemId?: string; // ID of matched item
   matchedUserId?: string; // User who claimed
+  /** Set by POST /api/matches/claim on the found item. */
+  claimedBy?: string;
   verificationRequired?: boolean;
   verificationConfidence?: number;
+  verifiedBy?: string;
   verifiedAt?: Timestamp;
   collectionPoint?: string;
   collectionInstructions?: string;
@@ -171,4 +196,42 @@ export async function uploadItemImage(file: File): Promise<string> {
     console.error('Error processing image:', error);
     throw new Error('Failed to process image for local storage');
   }
+}
+
+/**
+ * Approve or reject a reported item (admin).
+ *
+ * Approval is what makes the item publicly visible and starts its matching
+ * run, so this is not the same thing as setting a status.
+ */
+export async function moderateItem(
+  id: string,
+  decision: 'approved' | 'rejected',
+  reason?: string,
+): Promise<{ moderation: ModerationStatus; matching: string }> {
+  const response = await authFetch(`/api/items/${id}/moderate`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, reason }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to record the decision');
+  }
+
+  return data;
+}
+
+/** Review decisions taken on an item, newest first (admin). */
+export async function getItemAudit(id: string): Promise<AdminAuditEntry[]> {
+  const response = await authFetch(`/api/items/${id}/audit`);
+
+  if (!response.ok) {
+    throw new Error('Failed to load the review history');
+  }
+
+  const data = await response.json();
+
+  return data.entries ?? [];
 }

@@ -58,6 +58,7 @@ export const collections = {
   handovers: db.collection('handovers'),
   handoverCodes: db.collection('handoverCodes'),
   handoverAudit: db.collection('handoverAudit'), // Admin overrides and code re-issues
+  adminAudit: db.collection('adminAudit'), // Moderation and match verification decisions
 } as const;
 
 export default app;

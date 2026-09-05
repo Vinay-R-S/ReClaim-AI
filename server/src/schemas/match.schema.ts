@@ -37,6 +37,10 @@ export const matchClaimSchema = z.object({
 
 export const matchVerifySchema = z.object({
   itemId: idString,
+  // The match record being decided on. The admin list shows every candidate
+  // match, including ones whose items never had `matchedItemId` written,
+  // so the pair is taken from the record when the caller names one.
+  matchId: idString.optional(),
   claimUserId: idString,
   isValid: z.boolean({ required_error: 'isValid is required' }),
   // A manual admin verification may proceed despite failing the strict

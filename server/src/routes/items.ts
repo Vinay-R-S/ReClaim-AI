@@ -5,15 +5,16 @@
 
 import { Router, Request, Response } from 'express';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { collections } from '../utils/firebase-admin.js';
+import { collections, db } from '../utils/firebase-admin.js';
 import {
   uploadImage,
   uploadMultipleImages,
   deleteImage,
   isCloudinaryConfigured,
 } from '../services/cloudinary.js';
-import { Item, ItemInput, ItemType } from '../types/index.js';
+import { Item, ItemInput, ItemType, ModerationStatus } from '../types/index.js';
 import { updateUserItemCounts } from '../services/userStats.js';
+import { listAdminAuditForTarget, recordAdminAction } from '../services/audit.service.js';
 import { triggerAutoMatching } from '../services/autoMatch.service.js';
 import { createItemEmbeddingString } from '../utils/embeddings.js';
 import {
@@ -33,10 +34,12 @@ import {
   idParamsSchema,
   itemInputSchema,
   itemListQuerySchema,
+  itemModerateSchema,
   itemStatusUpdateSchema,
   itemUpdateSchema,
   userIdParamsSchema,
   type ItemListQuery,
+  type ItemModerateBody,
   type ItemStatusUpdateBody,
   type ItemUpdateBody,
 } from '../schemas/index.js';
@@ -48,6 +51,17 @@ const log = createLogger('items');
 const router = Router();
 
 /**
+ * Whether an item may be shown to someone who is not an admin.
+ *
+ * Items created before moderation existed carry no field and read as approved:
+ * the alternative is that every legacy item vanishes from the browse list the
+ * moment this deploys, and stays gone until the migration runs.
+ */
+function isPubliclyVisible(item: { moderation?: ModerationStatus }): boolean {
+  return item.moderation === undefined || item.moderation === 'approved';
+}
+
+/**
  * GET /api/items
  * Get all items (with optional filters)
  */
@@ -56,7 +70,8 @@ router.get(
   optionalAuthMiddleware,
   validateQuery(itemListQuerySchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { type, status, reportedBy, limit } = req.query as unknown as ItemListQuery;
+    const { type, status, moderation, reportedBy, limit } = req.query as unknown as ItemListQuery;
+    const isAdmin = req.user?.role === 'admin';
 
     // The browse list is public, but filtering by owner is not: without this,
     // `?reportedBy=<victim-uid>` would enumerate another user's reports and
@@ -65,7 +80,17 @@ router.get(
       return res.status(403).json({ error: 'You can only list your own reports' });
     }
 
-    let query = collections.items.orderBy('createdAt', 'desc');
+    // An explicit moderation filter has to be a real query filter: applied
+    // after `limit` it silently returned an empty review queue whenever the
+    // newest page happened to be all approved. Dropping `orderBy` keeps this
+    // to equality filters only, which Firestore serves from single-field
+    // indexes; the page is sorted below instead. Legacy documents are absent
+    // from the result either way, which is correct for an explicit filter.
+    const filterModeration = Boolean(moderation) && isAdmin;
+
+    let query = filterModeration
+      ? collections.items.where('moderation', '==', moderation)
+      : collections.items.orderBy('createdAt', 'desc');
 
     if (type) {
       query = query.where('type', '==', type);
@@ -76,15 +101,31 @@ router.get(
     if (reportedBy) {
       query = query.where('reportedBy', '==', reportedBy);
     }
-
-    const snapshot = await query.limit(limit).get();
+    // An unfiltered query is already ordered and bounded by Firestore. A
+    // moderation-filtered one is sorted and bounded here, after the fetch.
+    const snapshot = await (filterModeration ? query.get() : query.limit(limit).get());
 
     const items = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
-    }));
+    })) as (Item & { id: string })[];
 
-    return res.json({ items });
+    if (filterModeration) {
+      const sorted = items
+        .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
+        .slice(0, limit);
+
+      return res.json({ items: sorted });
+    }
+
+    // Without an explicit filter, visibility is decided in memory: a legacy
+    // item has no `moderation` field at all, and an equality filter would drop
+    // every one of them from the browse list. An owner sees their own
+    // unreviewed reports; everyone else sees approved items only.
+    const ownList = Boolean(reportedBy) && assertOwnerOrAdmin(req.user, reportedBy);
+    const visible = isAdmin || ownList ? items : items.filter(isPubliclyVisible);
+
+    return res.json({ items: visible });
   }),
 );
 
@@ -94,8 +135,9 @@ router.get(
  */
 router.get(
   '/:id',
+  optionalAuthMiddleware,
   validateParams(idParamsSchema),
-  asyncHandler(async (req: Request, res: Response) => {
+  asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     // Skip if this looks like 'user' - handle in next route
@@ -109,7 +151,17 @@ router.get(
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    return res.json({ item: { id: doc.id, ...doc.data() } });
+    const item = doc.data() as Item;
+
+    // The same gate the list applies. Without it an unreviewed or rejected
+    // report stayed fully readable, reporter email and collection point
+    // included, to anyone holding its id. The reporter and admins still see
+    // their own, which is what the post-report poll needs.
+    if (!isPubliclyVisible(item) && !assertOwnerOrAdmin(req.user, item.reportedBy)) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    return res.json({ item: { ...item, id: doc.id } });
   }),
 );
 
@@ -139,35 +191,86 @@ router.get(
   }),
 );
 
+/** How long a matching run holds its claim before another may take it over. */
+const MATCHING_RUN_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Claim the right to run matching for an item.
+ *
+ * Creation, approval and the manual rematch all dispatch a detached pipeline
+ * with nothing recording that one is already in flight. Two admins acting at
+ * once, or an approval followed straight away by a rematch, would score the
+ * same item twice, and each run can cross the threshold against a different
+ * counterpart and open its own handover for one report.
+ *
+ * The claim is transactional. A run whose process dies without releasing it is
+ * taken over after `MATCHING_RUN_TTL_MS` rather than blocking the item.
+ */
+async function claimMatchingRun(itemId: string): Promise<boolean> {
+  const ref = collections.items.doc(itemId);
+
+  return db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+
+    if (!snapshot.exists) return false;
+
+    const startedAt = snapshot.data()?.matchingStartedAt as Timestamp | undefined;
+
+    if (startedAt && Date.now() - startedAt.toMillis() < MATCHING_RUN_TTL_MS) return false;
+
+    tx.update(ref, { matchingStartedAt: Timestamp.now() });
+
+    return true;
+  });
+}
+
 /**
  * Run auto-matching outside the request.
  *
  * Nothing awaits this, so it owns its errors: an unhandled rejection here
  * would take the process down for an item that was already created.
  */
-function runMatchingInBackground(
+async function runMatchingInBackground(
   itemId: string,
   item: ItemInput,
   cloudinaryUrls: string[],
 ): Promise<void> {
-  return triggerAutoMatching(itemId, item.type, {
-    name: item.name,
-    description: item.description,
-    tags: item.tags || [],
-    color: item.color,
-    imageUrl: cloudinaryUrls[0],
-    cloudinaryUrls,
-    coordinates: item.coordinates,
-    location: item.location,
-    date: new Date(item.date),
-    category: item.category,
-  })
-    .then((result) => {
-      log.info(`[ITEM-CREATE] Matching finished for ${itemId}, best ${result?.highestScore ?? 0}%`);
-    })
-    .catch((error) => {
-      log.error(`[ITEM-CREATE] Matching failed for ${itemId}:`, error);
+  let claimed = false;
+
+  try {
+    claimed = await claimMatchingRun(itemId);
+
+    if (!claimed) {
+      log.info(`[MATCHING] A run is already in flight for ${itemId}, skipping`);
+      return;
+    }
+
+    const result = await triggerAutoMatching(itemId, item.type, {
+      name: item.name,
+      description: item.description,
+      tags: item.tags || [],
+      color: item.color,
+      imageUrl: cloudinaryUrls[0],
+      cloudinaryUrls,
+      coordinates: item.coordinates,
+      location: item.location,
+      date: new Date(item.date),
+      category: item.category,
     });
+
+    log.info(`[MATCHING] Finished for ${itemId}, best ${result?.highestScore ?? 0}%`);
+  } catch (error) {
+    log.error(`[MATCHING] Failed for ${itemId}:`, error);
+  } finally {
+    // Only the holder releases the claim, otherwise a rejected dispatch would
+    // clear the marker belonging to the run that is actually working.
+    if (claimed) {
+      await collections.items
+        .doc(itemId)
+        .update({ matchingStartedAt: FieldValue.delete() })
+        .catch((error) => log.error(`[MATCHING] Could not release the claim on ${itemId}:`, error));
+    }
+  }
 }
 
 /**
@@ -199,11 +302,16 @@ router.post(
       }
     }
 
+    // An admin creating an item is the review: the add-item and CCTV register
+    // flows would otherwise queue their own work for themselves.
+    const moderation: ModerationStatus = req.user?.role === 'admin' ? 'approved' : 'pending';
+
     const newItem: Record<string, unknown> = {
       name: item.name,
       description: item.description,
       type: item.type,
       status: 'Pending' as const,
+      moderation,
       location: item.location,
       date: Timestamp.fromDate(new Date(item.date)),
       tags: item.tags || [],
@@ -275,13 +383,139 @@ router.post(
     // as the slowest provider, and a matching failure returned 500 for an item
     // that had already been persisted. The result is picked up by polling
     // `GET /api/items/:id`.
-    void runMatchingInBackground(itemId, item, cloudinaryUrls);
+    //
+    // It only runs for an item that has cleared review. Matching an unreviewed
+    // report can initiate a handover and email a stranger a collection code,
+    // which is exactly what the moderation gate exists to stop.
+    if (moderation === 'approved') {
+      void runMatchingInBackground(itemId, item, cloudinaryUrls);
+    }
 
     return res.status(201).json({
       id: docRef.id,
       item: { id: created.id, ...created.data() },
-      matching: 'pending',
+      matching: moderation === 'approved' ? 'pending' : 'awaiting_review',
     });
+  }),
+);
+
+/**
+ * Rebuild the matching input from a stored document.
+ *
+ * Returns null when the item carries no report date: a legacy item cannot be
+ * time-scored, and the pipeline needs a real Date rather than a missing one.
+ */
+function toMatchingInput(data: Record<string, unknown>): ItemInput | null {
+  const date = (data.date as { toDate?: () => Date } | undefined)?.toDate?.();
+
+  if (!date) return null;
+
+  return {
+    name: data.name as string,
+    description: (data.description as string) || '',
+    type: data.type as ItemType,
+    location: (data.location as string) || '',
+    date,
+    tags: (data.tags as string[]) || [],
+    color: data.color as string | undefined,
+    category: data.category as string | undefined,
+    coordinates: data.coordinates as ItemInput['coordinates'],
+    reportedBy: (data.reportedBy as string) || '',
+  };
+}
+
+/**
+ * POST /api/items/:id/moderate
+ * Admin: approve or reject a reported item.
+ *
+ * Approval is what makes an item publicly visible and eligible for matching,
+ * so it is also what starts the matching run that item creation deliberately
+ * skipped. Rejection stops the item there and records why.
+ */
+router.post(
+  '/:id/moderate',
+  authMiddleware,
+  requireAdmin,
+  validateParams(idParamsSchema),
+  validate(itemModerateSchema),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const { decision, reason } = req.body as ItemModerateBody;
+    const adminId = req.user!.uid;
+
+    const doc = await collections.items.doc(id).get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    const data = doc.data() as Record<string, unknown>;
+    const current = data.moderation as ModerationStatus | undefined;
+
+    // A decision that has already been made is not repeated: re-approving
+    // would start a second matching run for the same item. An item with no
+    // field yet is unset rather than approved, so an admin can still stamp a
+    // pre-migration item as reviewed; it just reads as visible until they do.
+    if (current === decision) {
+      return res.status(409).json({ error: `Item is already ${decision}` });
+    }
+
+    await collections.items.doc(id).update(
+      stripUndefined({
+        moderation: decision,
+        moderatedBy: adminId,
+        moderatedAt: FieldValue.serverTimestamp(),
+        // An approval clears the reason a previous rejection left behind.
+        moderationReason: decision === 'rejected' ? reason : FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }),
+    );
+
+    await recordAdminAction({
+      action: decision === 'approved' ? 'item_approved' : 'item_rejected',
+      targetId: id,
+      actorId: adminId,
+      reason,
+      details: { previousModeration: current ?? null, itemType: data.type },
+    });
+
+    if (decision !== 'approved') {
+      return res.json({ success: true, moderation: decision, matching: 'not_started' });
+    }
+
+    // Only an item still looking for a counterpart is worth matching. An
+    // approval on an already Matched or Claimed item is a moderation decision,
+    // not a reason to re-run the pipeline over a settled pair.
+    if (data.status !== 'Pending') {
+      return res.json({ success: true, moderation: decision, matching: 'not_started' });
+    }
+
+    const input = toMatchingInput(data);
+
+    if (!input) {
+      log.info(`[MODERATE] ${id} approved but has no report date, matching skipped`);
+      return res.json({ success: true, moderation: decision, matching: 'not_started' });
+    }
+
+    void runMatchingInBackground(id, input, (data.cloudinaryUrls as string[]) || []);
+
+    return res.json({ success: true, moderation: decision, matching: 'pending' });
+  }),
+);
+
+/**
+ * GET /api/items/:id/audit
+ * Admin: the review decisions taken on this item, newest first.
+ */
+router.get(
+  '/:id/audit',
+  authMiddleware,
+  requireAdmin,
+  validateParams(idParamsSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const entries = await listAdminAuditForTarget(req.params.id);
+
+    return res.json({ entries });
   }),
 );
 
@@ -307,11 +541,6 @@ router.post(
     }
 
     const data = doc.data() as Record<string, unknown>;
-    const date = (data.date as { toDate?: () => Date } | undefined)?.toDate?.();
-
-    if (!date) {
-      return res.status(400).json({ error: 'Item has no report date, so it cannot be matched' });
-    }
 
     if (data.status !== 'Pending') {
       return res
@@ -319,21 +548,17 @@ router.post(
         .json({ error: `Only a Pending item can be rematched (is ${data.status})` });
     }
 
-    void runMatchingInBackground(
-      id,
-      {
-        name: data.name as string,
-        description: (data.description as string) || '',
-        type: data.type as ItemInput['type'],
-        location: (data.location as string) || '',
-        date,
-        tags: (data.tags as string[]) || [],
-        color: data.color as string | undefined,
-        category: data.category as string | undefined,
-        reportedBy: (data.reportedBy as string) || '',
-      },
-      (data.cloudinaryUrls as string[]) || [],
-    );
+    if (!isPubliclyVisible(data as { moderation?: ModerationStatus })) {
+      return res.status(400).json({ error: 'Approve the item before matching it' });
+    }
+
+    const input = toMatchingInput(data);
+
+    if (!input) {
+      return res.status(400).json({ error: 'Item has no report date, so it cannot be matched' });
+    }
+
+    void runMatchingInBackground(id, input, (data.cloudinaryUrls as string[]) || []);
 
     return res.json({ success: true, message: 'Matching restarted' });
   }),

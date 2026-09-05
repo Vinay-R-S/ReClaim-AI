@@ -11,6 +11,7 @@ import { collections } from '../utils/firebase-admin.js';
 import { Item } from '../types/index.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import { initiateHandover } from '../services/handover.service.js';
+import { recordAdminAction } from '../services/audit.service.js';
 import {
   assertOwnerOrAdmin,
   AuthRequest,
@@ -161,7 +162,14 @@ router.post(
     // names. Trusting the body also meant a missing adminId wrote `undefined`
     // into Firestore and threw, after the handover emails had already gone out.
     const adminId = req.user!.uid;
-    const { itemId, claimUserId, isValid, overrideCriteria, overrideReason } = req.body;
+    const {
+      itemId,
+      matchId: requestedMatchId,
+      claimUserId,
+      isValid,
+      overrideCriteria,
+      overrideReason,
+    } = req.body;
 
     const itemDoc = await collections.items.doc(itemId).get();
     if (!itemDoc.exists) {
@@ -170,47 +178,88 @@ router.post(
 
     const item = itemDoc.data()!;
 
+    // The pair is resolved before the decision branches. A rejection has to
+    // reset both halves, not just the named one: verification moves both to
+    // Matched, so resetting one left the counterpart stuck at Matched forever,
+    // and the retrieval stage only ever looks at Pending items.
+    let existingMatch: { lostItemId: string; foundItemId: string } | null = null;
+
+    if (requestedMatchId) {
+      const matchDoc = await collections.matches.doc(requestedMatchId).get();
+
+      if (!matchDoc.exists) {
+        return res.status(404).json({ error: 'Match not found' });
+      }
+
+      const data = matchDoc.data() as { lostItemId?: string; foundItemId?: string };
+
+      if (!data.lostItemId || !data.foundItemId) {
+        return res.status(400).json({ error: 'Match record is missing an item ID' });
+      }
+
+      // The named item has to be half of the pair being decided on, otherwise
+      // the decision is about one match and the penalty and the status writes
+      // land on an unrelated item.
+      if (itemId !== data.lostItemId && itemId !== data.foundItemId) {
+        return res.status(400).json({ error: 'Item is not part of this match' });
+      }
+
+      existingMatch = { lostItemId: data.lostItemId, foundItemId: data.foundItemId };
+    }
+
+    const lostItemId = existingMatch
+      ? existingMatch.lostItemId
+      : item.type === 'Lost'
+        ? itemId
+        : item.matchedItemId;
+    const foundItemId = existingMatch
+      ? existingMatch.foundItemId
+      : item.type === 'Found'
+        ? itemId
+        : item.matchedItemId;
+
     if (isValid) {
       // VERIFIED MATCH - Initiate Handover
-
-      // 1. Both item ids must be known before anything is written. Checking
-      //    after the match record was created left an orphan behind.
-      const lostItemId = item.type === 'Lost' ? itemId : item.matchedItemId;
-      const foundItemId = item.type === 'Found' ? itemId : item.matchedItemId;
 
       if (!lostItemId || !foundItemId) {
         return res.status(400).json({ error: 'Cannot initiate handover: missing linked item ID' });
       }
 
-      // 2. Find or Create Match Record
+      // Both halves must still exist before anything is sent. Only `itemId`
+      // was ever proved to exist, so a stale match record naming a deleted
+      // item used to fail on the status write, which runs after the handover
+      // emails have gone out and cannot be taken back.
+      const [lostSnapshot, foundSnapshot] = await Promise.all([
+        collections.items.doc(lostItemId).get(),
+        collections.items.doc(foundItemId).get(),
+      ]);
+
+      if (!lostSnapshot.exists || !foundSnapshot.exists) {
+        return res.status(404).json({ error: 'One of the matched items no longer exists' });
+      }
+
+      // 2. Find or create the match record. Both ids are real by this point,
+      //    so the lookup uses them directly. It used to fall back to the
+      //    literal string 'unknown', which then went into a written match
+      //    document and from there into initiateHandover and completeHandover.
       let matchId = '';
       let createdMatchId = '';
-      // Check if match exists (using item as either lost or found)
+
       const matchQuery = await collections.matches
-        .where('foundItemId', '==', itemId)
-        .where('lostItemId', '==', item.matchedItemId || 'unknown') // Try to find by matched item
+        .where('lostItemId', '==', lostItemId)
+        .where('foundItemId', '==', foundItemId)
         .limit(1)
         .get();
 
       if (!matchQuery.empty) {
         matchId = matchQuery.docs[0].id;
-      } else {
-        // Try reverse
-        const matchQuery2 = await collections.matches
-          .where('lostItemId', '==', itemId)
-          .where('foundItemId', '==', item.matchedItemId || 'unknown')
-          .limit(1)
-          .get();
-        if (!matchQuery2.empty) {
-          matchId = matchQuery2.docs[0].id;
-        }
       }
 
       // If still no match ID (e.g. manual claim without match record), create one
       if (!matchId) {
         const newMatch = await collections.matches.add({
-          lostItemId: item.type === 'Lost' ? itemId : item.matchedItemId || 'unknown',
-          foundItemId: item.type === 'Found' ? itemId : item.matchedItemId || 'unknown',
+          lostItemId,
+          foundItemId,
           matchScore: 100, // Verified manually
           status: 'matched',
           createdAt: FieldValue.serverTimestamp(),
@@ -238,11 +287,43 @@ router.post(
           .json({ error: result.message, criteriaFailure: result.criteriaFailure });
       }
 
-      // Update item verification status but keep as Matched/Pending until handover
-      await collections.items.doc(itemId).update({
+      // 4. Advance both items out of Pending. The handover is now in flight,
+      //    so neither item is available any more; this used to write only the
+      //    verification fields, leaving both items listed as available and
+      //    still eligible as matching candidates for other reports.
+      //
+      // `itemId` is always one half of the pair, so the verification fields
+      // ride along on that half's update rather than as a second write to the
+      // same document.
+      const now = FieldValue.serverTimestamp();
+      const verification = {
         verificationConfidence: 100,
         verifiedBy: adminId,
-        verifiedAt: FieldValue.serverTimestamp(),
+        verifiedAt: now,
+      };
+      const verifiedLost = itemId === lostItemId;
+
+      await Promise.all([
+        collections.items.doc(lostItemId).update({
+          status: 'Matched',
+          matchedItemId: foundItemId,
+          updatedAt: now,
+          ...(verifiedLost ? verification : {}),
+        }),
+        collections.items.doc(foundItemId).update({
+          status: 'Matched',
+          matchedItemId: lostItemId,
+          updatedAt: now,
+          ...(verifiedLost ? {} : verification),
+        }),
+      ]);
+
+      await recordAdminAction({
+        action: 'match_verified',
+        targetId: itemId,
+        actorId: adminId,
+        reason: overrideCriteria ? overrideReason : undefined,
+        details: { matchId, lostItemId, foundItemId, overrideCriteria: Boolean(overrideCriteria) },
       });
 
       return res.json({
@@ -250,20 +331,69 @@ router.post(
         message: 'Match verified. Handover process initiated and emails sent.',
       });
     } else {
-      // False claim - penalize
-      await penalizeFalseClaim(claimUserId, itemId);
+      const pairIds = [...new Set([itemId, lostItemId, foundItemId].filter(Boolean))] as string[];
+      const pairDocs = (
+        await Promise.all(pairIds.map((id) => collections.items.doc(id).get()))
+      ).filter((doc) => doc.exists);
 
-      // Reset item status back to pending
-      await collections.items.doc(itemId).update({
-        status: 'Pending',
+      // A penalty is for a person who claimed an item that was not theirs. The
+      // admin match list also shows pipeline proposals that nobody ever
+      // claimed, and dismissing one of those must not charge the reporter of
+      // the lost item 30 credits for a claim they never made.
+      //
+      // `claimedBy` is written by POST /api/matches/claim onto the found item,
+      // which is not necessarily the item this request named, so the whole
+      // pair is checked rather than just that one document.
+      const claimant = pairDocs
+        .map((doc) => doc.data()?.claimedBy as string | undefined)
+        .find(Boolean);
+      const penalise = Boolean(claimant) && claimant === claimUserId;
+
+      if (penalise) {
+        await penalizeFalseClaim(claimUserId, itemId);
+      }
+
+      // Reset both halves of the pair, not only the named item: verification
+      // moves both to Matched, so resetting one left the counterpart stranded
+      // there and invisible to every future matching run.
+      const now = FieldValue.serverTimestamp();
+      const reset = {
+        status: 'Pending' as const,
+        matchedItemId: FieldValue.delete(),
         claimedBy: FieldValue.delete(),
         claimedAt: FieldValue.delete(),
-        updatedAt: FieldValue.serverTimestamp(),
+        updatedAt: now,
+      };
+
+      await Promise.all(pairDocs.map((doc) => doc.ref.update(reset)));
+
+      // The proposal was refused, so it stops being an open match. Marked
+      // rather than deleted: the trail of what was rejected is the point.
+      if (requestedMatchId) {
+        await collections.matches.doc(requestedMatchId).update({
+          status: 'rejected',
+          updatedAt: now,
+        });
+      }
+
+      await recordAdminAction({
+        action: 'match_rejected',
+        targetId: itemId,
+        actorId: adminId,
+        details: {
+          claimUserId,
+          itemType: item.type,
+          penalised: penalise,
+          matchId: requestedMatchId ?? null,
+        },
       });
 
       return res.json({
         success: true,
-        message: 'Claim rejected. Penalty applied to user.',
+        penalised: penalise,
+        message: penalise
+          ? 'Claim rejected. Penalty applied to user.'
+          : 'Match rejected. No claim was on record, so no penalty was applied.',
       });
     }
   }),

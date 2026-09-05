@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { Search, RefreshCw, Package } from 'lucide-react';
 import { getAllMatches, type Match } from '@/services/matchService';
 import { getItems, type Item } from '@/services/itemService';
+import { MatchReviewModal } from '@/components/admin/MatchReviewModal';
 
 // Extended match with item names
 interface MatchWithNames extends Match {
@@ -14,8 +15,10 @@ interface MatchWithNames extends Match {
 
 export function MatchesPage() {
   const [matches, setMatches] = useState<MatchWithNames[]>([]);
+  const [items, setItems] = useState<Map<string, Item>>(new Map());
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [reviewing, setReviewing] = useState<MatchWithNames | null>(null);
 
   const fetchMatches = async () => {
     try {
@@ -44,6 +47,7 @@ export function MatchesPage() {
       });
 
       setMatches(enrichedMatches);
+      setItems(itemsMap);
     } catch (error) {
       console.error('Failed to fetch matches:', error);
     } finally {
@@ -116,12 +120,15 @@ export function MatchesPage() {
                   <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">
                     Date
                   </th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">
+                    Decision
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {filteredMatches.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-12 text-text-secondary">
+                    <td colSpan={6} className="text-center py-12 text-text-secondary">
                       {searchTerm ? 'No matches found matching your search' : 'No matches found'}
                     </td>
                   </tr>
@@ -173,7 +180,13 @@ export function MatchesPage() {
                         {match.matchScore}%
                       </td>
                       <td className="py-3 px-4">
-                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium capitalize">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
+                            match.status === 'rejected'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-green-100 text-green-700'
+                          }`}
+                        >
                           {match.status}
                         </span>
                       </td>
@@ -189,6 +202,18 @@ export function MatchesPage() {
                           return '-';
                         })()}
                       </td>
+                      <td className="py-3 px-4 text-right">
+                        {match.status === 'rejected' ? (
+                          <span className="text-xs text-text-secondary">Rejected</span>
+                        ) : (
+                          <button
+                            onClick={() => setReviewing(match)}
+                            className="px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary-hover transition-colors"
+                          >
+                            Review
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}
@@ -196,6 +221,19 @@ export function MatchesPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {reviewing && (
+        <MatchReviewModal
+          match={reviewing}
+          lostItem={items.get(reviewing.lostItemId)}
+          foundItem={items.get(reviewing.foundItemId)}
+          onClose={() => setReviewing(null)}
+          onDecided={() => {
+            setReviewing(null);
+            void fetchMatches();
+          }}
+        />
       )}
     </div>
   );

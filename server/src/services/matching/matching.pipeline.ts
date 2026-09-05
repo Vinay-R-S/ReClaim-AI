@@ -187,7 +187,12 @@ export class MatchingService {
   }
 
   /**
-   * Retrieval stage: pending items of the opposite type.
+   * Retrieval stage: pending, admin-approved items of the opposite type.
+   *
+   * Moderation is filtered in memory rather than with a third `where`. An item
+   * created before moderation existed has no such field, so an equality filter
+   * would exclude the entire existing corpus until the migration ran, and
+   * matching would quietly return nothing. A missing field reads as approved.
    */
   private async retrieve(subjectType: ItemType, excludeId?: string): Promise<Item[]> {
     const oppositeType: ItemType = subjectType === 'Lost' ? 'Found' : 'Lost';
@@ -199,7 +204,8 @@ export class MatchingService {
 
     return snapshot.docs
       .filter((doc) => doc.id !== excludeId)
-      .map((doc) => ({ id: doc.id, ...doc.data() }) as Item);
+      .map((doc) => ({ id: doc.id, ...doc.data() }) as Item)
+      .filter((item) => item.moderation === undefined || item.moderation === 'approved');
   }
 
   /**

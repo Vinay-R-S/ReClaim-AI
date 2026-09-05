@@ -22,6 +22,28 @@ export const itemStatusSchema = z.enum(['Pending', 'Matched', 'Claimed'], {
   errorMap: () => ({ message: 'Invalid status' }),
 });
 
+export const moderationStatusSchema = z.enum(['pending', 'approved', 'rejected'], {
+  errorMap: () => ({ message: 'Invalid moderation state' }),
+});
+
+/**
+ * An admin approve or reject decision on a reported item.
+ *
+ * A rejection must say why: the reason is the only record of what was wrong
+ * with the report, and it is what the audit trail shows.
+ */
+export const itemModerateSchema = z
+  .object({
+    decision: z.enum(['approved', 'rejected'], {
+      errorMap: () => ({ message: 'Decision must be "approved" or "rejected"' }),
+    }),
+    reason: optionalMultilineText(500),
+  })
+  .refine((body) => body.decision !== 'rejected' || Boolean(body.reason?.trim()), {
+    message: 'A rejection needs a reason',
+    path: ['reason'],
+  });
+
 export const itemInputSchema = z.object({
   item: z.object({
     name: text(1, 200),
@@ -90,6 +112,8 @@ export const itemStatusUpdateSchema = z.object({
 export const itemListQuerySchema = z.object({
   type: itemTypeSchema.optional(),
   status: itemStatusSchema.optional(),
+  // Admin only. A non-admin caller sees approved items whatever it asks for.
+  moderation: moderationStatusSchema.optional(),
   reportedBy: z.string().max(128).optional(),
   limit: z.coerce
     .number({ invalid_type_error: 'Limit must be a number' })
@@ -99,6 +123,7 @@ export const itemListQuerySchema = z.object({
     .default(50),
 });
 
+export type ItemModerateBody = z.infer<typeof itemModerateSchema>;
 export type ItemUpdateBody = z.infer<typeof itemUpdateSchema>;
 export type ItemStatusUpdateBody = z.infer<typeof itemStatusUpdateSchema>;
 export type ItemListQuery = z.infer<typeof itemListQuerySchema>;
