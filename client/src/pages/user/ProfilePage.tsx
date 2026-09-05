@@ -89,9 +89,7 @@ export function ProfilePage() {
           const lostItems = items.filter((item) => item.type === 'Lost').length;
           const foundItems = items.filter((item) => item.type === 'Found').length;
           const matchedItems = items.filter((item) => item.status === 'Matched').length;
-          const claimedItems = items.filter(
-            (item) => item.status === 'Claimed' || item.status === 'Resolved',
-          ).length;
+          const claimedItems = items.filter((item) => item.status === 'Claimed').length;
 
           setStats((prev) => ({
             ...prev,

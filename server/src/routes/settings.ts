@@ -16,6 +16,7 @@ import {
   validate,
 } from '../middleware/index.js';
 import { profilePictureSchema, settingsUpdateSchema } from '../schemas/index.js';
+import { getAvailableProviders, type LLMProvider } from '../utils/llm.js';
 import { AppError } from '../middleware/index.js';
 
 const log = createLogger('settings');
@@ -23,7 +24,12 @@ const log = createLogger('settings');
 const router = Router();
 
 export type AIProvider =
-  'groq_only' | 'gemini_only' | 'groq_with_fallback' | 'gemini_with_fallback';
+  | 'groq_only'
+  | 'gemini_only'
+  | 'grok_only'
+  | 'groq_with_fallback'
+  | 'gemini_with_fallback'
+  | 'grok_with_fallback';
 
 export interface MapCenter {
   address: string;
@@ -42,6 +48,16 @@ export interface SystemSettings {
 const SETTINGS_DOC_ID = 'system';
 
 // Default settings
+/** The provider a setting makes primary. A missing key here breaks every LLM call. */
+const PRIMARY_PROVIDER: Record<AIProvider, LLMProvider> = {
+  groq_only: 'groq',
+  groq_with_fallback: 'groq',
+  gemini_only: 'gemini',
+  gemini_with_fallback: 'gemini',
+  grok_only: 'grok',
+  grok_with_fallback: 'grok',
+};
+
 const DEFAULT_SETTINGS: SystemSettings = {
   aiProvider: 'groq_only',
   cctvEnabled: true,
@@ -58,12 +74,17 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const doc = await collections.settings.doc(SETTINGS_DOC_ID).get();
 
+    // The admin screen needs to know which providers this deployment can
+    // actually reach, so it can stop someone selecting one with no key and
+    // silently killing matching and CCTV description.
+    const availableProviders = getAvailableProviders();
+
     if (!doc.exists) {
       // Return default settings if not configured
-      return res.json(DEFAULT_SETTINGS);
+      return res.json({ ...DEFAULT_SETTINGS, availableProviders });
     }
 
-    return res.json(doc.data());
+    return res.json({ ...doc.data(), availableProviders });
   }),
 );
 
@@ -78,6 +99,14 @@ router.put(
   validate(settingsUpdateSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { aiProvider, mapCenter, cctvEnabled, testingMode } = req.body;
+
+    const required = PRIMARY_PROVIDER[aiProvider as AIProvider];
+
+    if (required && !getAvailableProviders().includes(required)) {
+      return res.status(400).json({
+        error: `${required} has no API key configured on this server, so selecting it would stop every AI feature`,
+      });
+    }
 
     const settings: SystemSettings = {
       aiProvider,

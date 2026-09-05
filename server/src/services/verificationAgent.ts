@@ -3,13 +3,25 @@
  * AI-powered verification to confirm item ownership
  */
 
-import { collections } from '../utils/firebase-admin.js';
+import { collections, db } from '../utils/firebase-admin.js';
 import { callLLM } from '../utils/llm.js';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { Item, Verification, VerificationQuestion } from '../types/index.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('verificationAgent');
+
+/**
+ * Ceiling on scored submissions per verification.
+ *
+ * Counts every reserved attempt, including ones that go on to fail, because
+ * the cost this bounds is the LLM call and that is already spent by then. With
+ * three questions a legitimate claimant uses three.
+ */
+const MAX_SUBMISSIONS = 6;
+
+/** Confidence needed to pass. */
+const PASS_THRESHOLD = 70;
 
 // Question categories weights
 const QUESTION_WEIGHTS = {
@@ -200,78 +212,139 @@ export async function submitVerificationAnswer(
   questionIndex: number,
   answer: string,
 ): Promise<{ success: boolean; verification: Verification | null; error?: string }> {
-  const verificationDoc = await collections.verifications.doc(verificationId).get();
-  if (!verificationDoc.exists) {
+  const ref = collections.verifications.doc(verificationId);
+  const snapshot = await ref.get();
+
+  if (!snapshot.exists) {
     return { success: false, verification: null, error: 'Verification not found' };
   }
 
-  const verification = { id: verificationDoc.id, ...verificationDoc.data() } as Verification;
+  const verification = { id: snapshot.id, ...snapshot.data() } as Verification;
 
-  if (verification.status !== 'pending') {
-    return { success: false, verification, error: 'Verification already completed' };
+  // Reserve the attempt before spending an LLM call on it. Checking the cap
+  // against a pre-read snapshot and only counting committed writes meant fifty
+  // concurrent submissions all passed the check, all called the model, and
+  // forty-nine were rejected afterwards. The counter has to move first, in its
+  // own transaction, for the cap to mean anything.
+  const reservation = await db.runTransaction(async (tx) => {
+    const fresh = await tx.get(ref);
+
+    if (!fresh.exists) return { error: 'Verification not found' as const };
+
+    const current = { id: fresh.id, ...fresh.data() } as Verification;
+    const blocked = checkSubmittable(current, questionIndex);
+
+    if (blocked) return { error: blocked };
+
+    tx.update(ref, { submissions: (current.submissions ?? 0) + 1 });
+
+    return { current };
+  });
+
+  if ('error' in reservation) {
+    return { success: false, verification, error: reservation.error };
   }
 
-  if (questionIndex < 0 || questionIndex >= verification.questions.length) {
-    return { success: false, verification, error: 'Invalid question index' };
-  }
-
-  // Get the item for context
   const itemDoc = await collections.items.doc(verification.itemId).get();
+
   if (!itemDoc.exists) {
     return { success: false, verification, error: 'Item not found' };
   }
 
   const item = { id: itemDoc.id, ...itemDoc.data() } as Item;
+  const question = reservation.current.questions[questionIndex].question;
+  const score = await scoreAnswer(item, question, answer);
 
-  // Score the answer
-  const question = verification.questions[questionIndex];
-  const score = await scoreAnswer(item, question.question, answer);
+  // Second transaction writes the answer. It re-reads because the reservation
+  // released the document while the model was working.
+  const outcome = await db.runTransaction(async (tx) => {
+    const fresh = await tx.get(ref);
 
-  // Update the question with answer and score
-  const updatedQuestions = [...verification.questions];
-  updatedQuestions[questionIndex] = {
-    ...question,
-    userAnswer: answer,
-    score,
-  };
+    if (!fresh.exists) return { error: 'Verification not found' as const };
 
-  // Calculate overall confidence score
-  const answeredQuestions = updatedQuestions.filter((q) => q.score !== undefined);
-  const confidenceScore =
-    answeredQuestions.length > 0
-      ? Math.round(
-          answeredQuestions.reduce((sum, q) => sum + (q.score || 0), 0) / answeredQuestions.length,
-        )
-      : 0;
+    const current = { id: fresh.id, ...fresh.data() } as Verification;
 
-  // Check if all questions are answered
-  const allAnswered = updatedQuestions.every((q) => q.userAnswer !== undefined);
-  let status: 'pending' | 'passed' | 'failed' = 'pending';
-  let completedAt: Timestamp | undefined;
+    if (current.status !== 'pending') return { error: 'Verification already completed' as const };
 
-  if (allAnswered) {
-    // Determine final status based on 70% threshold
-    status = confidenceScore >= 70 ? 'passed' : 'failed';
-    completedAt = Timestamp.now();
-  }
+    if (current.questions[questionIndex].userAnswer !== undefined) {
+      return { error: 'This question has already been answered' as const };
+    }
 
-  // Update Firestore
-  await collections.verifications.doc(verificationId).update({
-    questions: updatedQuestions,
-    confidenceScore,
-    status,
-    ...(completedAt && { completedAt }),
+    const questions = [...current.questions];
+    questions[questionIndex] = { ...questions[questionIndex], userAnswer: answer, score };
+
+    const answered = questions.filter((entry) => entry.score !== undefined);
+    const confidenceScore =
+      answered.length > 0
+        ? Math.round(
+            answered.reduce((total, entry) => total + (entry.score || 0), 0) / answered.length,
+          )
+        : 0;
+
+    const allAnswered = questions.every((entry) => entry.userAnswer !== undefined);
+    const status: Verification['status'] = allAnswered
+      ? confidenceScore >= PASS_THRESHOLD
+        ? 'passed'
+        : 'failed'
+      : 'pending';
+    const completedAt = allAnswered ? Timestamp.now() : undefined;
+
+    tx.update(ref, {
+      questions,
+      confidenceScore,
+      status,
+      ...(completedAt && { completedAt }),
+    });
+
+    return {
+      verification: {
+        ...current,
+        questions,
+        confidenceScore,
+        status,
+        completedAt,
+      } as Verification,
+    };
   });
 
-  const updatedVerification: Verification = {
-    ...verification,
-    questions: updatedQuestions,
-    confidenceScore,
-    status,
-    completedAt,
-  };
+  if ('error' in outcome) {
+    return { success: false, verification, error: outcome.error };
+  }
 
-  return { success: true, verification: updatedVerification };
+  return { success: true, verification: outcome.verification };
+}
+
+/**
+ * Why this answer may not be submitted, or null when it may.
+ *
+ * Answers had to be sequential and single-shot to mean anything: without it a
+ * claimant could answer question 3 first, re-answer whichever question scored
+ * badly, and keep going until the average cleared the threshold.
+ */
+function checkSubmittable(verification: Verification, questionIndex: number): string | null {
+  if (verification.status !== 'pending') return 'Verification already completed';
+
+  if ((verification.submissions ?? 0) >= MAX_SUBMISSIONS) {
+    return 'Too many verification attempts';
+  }
+
+  if (questionIndex < 0 || questionIndex >= verification.questions.length) {
+    return 'Invalid question index';
+  }
+
+  if (verification.questions[questionIndex].userAnswer !== undefined) {
+    return 'This question has already been answered';
+  }
+
+  const nextUnanswered = verification.questions.findIndex(
+    (question) => question.userAnswer === undefined,
+  );
+
+  if (questionIndex !== nextUnanswered) {
+    return `Answer question ${nextUnanswered + 1} first`;
+  }
+
+  return null;
 }
 
 /**
@@ -291,10 +364,12 @@ export async function completeVerification(
     return { success: false, error: 'Verification did not pass' };
   }
 
-  // Update item status to Resolved
+  // `Claimed` is the single terminal state. This path used to set `Resolved`
+  // while the handover flow set `Claimed`, and every dashboard counts
+  // `Claimed`, so verified claims vanished from the metrics.
   const itemRef = collections.items.doc(verification.itemId);
   await itemRef.update({
-    status: 'Resolved',
+    status: 'Claimed',
     matchedUserId: verification.claimantUserId,
     verificationConfidence: verification.confidenceScore,
     verifiedAt: FieldValue.serverTimestamp(),

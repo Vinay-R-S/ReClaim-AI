@@ -13,7 +13,7 @@ export interface Item {
   location: string;
   coordinates?: { lat: number; lng: number };
   date: Timestamp | Date;
-  status: 'Pending' | 'Matched' | 'Claimed' | 'Resolved';
+  status: 'Pending' | 'Matched' | 'Claimed';
   matchScore?: number;
   /** Best score seen while matching when nothing crossed the threshold. */
   bestCandidateScore?: number;
@@ -43,7 +43,7 @@ export interface ItemInput {
   location: string;
   coordinates?: { lat: number; lng: number };
   date: Date;
-  status: 'Pending' | 'Matched' | 'Claimed' | 'Resolved';
+  status: 'Pending' | 'Matched' | 'Claimed';
   matchScore?: number;
   tags?: string[];
   color?: string;

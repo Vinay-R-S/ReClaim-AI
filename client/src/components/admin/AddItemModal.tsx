@@ -19,6 +19,15 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
   const [matchResult, setMatchResult] = useState<{
     highestScore: number;
   } | null>(null);
+  const [matchPending, setMatchPending] = useState(false);
+  // Polling outlives a fast dismissal, so state updates are gated on this.
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const [loading, setLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>(
@@ -38,7 +47,6 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
       active = false;
     };
   }, []);
-
 
   const [formData, setFormData] = useState<Omit<ItemInput, 'imageUrl'>>({
     name: initialData?.name || '',
@@ -162,15 +170,56 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
 
       console.log('[ADMIN-MODAL] Item created successfully');
       const result = await response.json();
-      setMatchResult(result.matchResult);
       setStep('success');
-      onSuccess();
+
+      // `onSuccess` closes this modal on two of its three mount sites, which
+      // unmounts the success step before it renders. It runs on dismissal.
+
+      // Matching runs after the create response now, so the score is read back
+      // from the item rather than returned inline.
+      void pollForMatch(result.id);
     } catch (err) {
       console.error('Error adding item:', err);
       alert(`Failed to publish item: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * Read the match score off the item once matching has had a chance to run.
+   *
+   * Only `matchScore` counts: `bestCandidateScore` is written exactly when
+   * nothing crossed the threshold, so it is not a match to report.
+   */
+  const pollForMatch = async (itemId: string) => {
+    if (!itemId) return;
+
+    setMatchPending(true);
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+
+      if (!mountedRef.current) return;
+
+      try {
+        const response = await authFetch(`/api/items/${itemId}`);
+
+        if (!response.ok) continue;
+
+        const { item } = await response.json();
+
+        if (typeof item?.matchScore === 'number' && item.matchScore > 0) {
+          if (!mountedRef.current) return;
+          setMatchResult({ highestScore: item.matchScore });
+          break;
+        }
+      } catch {
+        // A failed poll is not a failed publish; keep trying, then give up.
+      }
+    }
+
+    if (mountedRef.current) setMatchPending(false);
   };
 
   const handleTagRemove = (tagToRemove: string) => {
@@ -555,7 +604,11 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
                 The {formData.type.toLowerCase()} item has been added to the database.
               </p>
 
-              {matchResult && matchResult.highestScore > 0 ? (
+              {matchPending && !matchResult ? (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 mb-6">
+                  <p className="text-sm text-blue-700">Checking for matches...</p>
+                </div>
+              ) : matchResult && matchResult.highestScore > 0 ? (
                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 mb-6">
                   <div className="flex items-center justify-center gap-2 text-blue-700 mb-2">
                     <Sparkles className="w-4 h-4" />
@@ -571,13 +624,16 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
               ) : (
                 <div className="bg-gray-50 border border-gray-100 rounded-xl p-5 mb-6">
                   <p className="text-sm text-text-secondary">
-                    No immediate matches found with existing items.
+                    No match yet. Matching continues in the background.
                   </p>
                 </div>
               )}
 
               <button
-                onClick={onClose}
+                onClick={() => {
+                  onSuccess();
+                  onClose();
+                }}
                 className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-md"
               >
                 Done

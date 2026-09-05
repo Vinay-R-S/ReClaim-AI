@@ -43,7 +43,10 @@ export function ItemDetailModal({ item, onClose, onUpdate, onDelete }: ItemDetai
     type: item.type,
     location: item.location,
     date: item.date instanceof Timestamp ? item.date.toDate() : new Date(item.date),
-    status: item.status,
+    // An item closed before `Resolved` was retired still carries it. The
+    // server rejects that status now, so seeding the form with it left the
+    // select blank and made the item unsaveable until the migration ran.
+    status: (item.status as string) === 'Resolved' ? 'Claimed' : item.status,
     matchScore: item.matchScore,
     tags: item.tags || [],
   });
@@ -305,7 +308,7 @@ export function ItemDetailModal({ item, onClose, onUpdate, onDelete }: ItemDetai
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      status: e.target.value as 'Pending' | 'Matched' | 'Claimed' | 'Resolved',
+                      status: e.target.value as 'Pending' | 'Matched' | 'Claimed',
                     })
                   }
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -313,7 +316,6 @@ export function ItemDetailModal({ item, onClose, onUpdate, onDelete }: ItemDetai
                   <option value="Pending">Pending</option>
                   <option value="Matched">Matched</option>
                   <option value="Claimed">Claimed</option>
-                  <option value="Resolved">Resolved</option>
                 </select>
               ) : (
                 <span
