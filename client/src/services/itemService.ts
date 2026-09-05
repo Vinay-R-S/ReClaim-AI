@@ -15,6 +15,8 @@ export interface Item {
   date: Timestamp | Date;
   status: 'Pending' | 'Matched' | 'Claimed' | 'Resolved';
   matchScore?: number;
+  /** Best score seen while matching when nothing crossed the threshold. */
+  bestCandidateScore?: number;
   tags?: string[];
   category?: string;
   images?: string[];

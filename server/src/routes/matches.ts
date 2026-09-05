@@ -4,6 +4,7 @@
 
 import { Router, Request, Response } from 'express';
 import { findMatchesForLostItem, findMatchesForFoundItem } from '../services/matching.js';
+import { toDate } from '../services/matching/matching.pipeline.js';
 import { penalizeFalseClaim } from '../services/credits.js';
 import { sendMatchNotification, sendClaimConfirmation } from '../services/email.js';
 import { collections } from '../utils/firebase-admin.js';
@@ -41,12 +42,26 @@ router.post(
   requireActiveUser,
   validate(matchSearchSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const { type, name, description, tags, coordinates, date, imageBase64 } = req.body;
+    const {
+      type,
+      name,
+      description,
+      tags,
+      color,
+      location,
+      category,
+      coordinates,
+      date,
+      imageBase64,
+    } = req.body;
 
     const searchParams = {
       name,
       description: description || '',
       tags: tags || [],
+      color,
+      location,
+      category,
       coordinates,
       date: date ? new Date(date) : new Date(),
       imageBase64,
@@ -355,14 +370,31 @@ router.get(
     // Get matches for each
     const allMatches = [];
 
-    for (const doc of lostSnapshot.docs) {
+    // Only items still looking for a match are worth scoring. Running the
+    // pipeline for every lost item the user ever reported turned one request
+    // into dozens of sequential LLM waves.
+    const openItems = lostSnapshot.docs.filter((doc) => doc.data().status === 'Pending');
+
+    for (const doc of openItems) {
       const item = doc.data();
+      const date = toDate(item.date);
+
+      // A legacy item with no date used to throw on `item.date.toDate()` and
+      // fail the whole request. It cannot be time-scored, so it is skipped.
+      if (!date) {
+        allMatches.push({ lostItem: { id: doc.id, ...item }, matches: [] });
+        continue;
+      }
+
       const matches = await findMatchesForLostItem({
         name: item.name,
         description: item.description,
         tags: item.tags,
+        color: item.color,
+        location: item.location,
         coordinates: item.coordinates,
-        date: item.date.toDate(),
+        cloudinaryUrls: item.cloudinaryUrls,
+        date,
       });
 
       allMatches.push({

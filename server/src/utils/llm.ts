@@ -49,6 +49,16 @@ const GEMINI_API_URL =
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 
 /**
+ * Ceiling on one provider call.
+ *
+ * It has to sit on the individual call rather than on `callLLM`, because a
+ * timeout around the whole function fires on a slow primary before the
+ * fallback provider is ever attempted, and leaves the abandoned request
+ * burning quota. An abort stops it for real and lets the fallback run.
+ */
+const PROVIDER_TIMEOUT_MS = 15000;
+
+/**
  * Call Groq API
  */
 async function callGroq(messages: LLMMessage[], options: LLMOptions = {}): Promise<string> {
@@ -80,6 +90,7 @@ async function callGroq(messages: LLMMessage[], options: LLMOptions = {}): Promi
 
   const response = await fetch(GROQ_API_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -133,6 +144,7 @@ async function callGrok(messages: LLMMessage[], options: LLMOptions = {}): Promi
 
   const response = await fetch(GROK_API_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -194,6 +206,7 @@ async function callGemini(messages: LLMMessage[], options: LLMOptions = {}): Pro
 
   const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
     method: 'POST',
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     headers: {
       'Content-Type': 'application/json',
     },
@@ -219,6 +232,7 @@ async function callGemini(messages: LLMMessage[], options: LLMOptions = {}): Pro
 
 import { collections } from './firebase-admin.js';
 import { createLogger } from './logger.js';
+import { singleFlight } from './async.js';
 import { env } from '../config/env.js';
 
 const log = createLogger('llm');
@@ -237,26 +251,36 @@ let lastSettingsFetch = 0;
 const SETTINGS_CACHE_TTL = 60000; // 1 minute cache
 
 /**
- * Get AI provider setting from Firestore (cached)
+ * Read the provider setting from Firestore.
+ *
+ * Wrapped in `singleFlight` so a fan-out of scorers on a cold cache issues one
+ * read between them, rather than one read per candidate.
  */
-async function getAIProviderSetting(): Promise<AIProviderSetting> {
-  const now = Date.now();
-
-  if (cachedAIProvider && now - lastSettingsFetch < SETTINGS_CACHE_TTL) {
-    return cachedAIProvider;
-  }
-
+const fetchAIProviderSetting = singleFlight(async (): Promise<AIProviderSetting> => {
   try {
     const doc = await collections.settings.doc('system').get();
     const data = doc.data();
     const provider: AIProviderSetting = data?.aiProvider || 'groq_only'; // Default to groq_only
+
     cachedAIProvider = provider;
-    lastSettingsFetch = now;
+    lastSettingsFetch = Date.now();
+
     return provider;
   } catch (error) {
     log.warn('Failed to fetch AI provider settings, using default:', error);
     return 'groq_only';
   }
+});
+
+/**
+ * Get AI provider setting from Firestore (cached)
+ */
+async function getAIProviderSetting(): Promise<AIProviderSetting> {
+  if (cachedAIProvider && Date.now() - lastSettingsFetch < SETTINGS_CACHE_TTL) {
+    return cachedAIProvider;
+  }
+
+  return fetchAIProviderSetting();
 }
 
 /**
