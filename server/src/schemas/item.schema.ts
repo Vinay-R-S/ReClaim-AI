@@ -18,7 +18,7 @@ export const itemTypeSchema = z.enum(['Lost', 'Found'], {
   errorMap: () => ({ message: 'Type must be "Lost" or "Found"' }),
 });
 
-export const itemStatusSchema = z.enum(['Pending', 'Matched', 'Claimed', 'Resolved'], {
+export const itemStatusSchema = z.enum(['Pending', 'Matched', 'Claimed'], {
   errorMap: () => ({ message: 'Invalid status' }),
 });
 
@@ -33,7 +33,11 @@ export const itemInputSchema = z.object({
     color: optionalText(50),
     tags: z.array(text(1, 50)).max(10, 'Maximum 10 tags allowed').optional(),
     coordinates: coordinatesSchema.optional(),
+    // `collectionPoint` is canonical. `collectionLocation` is what the report
+    // form has always sent and is accepted as an alias, mapped on write.
+    collectionPoint: optionalText(500),
     collectionLocation: optionalText(500),
+    collectionCoordinates: coordinatesSchema.optional(),
     reporterEmail: emailString.optional(),
   }),
   images: z.array(imagePayload).max(5, 'Maximum 5 images allowed').optional(),
@@ -64,7 +68,9 @@ export const itemUpdateSchema = z.object({
       category: optionalText(100),
       color: optionalText(50),
       tags: z.array(text(1, 50)).max(10).optional(),
+      collectionPoint: optionalText(500),
       collectionLocation: optionalText(500),
+      collectionCoordinates: coordinatesSchema.optional(),
       coordinates: coordinatesSchema.optional(),
       // Removal only. The handler rejects any URL not already on the item.
       cloudinaryUrls: z.array(z.string().url()).max(20).optional(),

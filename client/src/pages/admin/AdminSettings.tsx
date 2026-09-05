@@ -8,7 +8,13 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { authFetch } from '../../lib/authApi';
 
-type AIProvider = 'groq_only' | 'gemini_only' | 'groq_with_fallback' | 'gemini_with_fallback';
+type AIProvider =
+  | 'groq_only'
+  | 'gemini_only'
+  | 'grok_only'
+  | 'groq_with_fallback'
+  | 'gemini_with_fallback'
+  | 'grok_with_fallback';
 
 interface MapCenter {
   address: string;
@@ -18,6 +24,8 @@ interface MapCenter {
 
 interface SystemSettings {
   aiProvider: AIProvider;
+  /** Providers this deployment has an API key for. */
+  availableProviders?: ('groq' | 'gemini' | 'grok')[];
   mapCenter?: MapCenter;
   cctvEnabled: boolean;
   testingMode: boolean;
@@ -39,16 +47,36 @@ const AI_PROVIDER_OPTIONS: {
     description: 'Use Google Gemini exclusively. No fallback if Gemini fails.',
   },
   {
+    value: 'grok_only',
+    label: 'Grok Only',
+    description: 'Use xAI Grok exclusively. No fallback if Grok fails.',
+  },
+  {
     value: 'groq_with_fallback',
     label: 'Groq (with Gemini fallback)',
     description: 'Primary: Groq. Fallback to Gemini if Groq fails.',
   },
   {
     value: 'gemini_with_fallback',
-    label: 'Gemini (with Groq fallback)',
-    description: 'Primary: Gemini. Fallback to Groq if Gemini fails.',
+    label: 'Gemini (with Grok fallback)',
+    description: 'Primary: Gemini. Fallback to Grok if Gemini fails.',
+  },
+  {
+    value: 'grok_with_fallback',
+    label: 'Grok (with Groq fallback)',
+    description: 'Primary: Grok. Fallback to Groq if Grok fails.',
   },
 ];
+
+/** Which provider each option makes primary. A missing key breaks every AI call. */
+const PRIMARY_PROVIDER: Record<AIProvider, 'groq' | 'gemini' | 'grok'> = {
+  groq_only: 'groq',
+  groq_with_fallback: 'groq',
+  gemini_only: 'gemini',
+  gemini_with_fallback: 'gemini',
+  grok_only: 'grok',
+  grok_with_fallback: 'grok',
+};
 
 // Default marker icon
 const defaultIcon = L.icon({
@@ -592,34 +620,49 @@ export function AdminSettings() {
         </div>
 
         <div className="space-y-4">
-          {AI_PROVIDER_OPTIONS.map((option) => (
-            <label
-              key={option.value}
-              className={`flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all ${
-                settings.aiProvider === option.value
-                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                  : 'border-border hover:border-gray-300'
-              }`}
-            >
-              <input
-                type="radio"
-                name="aiProvider"
-                value={option.value}
-                checked={settings.aiProvider === option.value}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    aiProvider: e.target.value as AIProvider,
-                  })
-                }
-                className="mt-1 w-4 h-4 text-primary focus:ring-primary"
-              />
-              <div>
-                <span className="font-medium text-text-primary block">{option.label}</span>
-                <span className="text-sm text-text-secondary">{option.description}</span>
-              </div>
-            </label>
-          ))}
+          {AI_PROVIDER_OPTIONS.map((option) => {
+            // The server refuses a provider it has no key for, so say so here
+            // rather than letting the admin discover it through a failed save.
+            const available =
+              !settings.availableProviders ||
+              settings.availableProviders.includes(PRIMARY_PROVIDER[option.value]);
+
+            return (
+              <label
+                key={option.value}
+                className={`flex items-start gap-4 p-4 rounded-lg border transition-all ${
+                  !available
+                    ? 'border-border opacity-50 cursor-not-allowed'
+                    : settings.aiProvider === option.value
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary cursor-pointer'
+                      : 'border-border hover:border-gray-300 cursor-pointer'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="aiProvider"
+                  value={option.value}
+                  disabled={!available}
+                  checked={settings.aiProvider === option.value}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      aiProvider: e.target.value as AIProvider,
+                    })
+                  }
+                  className="mt-1 w-4 h-4 text-primary focus:ring-primary"
+                />
+                <div>
+                  <span className="font-medium text-text-primary block">{option.label}</span>
+                  <span className="text-sm text-text-secondary">
+                    {available
+                      ? option.description
+                      : `No ${PRIMARY_PROVIDER[option.value]} API key is configured on this server.`}
+                  </span>
+                </div>
+              </label>
+            );
+          })}
         </div>
       </div>
 

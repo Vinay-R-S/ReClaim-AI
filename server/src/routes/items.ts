@@ -140,6 +140,37 @@ router.get(
 );
 
 /**
+ * Run auto-matching outside the request.
+ *
+ * Nothing awaits this, so it owns its errors: an unhandled rejection here
+ * would take the process down for an item that was already created.
+ */
+function runMatchingInBackground(
+  itemId: string,
+  item: ItemInput,
+  cloudinaryUrls: string[],
+): Promise<void> {
+  return triggerAutoMatching(itemId, item.type, {
+    name: item.name,
+    description: item.description,
+    tags: item.tags || [],
+    color: item.color,
+    imageUrl: cloudinaryUrls[0],
+    cloudinaryUrls,
+    coordinates: item.coordinates,
+    location: item.location,
+    date: new Date(item.date),
+    category: item.category,
+  })
+    .then((result) => {
+      log.info(`[ITEM-CREATE] Matching finished for ${itemId}, best ${result?.highestScore ?? 0}%`);
+    })
+    .catch((error) => {
+      log.error(`[ITEM-CREATE] Matching failed for ${itemId}:`, error);
+    });
+}
+
+/**
  * POST /api/items
  * Create a new item (requires authentication)
  */
@@ -189,9 +220,18 @@ router.post(
       newItem.reportedByEmail = item.reporterEmail;
     }
 
-    // Add collection location for Found items
-    if (item.collectionLocation) {
-      newItem.collectionLocation = item.collectionLocation;
+    // Collection details for Found items. The form sends `collectionLocation`
+    // and every consumer reads `collectionPoint`, which is why the handover
+    // email showed the found-at location and the admin screen showed nothing.
+    // One canonical name is written here, whichever alias arrived.
+    const collectionPoint = item.collectionPoint || item.collectionLocation;
+
+    if (collectionPoint) {
+      newItem.collectionPoint = collectionPoint;
+    }
+
+    if (item.collectionCoordinates) {
+      newItem.collectionCoordinates = item.collectionCoordinates;
     }
 
     // Only add coordinates if defined
@@ -225,33 +265,77 @@ router.post(
       // Don't fail the request, just log the error
     }
 
-    // Trigger automatic matching (non-blocking) with comprehensive scoring
-    const imageUrl = cloudinaryUrls[0];
-    log.info(`[ITEM-CREATE] Triggering auto-match for item ${itemId}`);
-    log.info(`[ITEM-CREATE] - Tags: ${JSON.stringify(item.tags || [])}`);
-    log.info(`[ITEM-CREATE] - Color: ${item.color || 'NONE'}`);
-    log.info(`[ITEM-CREATE] - Coordinates: ${item.coordinates ? 'present' : 'MISSING'}`);
-    log.info(`[ITEM-CREATE] - Date: ${item.date || 'MISSING'}`);
-    log.info(`[ITEM-CREATE] - Image: ${imageUrl ? 'present' : 'MISSING'}`);
+    // Read the document back rather than echoing `newItem`: it still holds
+    // unresolved `serverTimestamp()` sentinels, which serialise to `{}` and
+    // give any client rendering `createdAt` an invalid date.
+    const created = await docRef.get();
 
-    const matchResult = await triggerAutoMatching(itemId, item.type, {
-      name: item.name,
-      description: item.description,
-      tags: item.tags || [],
-      color: item.color,
-      imageUrl,
-      cloudinaryUrls, // Every uploaded image, so multi-image comparison works
-      coordinates: item.coordinates, // Pass coordinates for location matching
-      location: item.location, // Pass location string for fallback
-      date: new Date(item.date), // Pass date for time matching
-      category: item.category, // Pass category for matching
-    });
+    // Matching runs after the response. It calls an LLM and a vision API per
+    // candidate, so awaiting it made report submission as slow and as fragile
+    // as the slowest provider, and a matching failure returned 500 for an item
+    // that had already been persisted. The result is picked up by polling
+    // `GET /api/items/:id`.
+    void runMatchingInBackground(itemId, item, cloudinaryUrls);
 
     return res.status(201).json({
       id: docRef.id,
-      item: { id: docRef.id, ...newItem },
-      matchResult,
+      item: { id: created.id, ...created.data() },
+      matching: 'pending',
     });
+  }),
+);
+
+/**
+ * POST /api/items/:id/rematch
+ * Admin: re-run matching for an item.
+ *
+ * Matching runs outside the request, so a restart or a deploy in the seconds
+ * after a report is created loses that run and leaves the item Pending with
+ * nothing to resume it. This is the manual resume.
+ */
+router.post(
+  '/:id/rematch',
+  authMiddleware,
+  requireAdmin,
+  validateParams(idParamsSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const doc = await collections.items.doc(id).get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    const data = doc.data() as Record<string, unknown>;
+    const date = (data.date as { toDate?: () => Date } | undefined)?.toDate?.();
+
+    if (!date) {
+      return res.status(400).json({ error: 'Item has no report date, so it cannot be matched' });
+    }
+
+    if (data.status !== 'Pending') {
+      return res
+        .status(400)
+        .json({ error: `Only a Pending item can be rematched (is ${data.status})` });
+    }
+
+    void runMatchingInBackground(
+      id,
+      {
+        name: data.name as string,
+        description: (data.description as string) || '',
+        type: data.type as ItemInput['type'],
+        location: (data.location as string) || '',
+        date,
+        tags: (data.tags as string[]) || [],
+        color: data.color as string | undefined,
+        category: data.category as string | undefined,
+        reportedBy: (data.reportedBy as string) || '',
+      },
+      (data.cloudinaryUrls as string[]) || [],
+    );
+
+    return res.json({ success: true, message: 'Matching restarted' });
   }),
 );
 
@@ -291,7 +375,11 @@ router.put(
       category: fields.category,
       color: fields.color,
       tags: fields.tags,
-      collectionLocation: fields.collectionLocation,
+      // `??` not `||`: an empty string is a request to clear the field, and
+      // `||` turned it into undefined, which stripUndefined then dropped, so
+      // the old value survived.
+      collectionPoint: fields.collectionPoint ?? fields.collectionLocation,
+      collectionCoordinates: fields.collectionCoordinates,
       coordinates: fields.coordinates,
       date: fields.date ? Timestamp.fromDate(new Date(fields.date)) : undefined,
       // Lifecycle fields are an admin action, not something an owner can set on

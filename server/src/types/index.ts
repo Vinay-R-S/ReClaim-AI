@@ -21,7 +21,19 @@ export interface User {
 
 // ============ Item Types ============
 export type ItemType = 'Lost' | 'Found';
-export type ItemStatus = 'Pending' | 'Matched' | 'Claimed' | 'Resolved';
+/**
+ * The item lifecycle, in order.
+ *
+ * `Pending`  reported, looking for a match.
+ * `Matched`  paired with a counterpart, handover not yet completed.
+ * `Claimed`  handed over and closed. The only terminal state.
+ *
+ * `Resolved` used to be a second terminal state, set by the verification agent
+ * while the handover flow set `Claimed`. Dashboards count `Claimed`, so
+ * anything closed through verification disappeared from every metric. Both
+ * paths now converge on `Claimed`; the migration rewrites existing documents.
+ */
+export type ItemStatus = 'Pending' | 'Matched' | 'Claimed';
 
 export * from './handover.js';
 
@@ -54,6 +66,7 @@ export interface Item {
   verificationConfidence?: number;
   verifiedAt?: Timestamp;
   collectionPoint?: string;
+  collectionCoordinates?: Coordinates;
   collectionInstructions?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -72,7 +85,11 @@ export interface ItemInput {
   images?: File[] | string[]; // Files or base64/urls
   reportedBy: string;
   reporterEmail?: string; // Email of reporter
-  collectionLocation?: string; // For Found items - where to collect
+  /** For Found items: where the owner collects it. Canonical name. */
+  collectionPoint?: string;
+  /** Accepted alias for `collectionPoint`, mapped on write. */
+  collectionLocation?: string;
+  collectionCoordinates?: Coordinates;
 }
 
 // ============ Conversation Types ============
@@ -188,6 +205,8 @@ export interface Verification {
   questions: VerificationQuestion[];
   confidenceScore: number; // Weighted average
   status: 'pending' | 'passed' | 'failed';
+  /** Scored submissions so far, capped to stop repeated guessing. */
+  submissions?: number;
   createdAt: Timestamp;
   completedAt?: Timestamp;
 }

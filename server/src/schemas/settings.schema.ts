@@ -6,7 +6,14 @@ import { z } from 'zod';
 import { imagePayload, optionalText } from './common.schema.js';
 
 export const aiProviderSchema = z.enum(
-  ['groq_only', 'gemini_only', 'groq_with_fallback', 'gemini_with_fallback'],
+  [
+    'groq_only',
+    'gemini_only',
+    'grok_only',
+    'groq_with_fallback',
+    'gemini_with_fallback',
+    'grok_with_fallback',
+  ],
   { errorMap: () => ({ message: 'Invalid AI provider' }) },
 );
 

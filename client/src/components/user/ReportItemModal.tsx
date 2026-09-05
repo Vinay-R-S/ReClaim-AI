@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   X,
   Upload,
@@ -30,12 +30,20 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
     highestScore: number;
     bestMatchId?: string;
   } | null>(null);
+  const [matchPending, setMatchPending] = useState(false);
+  // Polling outlives a fast dismissal, so state updates are gated on this.
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const [loading, setLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-
 
   const [formData, setFormData] = useState({
     name: '',
@@ -241,15 +249,63 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
       }
 
       const data = await response.json();
-      setMatchResult(data.matchResult);
       setStep('success');
-      onSuccess();
+
+      // `onSuccess` is deliberately not called here: on this screen it clears
+      // the report type, which unmounts this modal, so the success step never
+      // rendered. It runs when the user dismisses the panel instead.
+
+      // Matching now runs after the create response, so the item is persisted
+      // before the AI work starts and submission can no longer fail because a
+      // provider did. The result is read back from the item itself.
+      void pollForMatch(data.id);
     } catch (err) {
       console.error('Error submitting item:', err);
       alert(`Failed to submit: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * Read the match score off the item once matching has had a chance to run.
+   *
+   * Only `matchScore` counts. `bestCandidateScore` is written precisely when
+   * nothing crossed the threshold, so announcing it as a match would be the
+   * same lie the server stopped telling.
+   *
+   * Gives up quietly: a report with no match is the normal case, and matching
+   * can outlast this window, so the panel says results may still arrive rather
+   * than claiming there are none.
+   */
+  const pollForMatch = async (itemId: string) => {
+    if (!itemId) return;
+
+    setMatchPending(true);
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+
+      if (!mountedRef.current) return;
+
+      try {
+        const response = await fetch(`${API_URL}/api/items/${itemId}`);
+
+        if (!response.ok) continue;
+
+        const { item } = await response.json();
+
+        if (typeof item?.matchScore === 'number' && item.matchScore > 0) {
+          if (!mountedRef.current) return;
+          setMatchResult({ highestScore: item.matchScore, bestMatchId: item?.matchedItemId });
+          break;
+        }
+      } catch {
+        // A failed poll is not a failed report; keep trying, then give up.
+      }
+    }
+
+    if (mountedRef.current) setMatchPending(false);
   };
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -736,6 +792,18 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
                 Your {type.toLowerCase()} item report has been successfully recorded.
               </p>
 
+              {matchPending && !matchResult && (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 text-sm text-blue-700">
+                  Checking for matches...
+                </div>
+              )}
+
+              {!matchPending && !matchResult && (
+                <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 mb-6 text-sm text-text-secondary">
+                  No match yet. We keep looking, and anything we find will appear in My Reports.
+                </div>
+              )}
+
               {matchResult && matchResult.highestScore > 0 && (
                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-6">
                   <div className="flex items-center justify-center gap-2 text-blue-700 mb-2">
@@ -757,7 +825,10 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
               )}
 
               <button
-                onClick={onClose}
+                onClick={() => {
+                  onSuccess();
+                  onClose();
+                }}
                 className="w-full py-3 bg-primary text-white rounded-xl font-semibold hover:bg-primary-hover transition-colors shadow-md"
               >
                 Got it
