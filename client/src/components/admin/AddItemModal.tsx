@@ -38,6 +38,13 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
   const [imagePreviews, setImagePreviews] = useState<string[]>(
     initialData?.imageUrl ? [initialData.imageUrl] : [],
   );
+  // A seeded image is real content, not just a preview. CCTV register-as-found
+  // hands the detected crop in through `initialData.imageUrl`, and because
+  // submission only ever uploaded from `imageFiles`, the admin saw the crop on
+  // screen and the created item had no images at all.
+  const [seededImages, setSeededImages] = useState<string[]>(
+    initialData?.imageUrl ? [initialData.imageUrl] : [],
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [aiAvailable, setAiAvailable] = useState(true);
@@ -70,6 +77,9 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
       setImageFiles(files);
+      // A hand-picked upload replaces the seeded crop, matching what the
+      // preview strip then shows.
+      setSeededImages([]);
 
       // Generate previews
       const newPreviews: string[] = [];
@@ -140,11 +150,13 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
     try {
       setLoading(true);
 
-      let uploadedImages: string[] = [];
-      if (imageFiles.length > 0) {
-        // Convert images to base64
-        uploadedImages = await Promise.all(imageFiles.map((file) => uploadItemImage(file)));
-      }
+      // Seeded images are already base64 and go up as they are; picked files
+      // are compressed first.
+      const pickedImages =
+        imageFiles.length > 0
+          ? await Promise.all(imageFiles.map((file) => uploadItemImage(file)))
+          : [];
+      const uploadedImages = [...seededImages, ...pickedImages];
 
       // Call backend API to trigger automatic matching
       // Note: authFetch automatically adds the Firebase auth token

@@ -26,6 +26,7 @@ import {
   type Keyframe,
 } from '../../services/cctvService';
 import { AddItemModal } from '../../components/admin/AddItemModal';
+import { CameraContextPanel } from '../../components/admin/CameraContextPanel';
 import { Link } from 'react-router-dom';
 import { authFetch } from '../../lib/authApi';
 
@@ -56,12 +57,47 @@ export function CCTVIntelligence() {
   const [analysisResult, setAnalysisResult] = useState<VideoAnalysisResult | null>(null);
   const [selectedKeyframe, setSelectedKeyframe] = useState<Keyframe | null>(null);
 
+  // Camera context. A detection is only as matchable as the position and time
+  // it carries, and both used to be hardcoded.
+  const [cameraLocation, setCameraLocation] = useState('');
+  const [cameraCoordinates, setCameraCoordinates] = useState<
+    { lat: number; lng: number } | undefined
+  >(undefined);
+  const [recordedAt, setRecordedAt] = useState<Date>(() => new Date());
+
   // Register Found Workflow
   const [showAddModal, setShowAddModal] = useState(false);
   const [foundItemData, setFoundItemData] = useState<any>(null);
 
   // 5. Register Found Item Logic with AI Description
   const [isDescribing, setIsDescribing] = useState(false);
+
+  /**
+   * The position and time a registered detection carries into matching.
+   *
+   * Both were hardcoded: "Admin Office (CCTV)" with no coordinates, and a date
+   * of now. Location scored zero and time sat at the edge of the window, so a
+   * CCTV item could not realistically match anything.
+   */
+  const cameraContext = (seenAt?: Date) => ({
+    location: cameraLocation,
+    coordinates: cameraCoordinates,
+    date: seenAt ?? new Date(),
+  });
+
+  /**
+   * Refuse to register a detection that cannot be matched.
+   *
+   * Without a pin the item scores zero on location, which is the failure this
+   * screen exists to stop reproducing. The panel marks the field required, so
+   * it has to actually be required.
+   */
+  const hasCameraContext = () => {
+    if (cameraLocation.trim() && cameraCoordinates) return true;
+
+    alert('Set the camera location and pick a point on the map before registering a detection.');
+    return false;
+  };
 
   // Check if CCTV feature is enabled
   useEffect(() => {
@@ -71,6 +107,17 @@ export function CCTVIntelligence() {
         if (response.ok) {
           const data = await response.json();
           setCctvEnabled(data.cctvEnabled !== false);
+
+          // The configured map centre is the sensible default camera position:
+          // it is where this deployment operates. The admin can move the pin.
+          // Only as a default. A slow settings read must not overwrite a pin
+          // the admin has already dropped while it was in flight.
+          if (typeof data.mapCenter?.lat === 'number' && typeof data.mapCenter?.lng === 'number') {
+            setCameraCoordinates(
+              (current) => current ?? { lat: data.mapCenter.lat, lng: data.mapCenter.lng },
+            );
+            setCameraLocation((current) => current || data.mapCenter.address || '');
+          }
         }
       } catch (error) {
         console.error('Failed to fetch settings:', error);
@@ -260,6 +307,8 @@ export function CCTVIntelligence() {
   }
 
   const handleRegisterFound = async (det: Detection) => {
+    if (!hasCameraContext()) return;
+
     if (!det.croppedImage) return;
 
     setIsDescribing(true);
@@ -276,7 +325,7 @@ export function CCTVIntelligence() {
         tags: aiDescription.tags || [det.className.toLowerCase()],
         color: aiDescription.color || 'Unknown',
         imageUrl: det.croppedImage,
-        location: 'Admin Office (CCTV)',
+        ...cameraContext(),
       });
     } catch (err) {
       console.error('AI description failed:', err);
@@ -286,7 +335,7 @@ export function CCTVIntelligence() {
         description: `Detected via CCTV Intelligence. Object identified as ${det.className}.`,
         category: det.className,
         imageUrl: det.croppedImage,
-        location: 'Admin Office (CCTV)',
+        ...cameraContext(),
       });
     } finally {
       setIsDescribing(false);
@@ -298,13 +347,16 @@ export function CCTVIntelligence() {
   const handleRegisterFromKeyframe = (keyframe: Keyframe) => {
     const bestDet = keyframe.detections[0];
     if (!bestDet) return;
+    if (!hasCameraContext()) return;
 
     setFoundItemData({
       name: `Found ${bestDet.className}`,
       description: `Detected via CCTV Video Analysis at ${keyframe.timestamp}s. ${analysisResult?.aiAnalysis?.explanation || ''}`,
       category: bestDet.className,
       imageUrl: bestDet.croppedImage || keyframe.frameImage,
-      location: 'Admin Office (CCTV)',
+      // The sighting time is the start of the footage plus the keyframe's own
+      // offset, not the moment the admin happened to click register.
+      ...cameraContext(new Date(recordedAt.getTime() + keyframe.timestamp * 1000)),
     });
 
     setShowAddModal(true);
@@ -317,6 +369,9 @@ export function CCTVIntelligence() {
       setVideoPreview(URL.createObjectURL(file));
       setAnalysisResult(null);
       setSelectedKeyframe(null);
+      // The file's own timestamp is a better first guess at when the footage
+      // was taken than "now". The admin can correct it before registering.
+      if (file.lastModified) setRecordedAt(new Date(file.lastModified));
     }
   };
 
@@ -339,12 +394,14 @@ export function CCTVIntelligence() {
         throw new Error('Could not extract frames from video');
       }
 
-      // Analyze frames with selected category
+      // Analyze frames with selected category. Long footage goes up as several
+      // requests, so the bar tracks batches rather than jumping to 100.
       const result = await analyzeVideoForItem(
         frames,
         selectedCategory,
         selectedCategory,
         `Looking for ${selectedCategory} in video footage`,
+        (completed, total) => setAnalysisProgress(40 + Math.round((completed / total) * 55)),
       );
 
       setAnalysisProgress(100);
@@ -428,6 +485,23 @@ export function CCTVIntelligence() {
               </div>
             )}
           </div>
+
+          <hr />
+
+          {/* Camera context: where it points, and when the footage was taken */}
+          <CameraContextPanel
+            location={cameraLocation}
+            coordinates={cameraCoordinates}
+            onLocationChange={(location, coordinates) => {
+              setCameraLocation(location);
+              // Assigned, not merged: an edit that drops the pin has to drop
+              // it here too, or the item carries a position its own location
+              // string contradicts.
+              setCameraCoordinates(coordinates);
+            }}
+            recordedAt={activeTab === 'upload' ? recordedAt : undefined}
+            onRecordedAtChange={activeTab === 'upload' ? setRecordedAt : undefined}
+          />
 
           <hr />
 

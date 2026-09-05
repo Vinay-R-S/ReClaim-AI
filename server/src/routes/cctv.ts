@@ -9,6 +9,7 @@ import {
 import { cctvAnalyzeSchema, cctvDescribeSchema, cctvDetectSchema } from '../schemas/index.js';
 import { createLogger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+import { callLLM } from '../utils/llm.js';
 
 const log = createLogger('cctv');
 
@@ -16,6 +17,51 @@ const router = Router();
 
 // Python YOLO service URL
 const YOLO_SERVICE_URL = env.yolo.serviceUrl;
+
+/**
+ * Ceilings on a call to the Flask service.
+ *
+ * Every proxy call used to be an unbounded `fetch`. A Flask process that
+ * accepted the connection and then stalled, on a model load or a frame it
+ * could not decode, held the Express request open with it and the admin saw a
+ * spinner with no end. Video analysis gets its own budget because it runs YOLO
+ * over every frame in the batch.
+ */
+const YOLO_TIMEOUT_MS = {
+  classes: 10000,
+  detect: 30000,
+  analyze: 120000,
+} as const;
+
+/**
+ * Call the Flask service with a deadline.
+ *
+ * `AbortSignal.timeout` rejects with a `TimeoutError`, which is tagged here so
+ * the handler can tell "took too long" apart from "not running": they need
+ * different things done about them.
+ */
+async function callYolo(
+  path: string,
+  timeoutMs: number,
+  init: RequestInit = {},
+): Promise<globalThis.Response> {
+  try {
+    return await fetch(`${YOLO_SERVICE_URL}${path}`, {
+      ...init,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    if ((error as Error).name === 'TimeoutError' || (error as Error).name === 'AbortError') {
+      const timeout = new Error(`YOLO service did not respond within ${timeoutMs}ms`) as Error & {
+        yoloTimeout: boolean;
+      };
+      timeout.yoloTimeout = true;
+      throw timeout;
+    }
+
+    throw error;
+  }
+}
 
 /**
  * The Flask service is reachable on the network and has no user accounts, so
@@ -36,6 +82,14 @@ function yoloHeaders(extra: Record<string, string> = {}): Record<string, string>
  */
 function yoloFailure(res: Response, error: unknown) {
   const status = (error as { yoloStatus?: number }).yoloStatus;
+
+  if ((error as { yoloTimeout?: boolean }).yoloTimeout) {
+    return res.status(504).json({
+      error: 'YOLO Detection Service timed out',
+      details:
+        'The service accepted the request but did not answer in time. For a video, try a shorter clip or a longer frame interval.',
+    });
+  }
 
   if (status === 401 || status === 403 || status === 503) {
     return res.status(502).json({
@@ -66,7 +120,9 @@ router.get(
   requireAdmin,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     try {
-      const response = await fetch(`${YOLO_SERVICE_URL}/classes`, { headers: yoloHeaders() });
+      const response = await callYolo('/classes', YOLO_TIMEOUT_MS.classes, {
+        headers: yoloHeaders(),
+      });
       if (!response.ok) throw yoloError(response);
       return res.json(await response.json());
     } catch (connError: any) {
@@ -86,7 +142,7 @@ router.post(
     const { image, targetClasses, targetClass } = req.body;
 
     try {
-      const response = await fetch(`${YOLO_SERVICE_URL}/detect`, {
+      const response = await callYolo('/detect', YOLO_TIMEOUT_MS.detect, {
         method: 'POST',
         headers: yoloHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ image, targetClasses, targetClass }),
@@ -113,7 +169,7 @@ router.post(
     // Call Python YOLO service
     let yoloResult: any;
     try {
-      const response = await fetch(`${YOLO_SERVICE_URL}/analyze-video`, {
+      const response = await callYolo('/analyze-video', YOLO_TIMEOUT_MS.analyze, {
         method: 'POST',
         headers: yoloHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
@@ -138,8 +194,7 @@ router.post(
     };
 
     try {
-      const groqApiKey = env.llm.groqApiKey;
-      if (groqApiKey && yoloResult.keyframes?.length > 0) {
+      if (yoloResult.keyframes?.length > 0) {
         const prompt = `You are an AI assistant helping to verify if a detected object matches a lost item report.
 
 Lost Item Details:
@@ -160,59 +215,43 @@ Respond in JSON format:
 "recommendations": ["string", "string"]
 }`;
 
-        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${groqApiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-            messages: [
-              {
-                role: 'system',
-                content:
-                  'You are an AI assistant that analyzes object detection results. Always respond with valid JSON.',
-              },
-              { role: 'user', content: prompt },
-            ],
-            temperature: 0.3,
-            max_tokens: 512,
-          }),
-        });
+        // Through `callLLM`, not a hardcoded Groq call: the admin provider
+        // setting is what decides which model runs, and going direct meant
+        // selecting Gemini or Grok changed matching but left CCTV on Groq.
+        const { content } = await callLLM(
+          [
+            {
+              role: 'system',
+              content:
+                'You are an AI assistant that analyzes object detection results. Always respond with valid JSON.',
+            },
+            { role: 'user', content: prompt },
+          ],
+          { temperature: 0.3, maxTokens: 512 },
+        );
 
-        if (groqResponse.ok) {
-          const groqData = (await groqResponse.json()) as {
-            choices?: { message?: { content?: string } }[];
+        try {
+          const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
+          const parsed = JSON.parse(jsonMatch[1]?.trim() || content.trim());
+          aiAnalysis = {
+            matchConfidence: parsed.matchConfidence || yoloResult.stats.maxConfidence,
+            explanation: parsed.explanation || 'AI analysis completed.',
+            recommendations: parsed.recommendations || [],
           };
-          const content = groqData.choices?.[0]?.message?.content || '';
-          try {
-            const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
-            const parsed = JSON.parse(jsonMatch[1]?.trim() || content.trim());
-            aiAnalysis = {
-              matchConfidence: parsed.matchConfidence || yoloResult.stats.maxConfidence,
-              explanation: parsed.explanation || 'AI analysis completed.',
-              recommendations: parsed.recommendations || [],
-            };
-          } catch {
-            aiAnalysis.explanation =
-              'Detection analysis completed. Visual verification recommended.';
-            aiAnalysis.recommendations = [
-              'Verify object visually',
-              'Check distinguishing features',
-            ];
-          }
+        } catch {
+          aiAnalysis.explanation = 'Detection analysis completed. Visual verification recommended.';
+          aiAnalysis.recommendations = ['Verify object visually', 'Check distinguishing features'];
         }
       } else {
-        aiAnalysis.explanation =
-          yoloResult.keyframes?.length > 0
-            ? 'Object detected. Groq AI not configured.'
-            : 'No matching objects found.';
-        aiAnalysis.recommendations =
-          yoloResult.keyframes?.length > 0
-            ? ['Review keyframes manually']
-            : ['Try uploading a different video'];
+        aiAnalysis.explanation = 'No matching objects found.';
+        aiAnalysis.recommendations = ['Try uploading a different video'];
       }
     } catch (aiError: any) {
-      log.error('Groq AI error:', aiError.message);
+      // A provider being down or unconfigured is not a failed analysis: the
+      // YOLO keyframes are the result, and the commentary is the extra.
+      log.error('CCTV analysis LLM error:', aiError.message);
       aiAnalysis.explanation = 'AI analysis unavailable. Manual review recommended.';
+      aiAnalysis.recommendations = ['Review keyframes manually'];
     }
 
     return res.json({
@@ -233,7 +272,6 @@ router.post(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { image, detectedClass } = req.body;
 
-    const groqApiKey = env.llm.groqApiKey;
     const defaultResponse = {
       success: true,
       name: `Found ${detectedClass || 'Item'}`,
@@ -242,8 +280,6 @@ router.post(
       tags: [detectedClass?.toLowerCase() || 'item', 'found', 'cctv'],
       color: 'Unknown',
     };
-
-    if (!groqApiKey) return res.json(defaultResponse);
 
     const imageData = image.includes(',') ? image.split(',')[1] : image;
     const prompt = `Analyze this found item image (detected as "${detectedClass || 'unknown'}"). Respond in JSON:
@@ -255,35 +291,24 @@ router.post(
 "color": "Primary color"
 }`;
 
-    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${groqApiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-        messages: [
-          { role: 'system', content: 'Analyze found item images. Respond with valid JSON.' },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageData}` } },
-            ],
-          },
-        ],
-        temperature: 0.3,
-        max_tokens: 512,
-      }),
-    });
+    // Through `callLLM` so the admin provider setting decides the model, and
+    // so an unconfigured or failing provider falls through to the descriptive
+    // default rather than 500ing the register-as-found flow.
+    let content = '';
 
-    if (!groqResponse.ok) {
-      log.error('Groq API error');
+    try {
+      const result = await callLLM(
+        [
+          { role: 'system', content: 'Analyze found item images. Respond with valid JSON.' },
+          { role: 'user', content: prompt },
+        ],
+        { temperature: 0.3, maxTokens: 512, imageBase64: imageData, imageMimeType: 'image/jpeg' },
+      );
+      content = result.content;
+    } catch (error) {
+      log.error('CCTV describe LLM error:', error);
       return res.json(defaultResponse);
     }
-
-    const groqData = (await groqResponse.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-    const content = groqData.choices?.[0]?.message?.content || '';
 
     try {
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
