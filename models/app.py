@@ -232,6 +232,12 @@ def analyze_video():
 
         avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else 0
         max_confidence = max(all_confidences) if all_confidences else 0
+
+        # Counted before the truncation below, which keeps only the ten best
+        # keyframes for the response. Reading it off the truncated list capped
+        # the reported figure at 10 however long the video was.
+        frames_with_target = len(keyframes)
+
         keyframes.sort(key=lambda x: x['confidence'], reverse=True)
         keyframes = keyframes[:10]
 
@@ -240,7 +246,7 @@ def analyze_video():
             "keyframes": keyframes,
             "stats": {
                 "totalFramesAnalyzed": len(frames),
-                "framesWithTarget": len(keyframes),
+                "framesWithTarget": frames_with_target,
                 "averageConfidence": round(avg_confidence, 2),
                 "maxConfidence": round(max_confidence, 2)
             },
