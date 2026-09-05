@@ -24,6 +24,11 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    // Re-armed on every mount. StrictMode runs mount, cleanup, mount in
+    // development, which left the ref false for the component's whole life and
+    // made the poll return on its first tick without ever clearing its state.
+    mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
     };
@@ -244,6 +249,18 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
     }
   };
 
+  /**
+   * Close the modal.
+   *
+   * `onSuccess` moved off the submit path so the success step could render at
+   * all, which left the header close as a way to dismiss a filed report
+   * without the parent list ever reloading.
+   */
+  const handleClose = () => {
+    if (step === 'success') onSuccess();
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
@@ -256,7 +273,7 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
             {step === 'success' && 'Success!'}
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             disabled={loading}
           >

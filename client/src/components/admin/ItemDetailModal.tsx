@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ImageCarousel } from '../ui/ImageCarousel';
+import { ItemReviewHistory } from './ItemReviewHistory';
 import {
   type Item,
   type ItemInput,
@@ -463,6 +464,8 @@ export function ItemDetailModal({ item, onClose, onUpdate, onDelete }: ItemDetai
                 )}
               </div>
             )}
+
+            {!isEditing && <ItemReviewHistory item={item} />}
 
             {/* Matched Item Info */}
             {matchedItem && !isEditing && (

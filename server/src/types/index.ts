@@ -35,6 +35,22 @@ export type ItemType = 'Lost' | 'Found';
  */
 export type ItemStatus = 'Pending' | 'Matched' | 'Claimed';
 
+/**
+ * Whether an admin has reviewed the report, independent of the match state.
+ *
+ * `status` answers "has this item found its counterpart"; `moderation` answers
+ * "may this item be seen and matched at all". Conflating the two in `status`
+ * meant `Pending` had to mean both "not yet approved" and "not yet matched".
+ *
+ * A user report starts `pending` and is invisible to the browse list and to
+ * the matching pipeline until an admin approves it, which is what stops an
+ * unreviewed report from emailing a stranger a handover code. An item an admin
+ * creates is `approved` on write: creating it is the review.
+ *
+ * A document with no `moderation` field predates this and reads as approved.
+ */
+export type ModerationStatus = 'pending' | 'approved' | 'rejected';
+
 export * from './handover.js';
 
 export interface Coordinates {
@@ -48,6 +64,12 @@ export interface Item {
   description: string;
   type: ItemType;
   status: ItemStatus;
+  /** Absent on items created before moderation existed, which read as approved. */
+  moderation?: ModerationStatus;
+  moderatedBy?: string;
+  moderatedAt?: Timestamp;
+  /** Why the report was rejected. Required on a rejection. */
+  moderationReason?: string;
   location: string;
   coordinates?: Coordinates;
   date: Timestamp | Date;
@@ -58,12 +80,15 @@ export interface Item {
   cloudinaryUrls?: string[];
   embedding?: number[];
   matchScore?: number;
+  /** Set while a matching run holds the item, so a second run does not start. */
+  matchingStartedAt?: Timestamp;
   reportedBy: string; // User ID
   reportedByEmail?: string; // For notifications
   matchedItemId?: string; // ID of matched item
   matchedUserId?: string; // User who claimed
   verificationRequired?: boolean;
   verificationConfidence?: number;
+  verifiedBy?: string;
   verifiedAt?: Timestamp;
   collectionPoint?: string;
   collectionCoordinates?: Coordinates;
@@ -164,7 +189,8 @@ export interface Match {
   timeScore: number; // 0-10 points from time window
   imageScore: number; // 0-5 points from image analysis (optional)
   matchScore: number; // Total: sum of all scores
-  status: 'matched';
+  /** `rejected` is an admin refusal of a proposal, kept rather than deleted. */
+  status: 'matched' | 'rejected';
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -248,3 +274,22 @@ export const CREDIT_VALUES = {
   SUCCESSFUL_MATCH_OWNER: 10, // Credits awarded to claimer when handover completes
   FALSE_CLAIM: -30,
 } as const;
+
+// ============ Admin Audit Types ============
+export type AdminAuditAction =
+  'item_approved' | 'item_rejected' | 'match_verified' | 'match_rejected';
+
+/**
+ * One admin decision, kept out of the item document so the trail survives the
+ * next decision instead of being overwritten by it.
+ */
+export interface AdminAuditEntry {
+  id: string;
+  action: AdminAuditAction;
+  /** The item the decision was about. */
+  targetId: string;
+  actorId: string;
+  reason?: string;
+  details?: Record<string, unknown>;
+  createdAt: Timestamp;
+}

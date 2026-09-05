@@ -20,12 +20,21 @@
  * dashboard counts `Claimed`, so anything closed through verification vanished
  * from the metrics. `Resolved` is retired and both paths now set `Claimed`.
  *
+ * 3. Backfills `moderation: 'approved'` on every item that predates moderation.
+ *
+ * Approval decides whether an item is publicly visible and eligible for
+ * matching. Existing items have already been live, so they are approved rather
+ * than dropped into a review queue nobody asked for. The server treats a
+ * missing field as approved, so this backfill is not a hard prerequisite; it
+ * exists so the admin screens can filter on the field rather than on its
+ * absence.
+ *
  * Usage, from the `server` directory with a populated `.env`:
  *
  *   npm run migrate:items            # dry run, prints the plan and changes nothing
  *   npm run migrate:items -- --apply # writes
  *
- * Safe to run more than once: both passes select only documents that still need
+ * Safe to run more than once: every pass selects only documents that still need
  * changing, so a second run reports nothing to do.
  */
 
@@ -152,6 +161,48 @@ async function convertResolvedStatus(db: Db, apply: boolean): Promise<void> {
   console.log(`Converted ${plans.length} item(s).\n`);
 }
 
+/**
+ * Pass 3: backfill `moderation` on items that predate the review workflow.
+ */
+async function backfillModeration(db: Db, apply: boolean): Promise<void> {
+  console.log('=== Pass 3: backfill moderation = approved ===\n');
+
+  const items = await db.collection('items').get();
+
+  // Selected in memory: Firestore cannot query for the absence of a field.
+  const plans: StatusPlan[] = items.docs
+    .filter((doc) => doc.data().moderation === undefined)
+    .map((doc) => ({
+      itemId: doc.id,
+      name: (doc.data().name as string | undefined) ?? '(unnamed)',
+    }));
+
+  if (plans.length === 0) {
+    console.log('Every item already carries a moderation state.\n');
+    return;
+  }
+
+  for (const plan of plans) {
+    console.log(`${plan.itemId}  ${plan.name}  -> approved`);
+  }
+
+  console.log(`\n${plans.length} item(s) to backfill.`);
+
+  if (!apply) return;
+
+  for (let index = 0; index < plans.length; index += BATCH_LIMIT) {
+    const batch = db.batch();
+
+    for (const plan of plans.slice(index, index + BATCH_LIMIT)) {
+      batch.update(db.collection('items').doc(plan.itemId), { moderation: 'approved' });
+    }
+
+    await batch.commit();
+  }
+
+  console.log(`Backfilled ${plans.length} item(s).\n`);
+}
+
 async function main() {
   const apply = process.argv.includes('--apply');
 
@@ -164,6 +215,7 @@ async function main() {
 
   await renameCollectionPoint(db, apply);
   await convertResolvedStatus(db, apply);
+  await backfillModeration(db, apply);
 
   if (apply) {
     console.log('Done. Check a Found item and the admin Handovers screen.');

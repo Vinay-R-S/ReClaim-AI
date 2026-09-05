@@ -50,7 +50,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       try {
         const [items, matches] = await Promise.all([getItems(), getAllMatches()]);
 
-        const pendingItems = items.filter((item) => item.status === 'Pending').length;
+        // The review queue, matching what Pending Approvals lists. Counting
+        // status Pending here instead showed a badge of approved-but-unmatched
+        // items over a page that said nothing was waiting for review.
+        const pendingItems = items.filter((item) => item.moderation === 'pending').length;
 
         setCounts({
           allItems: items.length, // Total items (Lost + Found)

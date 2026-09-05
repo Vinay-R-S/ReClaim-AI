@@ -1,25 +1,55 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Search, RefreshCw, Clock } from 'lucide-react';
-import { getItems, type Item } from '@/services/itemService';
+import { Search, RefreshCw, Clock, Check, X } from 'lucide-react';
+import { getItems, moderateItem, type Item } from '@/services/itemService';
+import { RejectItemDialog } from '@/components/admin/RejectItemDialog';
 import { Timestamp } from 'firebase/firestore';
 
 export function PendingApprovalsPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<Item | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchPendingItems = async () => {
     try {
       setLoading(true);
       const allItems = await getItems();
-      // Filter only items with "Pending" status
-      const pendingItems = allItems.filter((item) => item.status === 'Pending');
-      setItems(pendingItems);
-    } catch (error) {
-      console.error('Failed to fetch pending items:', error);
+      // Awaiting review, which is not the same thing as awaiting a match: an
+      // approved item sits at status Pending for as long as it takes to find a
+      // counterpart. Items reported before review existed carry no moderation
+      // field and are already live, so they are not queued here.
+      setItems(allItems.filter((item) => item.moderation === 'pending'));
+    } catch (err) {
+      console.error('Failed to fetch pending items:', err);
+      setError('Could not load the review queue.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Record a decision and drop the item from the queue.
+   *
+   * The list is updated optimistically and the item is put back if the server
+   * refuses, which is the only way the admin finds out the decision did not
+   * land: the row is gone by then.
+   */
+  const decide = async (item: Item, decision: 'approved' | 'rejected', reason?: string) => {
+    setPendingId(item.id);
+    setError(null);
+    setItems((current) => current.filter((entry) => entry.id !== item.id));
+
+    try {
+      await moderateItem(item.id, decision, reason);
+      setRejecting(null);
+    } catch (err) {
+      setItems((current) => [item, ...current]);
+      setError(err instanceof Error ? err.message : 'Could not record the decision.');
+    } finally {
+      setPendingId(null);
     }
   };
 
@@ -69,7 +99,9 @@ export function PendingApprovalsPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Pending Approvals</h1>
-          <p className="text-text-secondary">Items awaiting review and matching</p>
+          <p className="text-text-secondary">
+            Reports awaiting review. Approving one publishes it and starts matching.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -92,14 +124,22 @@ export function PendingApprovalsPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
+          {error}
+        </div>
+      )}
+
       {/* Stats Card */}
       <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-center gap-3">
         <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
           <Clock className="w-5 h-5 text-orange-600" />
         </div>
         <div>
-          <p className="text-lg font-bold text-orange-700">{items.length} Pending Items</p>
-          <p className="text-sm text-orange-600">Awaiting match or review</p>
+          <p className="text-lg font-bold text-orange-700">{items.length} Awaiting Review</p>
+          <p className="text-sm text-orange-600">
+            Not yet visible to users or eligible for matching
+          </p>
         </div>
       </div>
 
@@ -128,18 +168,18 @@ export function PendingApprovalsPage() {
                   <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">
                     Status
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">
-                    Match %
+                  <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">
+                    Decision
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-12 text-text-secondary">
+                    <td colSpan={6} className="text-center py-12 text-text-secondary">
                       {searchTerm
-                        ? 'No pending items matching your search'
-                        : 'No pending items found'}
+                        ? 'No items awaiting review match your search'
+                        : 'Nothing is waiting for review'}
                     </td>
                   </tr>
                 ) : (
@@ -183,22 +223,28 @@ export function PendingApprovalsPage() {
                       </td>
                       <td className="py-3 px-4">
                         <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
-                          Pending
+                          Awaiting review
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-xs font-bold text-text-primary">
-                        {item.matchScore ? (
-                          `${item.matchScore}%`
-                        ) : item.bestCandidateScore ? (
-                          <span
-                            className="font-medium text-text-secondary"
-                            title="Best candidate seen, below the match threshold"
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => decide(item, 'approved')}
+                            disabled={pendingId === item.id}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
-                            {item.bestCandidateScore}% candidate
-                          </span>
-                        ) : (
-                          '-'
-                        )}
+                            <Check className="w-3.5 h-3.5" />
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => setRejecting(item)}
+                            disabled={pendingId === item.id}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            Reject
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -207,6 +253,15 @@ export function PendingApprovalsPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {rejecting && (
+        <RejectItemDialog
+          itemName={rejecting.name}
+          submitting={pendingId === rejecting.id}
+          onCancel={() => setRejecting(null)}
+          onConfirm={(reason) => decide(rejecting, 'rejected', reason)}
+        />
       )}
     </div>
   );

@@ -31,10 +31,19 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
     bestMatchId?: string;
   } | null>(null);
   const [matchPending, setMatchPending] = useState(false);
+  // The server decides whether matching ran. A user report waits for an admin
+  // to approve it first, so there is nothing to poll for and nothing to
+  // promise; an admin's own report is approved on write and matches at once.
+  const [awaitingReview, setAwaitingReview] = useState(false);
   // Polling outlives a fast dismissal, so state updates are gated on this.
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    // Re-armed on every mount. StrictMode runs mount, cleanup, mount in
+    // development, which left the ref false for the component's whole life and
+    // made the poll return on its first tick without ever clearing its state.
+    mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
     };
@@ -257,8 +266,14 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
 
       // Matching now runs after the create response, so the item is persisted
       // before the AI work starts and submission can no longer fail because a
-      // provider did. The result is read back from the item itself.
-      void pollForMatch(data.id);
+      // provider did. The result is read back from the item itself, but only
+      // when the server actually started a run.
+      if (data.matching === 'pending') {
+        void pollForMatch(data.id);
+        return;
+      }
+
+      setAwaitingReview(true);
     } catch (err) {
       console.error('Error submitting item:', err);
       alert(`Failed to submit: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -306,6 +321,19 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
     }
 
     if (mountedRef.current) setMatchPending(false);
+  };
+
+  /**
+   * Close the modal.
+   *
+   * `onSuccess` moved off the submit path so the success step could render at
+   * all, which left the header close as a way to dismiss a filed report
+   * without the parent list ever reloading: the item the user just submitted
+   * looked like it had vanished.
+   */
+  const handleClose = () => {
+    if (step === 'success') onSuccess();
+    onClose();
   };
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -356,7 +384,7 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
             Report {type} Item
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             disabled={loading}
             aria-label="Close"
@@ -792,13 +820,20 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
                 Your {type.toLowerCase()} item report has been successfully recorded.
               </p>
 
-              {matchPending && !matchResult && (
+              {awaitingReview && (
+                <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-6 text-sm text-amber-700">
+                  An admin will review your report shortly. We start looking for matches as soon as
+                  it is approved, and anything we find will appear in My Reports.
+                </div>
+              )}
+
+              {!awaitingReview && matchPending && !matchResult && (
                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 text-sm text-blue-700">
                   Checking for matches...
                 </div>
               )}
 
-              {!matchPending && !matchResult && (
+              {!awaitingReview && !matchPending && !matchResult && (
                 <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 mb-6 text-sm text-text-secondary">
                   No match yet. We keep looking, and anything we find will appear in My Reports.
                 </div>
