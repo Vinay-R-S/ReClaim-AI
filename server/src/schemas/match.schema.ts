@@ -9,6 +9,7 @@ import {
   imagePayload,
   isoDateString,
   optionalMultilineText,
+  optionalText,
   text,
 } from './common.schema.js';
 import { itemTypeSchema } from './item.schema.js';
@@ -18,6 +19,12 @@ export const matchSearchSchema = z.object({
   name: text(1, 200),
   description: optionalMultilineText(2000),
   tags: z.array(text(1, 50)).max(10).optional(),
+  // Colour, location and category are scoring signals, not filters. Without
+  // them a search scores on semantic and time alone, and the pipeline
+  // normalises over a denominator small enough to pass lukewarm verdicts.
+  color: optionalText(50),
+  location: optionalText(200),
+  category: optionalText(100),
   coordinates: coordinatesSchema.optional(),
   date: isoDateString.optional(),
   imageBase64: imagePayload.optional(),

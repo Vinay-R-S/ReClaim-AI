@@ -13,6 +13,15 @@ const CLARIFAI_USER_ID = env.clarifai.userId;
 const CLARIFAI_APP_ID = env.clarifai.appId;
 const CLARIFAI_MODEL_ID = env.clarifai.modelId;
 
+/** Hard ceiling on one Clarifai call. */
+const CLARIFAI_TIMEOUT_MS = 10000;
+
+/**
+ * An image Clarifai can accept: a hosted URL, or inline data for the manual
+ * search path, where the upload never happened.
+ */
+export type ClarifaiImage = { url: string } | { base64: string };
+
 interface ClarifaiResponse {
   status: {
     code: number;
@@ -29,124 +38,19 @@ interface ClarifaiResponse {
 }
 
 /**
- * Compare two images using Clarifai API and return similarity score
- * @param imageUrl1 - First image URL
- * @param imageUrl2 - Second image URL  
- * @returns Similarity score from 0-100
+ * Get visual concepts from an image using Clarifai.
+ *
+ * The old `timeout` property was a node-fetch option that native fetch ignores,
+ * so a hung Clarifai request had nothing stopping it. This aborts for real.
  */
-export async function compareImages(imageUrl1: string, imageUrl2: string): Promise<number> {
-  // Validate inputs
-  if (!imageUrl1 || !imageUrl2) {
-    log.warn('Missing image URL(s), returning 0 score');
-    return 0;
-  }
-
-  // Check if API key is configured
+export async function fetchImageConcepts(
+  image: ClarifaiImage,
+): Promise<Map<string, number> | null> {
   if (!CLARIFAI_PAT) {
-    log.error(
-      '[CLARIFAI] API key not configured (CLARIFAI_API_KEY or CLARIFAI_PAT missing in .env)',
-    );
-    return 0;
+    log.error('[CLARIFAI] API key not configured (CLARIFAI_API_KEY or CLARIFAI_PAT missing)');
+    return null;
   }
 
-  try {
-    log.info(
-      `[CLARIFAI] Comparing images: ${imageUrl1.substring(0, 50)}... vs ${imageUrl2.substring(0, 50)}...`,
-    );
-
-    // Use Clarifai's visual similarity workflow
-    // We'll use a simpler approach: get concepts from both images and compare them
-    const concepts1 = await getImageConcepts(imageUrl1);
-    const concepts2 = await getImageConcepts(imageUrl2);
-
-    if (!concepts1 || !concepts2) {
-      log.warn('Failed to get concepts from one or both images');
-      return 0;
-    }
-
-    // Calculate similarity based on concept overlap and confidence scores
-    const similarity = calculateConceptSimilarity(concepts1, concepts2);
-
-    log.info(`[CLARIFAI] Similarity score: ${similarity}%`);
-    return similarity;
-  } catch (error) {
-    log.error('Error comparing images:', error);
-    return 0; // Return 0 on error to prevent matching
-  }
-}
-
-/**
- * Compare multiple images from two items and return the best match score
- * Cross-compares all images from item1 with all images from item2
- * Uses both best match and average match for scoring
- * @param imageUrls1 - Array of image URLs from first item
- * @param imageUrls2 - Array of image URLs from second item
- * @returns Similarity score from 0-100
- */
-export async function compareMultipleImages(
-  imageUrls1: string[],
-  imageUrls2: string[],
-): Promise<number> {
-  // Filter out empty/null URLs
-  const urls1 = imageUrls1.filter((url) => url && url.trim());
-  const urls2 = imageUrls2.filter((url) => url && url.trim());
-
-  // If either set is empty, return 0
-  if (urls1.length === 0 || urls2.length === 0) {
-    log.warn('One or both image arrays are empty, returning 0 score');
-    return 0;
-  }
-
-  // If only one image each, use the simple comparison
-  if (urls1.length === 1 && urls2.length === 1) {
-    log.info('Single image comparison');
-    return compareImages(urls1[0], urls2[0]);
-  }
-
-  log.info(`[CLARIFAI] Cross-comparing ${urls1.length} images with ${urls2.length} images`);
-
-  try {
-    // Build all comparison pairs
-    const comparisonPairs: Array<{ url1: string; url2: string }> = [];
-    for (const url1 of urls1) {
-      for (const url2 of urls2) {
-        comparisonPairs.push({ url1, url2 });
-      }
-    }
-
-    // For better results:
-    // - If <=9 pairs: compare all
-    // - If >9 pairs: compare first 9 (to avoid rate limits)
-    const pairsToCompare = comparisonPairs.slice(0, Math.min(comparisonPairs.length, 9));
-
-    log.info(`[CLARIFAI] Comparing ${pairsToCompare.length} image pairs...`);
-
-    const comparisonPromises = pairsToCompare.map((pair) => compareImages(pair.url1, pair.url2));
-
-    const scores = await Promise.all(comparisonPromises);
-
-    // Calculate both best match and average
-    const maxScore = Math.max(...scores, 0);
-    const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-
-    // Use weighted combination: 70% best match + 30% average
-    // This prevents one really good match from dominating when other images don't match
-    const finalScore = Math.round(maxScore * 0.7 + avgScore * 0.3);
-
-    log.info(
-      `[CLARIFAI] Image scores - Best: ${maxScore}%, Avg: ${avgScore.toFixed(1)}%, Final: ${finalScore}%`,
-    );
-    return finalScore;
-  } catch (error) {
-    log.error('Error in multi-image comparison:', error);
-    return 0;
-  }
-}
-
-/**
- * Get visual concepts from an image using Clarifai
- */
-async function getImageConcepts(imageUrl: string): Promise<Map<string, number> | null> {
   try {
     const response = await fetch(
       `https://api.clarifai.com/v2/users/${CLARIFAI_USER_ID}/apps/${CLARIFAI_APP_ID}/models/${CLARIFAI_MODEL_ID}/outputs`,
@@ -156,19 +60,8 @@ async function getImageConcepts(imageUrl: string): Promise<Map<string, number> |
           Authorization: `Key ${CLARIFAI_PAT}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          inputs: [
-            {
-              data: {
-                image: {
-                  url: imageUrl,
-                },
-              },
-            },
-          ],
-        }),
-        // @ts-ignore - node-fetch types
-        timeout: 10000, // 10 second timeout
+        body: JSON.stringify({ inputs: [{ data: { image } }] }),
+        signal: AbortSignal.timeout(CLARIFAI_TIMEOUT_MS),
       },
     );
 
@@ -195,7 +88,7 @@ async function getImageConcepts(imageUrl: string): Promise<Map<string, number> |
       }
     }
 
-    log.info(`[CLARIFAI] Found ${concepts.size} concepts for image`);
+    log.debug(`[CLARIFAI] Found ${concepts.size} concepts for image`);
     return concepts;
   } catch (error) {
     log.error('Error getting image concepts:', error);
@@ -207,7 +100,7 @@ async function getImageConcepts(imageUrl: string): Promise<Map<string, number> |
  * Calculate similarity between two sets of concepts
  * Enhanced algorithm with semantic boosting and better weight distribution
  */
-function calculateConceptSimilarity(
+export function conceptSimilarity(
   concepts1: Map<string, number>,
   concepts2: Map<string, number>,
 ): number {

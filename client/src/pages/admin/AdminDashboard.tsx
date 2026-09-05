@@ -203,7 +203,18 @@ export function AdminDashboard() {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm font-bold text-text-primary">
-                      {item.matchScore !== undefined ? `${item.matchScore}%` : '-'}
+                      {item.matchScore !== undefined ? (
+                        `${item.matchScore}%`
+                      ) : item.bestCandidateScore !== undefined ? (
+                        <span
+                          className="font-medium text-text-secondary"
+                          title="Best candidate seen, below the match threshold"
+                        >
+                          {item.bestCandidateScore}% candidate
+                        </span>
+                      ) : (
+                        '-'
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <button

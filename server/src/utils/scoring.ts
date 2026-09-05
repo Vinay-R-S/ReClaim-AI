@@ -1,29 +1,29 @@
 /**
- * Scoring Utilities for Item Matching
- * Shared logic for both Auto-Match and Manual Search
+ * Scoring utilities for item matching.
  *
- * Scoring Breakdown (100 points total):
- * - Tags:        30 points (30%)
- * - Description: 20 points (20%)
- * - Color:       15 points (15%)
- * - Location:    20 points (20%)
- * - Time:        10 points (10%)
- * - Image:        5 points (5%)
+ * Shared by both entry points onto the matching pipeline. The weights below are
+ * the whole scoring model: name, description and tags are covered by the
+ * semantic component rather than by separate lexical scorers.
+ *
+ * Scoring breakdown (100 points total):
+ * - Semantic: 50 points (LLM comparison of name, description and tags)
+ * - Location: 15 points
+ * - Image:    15 points
+ * - Color:    10 points
+ * - Time:     10 points
+ *
+ * A component that cannot run leaves the denominator too, so the pipeline
+ * normalises against the weights that actually applied.
  */
-
-import { Match } from '../types/index.js';
 
 export const MATCH_CONFIG = {
   // Scoring weights (must sum to 100)
   WEIGHTS: {
-    semantic: 50, // Increased: LLM-based semantic matching (most important)
-    tags: 0, // Included in semantic
-    description: 0, // Included in semantic
+    semantic: 50,
     color: 10,
-    location: 15, // Slightly reduced
+    location: 15,
     time: 10,
-    category: 0,
-    image: 15, // Slightly reduced
+    image: 15,
   },
 
   // Threshold - Lowered to allow more matches
@@ -46,11 +46,12 @@ export const MATCH_CONFIG = {
     tier3: 96, // 24-96 hours: 5 points
   },
 
-  // Minimum requirements (pre-filters)
+  // Hard pre-filters. Tag overlap is deliberately not one of them: it is a
+  // ranking signal in the pipeline, because a gate on exact token overlap
+  // dropped genuine matches before the semantic scorer ever saw them.
   REQUIREMENTS: {
-    minCommonTags: 1,
-    maxDistance: 15, // Increased from 10km
-    maxTimeDiff: 96, // Increased from 72h
+    maxDistance: 15, // km
+    maxTimeDiff: 96, // hours
   },
 };
 
@@ -98,113 +99,8 @@ export function getTagsWithFallback(tags: string[] = [], name: string = ''): str
 }
 
 /**
- * SCORE 1: Tag Matching (0-30 points)
- * Compares tag overlap between two items
- */
-export function calculateTagScore(tags1: string[], tags2: string[]): number {
-  if ((!tags1 || tags1.length === 0) && (!tags2 || tags2.length === 0)) {
-    return 0;
-  }
-
-  // Convert to lowercase for comparison
-  const set1 = new Set(tags1.map((t) => t.toLowerCase().trim()));
-  const set2 = new Set(tags2.map((t) => t.toLowerCase().trim()));
-
-  // Count common tags
-  const commonTags = [...set1].filter((tag) => set2.has(tag));
-
-  // Use Overlap Coefficient
-  // If Item A has 2 tags and Item B has 10 tags, but they share 2, it's a 100% match for shared info
-  const minTags = Math.min(set1.size, set2.size);
-
-  if (minTags === 0) return 0;
-
-  const similarity = commonTags.length / minTags;
-  const score = similarity * MATCH_CONFIG.WEIGHTS.tags;
-
-  return Math.round(score * 10) / 10;
-}
-
-/**
- * SCORE 2: Description Similarity (0-20 points)
- * Uses Overlap Coefficient on description text
- */
-export function calculateDescriptionScore(desc1: string, desc2: string): number {
-  if (!desc1 || !desc2) return 0;
-
-  // Remove stop words and extract meaningful words
-  const stopWords = new Set([
-    'the',
-    'a',
-    'an',
-    'is',
-    'are',
-    'was',
-    'were',
-    'in',
-    'on',
-    'at',
-    'to',
-    'for',
-    'of',
-    'and',
-    'or',
-    'my',
-    'i',
-    'it',
-    'this',
-    'that',
-    'with',
-    'from',
-    'by',
-    'as',
-    'be',
-    'have',
-    'has',
-    'had',
-  ]);
-
-  const extractWords = (text: string) => {
-    return text
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((w) => w.length > 2 && !stopWords.has(w));
-  };
-
-  const words1 = new Set(extractWords(desc1));
-  const words2 = new Set(extractWords(desc2));
-
-  if (words1.size === 0 || words2.size === 0) return 0;
-
-  const intersection = [...words1].filter((w) => words2.has(w)).length;
-
-  // Overlap Coefficient is better for matching snippets of info
-  const minWords = Math.min(words1.size, words2.size);
-  const similarity = intersection / minWords;
-
-  const score = similarity * MATCH_CONFIG.WEIGHTS.description;
-
-  return Math.round(score * 10) / 10;
-}
-
-/**
- * SCORE 3: Category Matching (0-5 points)
- * If broad categories match (Electronics vs Electronics)
- */
-export function calculateCategoryScore(cat1?: string, cat2?: string): number {
-  if (!cat1 || !cat2) return 0;
-
-  // Exact text match (AI produces standard labels)
-  if (cat1.toLowerCase().trim() === cat2.toLowerCase().trim()) {
-    return MATCH_CONFIG.WEIGHTS.category || 5;
-  }
-
-  return 0;
-}
-
-/**
- * SCORE 3: Color Matching (0-15 points)
- * Exact match = 15, similar = 10, none = 0
+ * SCORE: Color Matching (0-10 points)
+ * Exact match = full weight, similar = two thirds, none = 0
  */
 export function calculateColorScore(color1?: string, color2?: string): number {
   if (!color1 || !color2) return 0;
@@ -212,14 +108,12 @@ export function calculateColorScore(color1?: string, color2?: string): number {
   const c1 = color1.toLowerCase().trim();
   const c2 = color2.toLowerCase().trim();
 
-  // Exact match = 15 points
   if (c1 === c2) {
     return MATCH_CONFIG.WEIGHTS.color;
   }
 
-  // Similar colors = 10 points
   if (areSimilarColors(c1, c2)) {
-    return Math.round(MATCH_CONFIG.WEIGHTS.color * 0.67); // ~10 points
+    return Math.round(MATCH_CONFIG.WEIGHTS.color * 0.67);
   }
 
   return 0;
@@ -374,7 +268,16 @@ function areSimilarColors(color1: string, color2: string): boolean {
 }
 
 /**
- * SCORE 4: Location Proximity (0-15 points)
+ * Ceiling of the text-only location branch.
+ *
+ * Without coordinates the best a pair can score is an exact string match, so
+ * the full location weight is not achievable and must not sit in the
+ * denominator.
+ */
+export const LOCATION_TEXT_MAX_SCORE = 8;
+
+/**
+ * SCORE: Location Proximity (0-15 points, 0-8 without coordinates)
  * Based on distance between coordinates
  */
 export function calculateLocationScore(
@@ -403,7 +306,7 @@ export function calculateLocationScore(
     const s2 = loc2.toLowerCase();
 
     // Exact match of strings (e.g. "College Canteen")
-    if (s1 === s2) return 8;
+    if (s1 === s2) return LOCATION_TEXT_MAX_SCORE;
 
     // Check for common words (e.g. "Rajarajeshwari Nagar" vs "Rajarajeshwari Nagar, Bengaluru")
     const words1 = s1.split(/[\s,]+/).filter((w) => w.length > 3);
@@ -417,7 +320,7 @@ export function calculateLocationScore(
 }
 
 /**
- * SCORE 5: Time Window (0-10 points)
+ * SCORE: Time Window (0-10 points)
  * Based on time difference between lost and found
  */
 export function calculateTimeScore(date1: Date, date2: Date): number {

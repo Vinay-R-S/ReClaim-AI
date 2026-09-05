@@ -187,7 +187,18 @@ export function PendingApprovalsPage() {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-xs font-bold text-text-primary">
-                        {item.matchScore ? `${item.matchScore}%` : '-'}
+                        {item.matchScore ? (
+                          `${item.matchScore}%`
+                        ) : item.bestCandidateScore ? (
+                          <span
+                            className="font-medium text-text-secondary"
+                            title="Best candidate seen, below the match threshold"
+                          >
+                            {item.bestCandidateScore}% candidate
+                          </span>
+                        ) : (
+                          '-'
+                        )}
                       </td>
                     </tr>
                   ))

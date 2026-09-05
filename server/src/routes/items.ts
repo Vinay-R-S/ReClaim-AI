@@ -239,7 +239,8 @@ router.post(
       description: item.description,
       tags: item.tags || [],
       color: item.color,
-      imageUrl: imageUrl,
+      imageUrl,
+      cloudinaryUrls, // Every uploaded image, so multi-image comparison works
       coordinates: item.coordinates, // Pass coordinates for location matching
       location: item.location, // Pass location string for fallback
       date: new Date(item.date), // Pass date for time matching
