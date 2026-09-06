@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ArrowUp, ArrowDown, Package } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { getItems } from '../../services/itemService';
 import type { Item } from '../../types/domain';
+import { useItems } from '../../hooks/useItems';
 import { ItemDetailModal } from '../../components/admin/ItemDetailModal';
 import { AddItemModal } from '../../components/admin/AddItemModal';
 import { Timestamp } from 'firebase/firestore';
@@ -41,27 +41,9 @@ function StatsCard({ title, value, trend }: StatsCardProps) {
 }
 
 export function AdminDashboard() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { items, loading, reload: fetchItems } = useItems();
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
-
-  // Fetch items from Firestore
-  const fetchItems = async () => {
-    try {
-      setLoading(true);
-      const data = await getItems();
-      setItems(data);
-    } catch (err) {
-      console.error('Error fetching items:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchItems();
-  }, []);
 
   // Format date for display
   const formatDate = (date: Timestamp | Date | unknown) => {

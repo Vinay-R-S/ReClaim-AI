@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { Search, RefreshCw, Package } from 'lucide-react';
-import { getAllMatches } from '@/services/matchService';
-import type { Item, Match } from '@/types/domain';
-import { getItems } from '@/services/itemService';
+import type { Match } from '@/types/domain';
+import { useItems } from '@/hooks/useItems';
+import { useMatches } from '@/hooks/useMatches';
 import { MatchReviewModal } from '@/components/admin/MatchReviewModal';
 
 // Extended match with item names
@@ -15,50 +15,37 @@ interface MatchWithNames extends Match {
 }
 
 export function MatchesPage() {
-  const [matches, setMatches] = useState<MatchWithNames[]>([]);
-  const [items, setItems] = useState<Map<string, Item>>(new Map());
-  const [loading, setLoading] = useState(true);
+  const { matches: rawMatches, loading: matchesLoading, reload: reloadMatches } = useMatches();
+  const { items, loading: itemsLoading, reload: reloadItems } = useItems();
+
+  // Both, because the names and thumbnails come from the items: showing the
+  // table on the matches alone paints every row as "Unknown Item" first.
+  const loading = matchesLoading || itemsLoading;
   const [searchTerm, setSearchTerm] = useState('');
   const [reviewing, setReviewing] = useState<MatchWithNames | null>(null);
 
-  const fetchMatches = async () => {
-    try {
-      setLoading(true);
+  // Names and thumbnails live on the items, not on the match record, so the
+  // list is joined here rather than by the endpoint.
+  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
-      // Fetch matches and items in parallel
-      const [matchesData, itemsData] = await Promise.all([getAllMatches(), getItems()]);
+  const matches: MatchWithNames[] = useMemo(() => {
+    return rawMatches.map((match) => {
+      const lostItem = itemsById.get(match.lostItemId);
+      const foundItem = itemsById.get(match.foundItemId);
 
-      // Create a lookup map for items by ID
-      const itemsMap = new Map<string, Item>();
-      itemsData.forEach((item) => {
-        itemsMap.set(item.id, item);
-      });
+      return {
+        ...match,
+        lostItemName: lostItem?.name || 'Unknown Item',
+        foundItemName: foundItem?.name || 'Unknown Item',
+        lostItemImage: lostItem?.cloudinaryUrls?.[0] || lostItem?.imageUrl,
+        foundItemImage: foundItem?.cloudinaryUrls?.[0] || foundItem?.imageUrl,
+      };
+    });
+  }, [rawMatches, itemsById]);
 
-      // Enrich matches with item names
-      const enrichedMatches: MatchWithNames[] = matchesData.map((match) => {
-        const lostItem = itemsMap.get(match.lostItemId);
-        const foundItem = itemsMap.get(match.foundItemId);
-        return {
-          ...match,
-          lostItemName: lostItem?.name || 'Unknown Item',
-          foundItemName: foundItem?.name || 'Unknown Item',
-          lostItemImage: lostItem?.cloudinaryUrls?.[0] || lostItem?.imageUrl,
-          foundItemImage: foundItem?.cloudinaryUrls?.[0] || foundItem?.imageUrl,
-        };
-      });
-
-      setMatches(enrichedMatches);
-      setItems(itemsMap);
-    } catch (error) {
-      console.error('Failed to fetch matches:', error);
-    } finally {
-      setLoading(false);
-    }
+  const reload = async () => {
+    await Promise.all([reloadMatches(), reloadItems()]);
   };
-
-  useEffect(() => {
-    fetchMatches();
-  }, []);
 
   const filteredMatches = matches.filter((match) => {
     const searchLower = searchTerm.toLowerCase();
@@ -87,7 +74,7 @@ export function MatchesPage() {
             />
           </div>
           <button
-            onClick={fetchMatches}
+            onClick={() => void reload()}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             title="Refresh matches"
           >
@@ -227,12 +214,12 @@ export function MatchesPage() {
       {reviewing && (
         <MatchReviewModal
           match={reviewing}
-          lostItem={items.get(reviewing.lostItemId)}
-          foundItem={items.get(reviewing.foundItemId)}
+          lostItem={itemsById.get(reviewing.lostItemId)}
+          foundItem={itemsById.get(reviewing.foundItemId)}
           onClose={() => setReviewing(null)}
           onDecided={() => {
             setReviewing(null);
-            void fetchMatches();
+            void reload();
           }}
         />
       )}

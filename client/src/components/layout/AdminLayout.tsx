@@ -16,19 +16,16 @@ import {
 } from '@/lib/icons';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../context/AuthContext';
-import { getItems } from '../../services/itemService';
-import { getAllMatches } from '../../services/matchService';
-import { authGet } from '../../lib/api';
+import { useItems } from '../../hooks/useItems';
+import { useMatches } from '../../hooks/useMatches';
+import { useSettings } from '../../hooks/useSettings';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
-interface SidebarCounts {
-  allItems: number;
-  matches: number;
-  pendingItems: number;
-}
+/** How often the sidebar badges catch up with the review queue. */
+const COUNTS_REFRESH_MS = 30000;
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const location = useLocation();
@@ -36,54 +33,36 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const { user, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [counts, setCounts] = useState<SidebarCounts>({
-    allItems: 0,
-    matches: 0,
-    pendingItems: 0,
-  });
-  const [cctvEnabled, setCctvEnabled] = useState(true);
+  const { items, reload: reloadItems } = useItems();
+  const { matches, reload: reloadMatches } = useMatches();
+  const { settings } = useSettings();
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Fetch real-time counts from API
+  // A settings read that fails leaves CCTV enabled, which is what the sidebar
+  // assumed before it could ask.
+  const cctvEnabled = settings?.cctvEnabled !== false;
+
+  // The layout outlives every admin route, so without this the review badge
+  // keeps the number it had when the admin signed in, however many items they
+  // have approved since. Silent, because the badges sit next to whatever the
+  // admin is reading.
   useEffect(() => {
-    const fetchCounts = async () => {
-      try {
-        const [items, matches] = await Promise.all([getItems(), getAllMatches()]);
+    const interval = setInterval(() => {
+      void reloadItems({ silent: true });
+      void reloadMatches({ silent: true });
+    }, COUNTS_REFRESH_MS);
 
-        // The review queue, matching what Pending Approvals lists. Counting
-        // status Pending here instead showed a badge of approved-but-unmatched
-        // items over a page that said nothing was waiting for review.
-        const pendingItems = items.filter((item) => item.moderation === 'pending').length;
-
-        setCounts({
-          allItems: items.length, // Total items (Lost + Found)
-          matches: matches.length,
-          pendingItems: pendingItems,
-        });
-      } catch (error) {
-        console.error('Failed to fetch sidebar counts:', error);
-      }
-    };
-
-    fetchCounts();
-
-    // Refresh counts every 30 seconds
-    const interval = setInterval(fetchCounts, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [reloadItems, reloadMatches]);
 
-  // Fetch cctvEnabled setting
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const data = await authGet<{ cctvEnabled?: boolean }>('/api/settings');
-        setCctvEnabled(data.cctvEnabled !== false);
-      } catch (error) {
-        console.error('Failed to fetch settings:', error);
-      }
-    };
-    fetchSettings();
-  }, []);
+  // The review queue, matching what Pending Approvals lists. Counting status
+  // Pending here instead showed a badge of approved-but-unmatched items over a
+  // page that said nothing was waiting for review.
+  const counts = {
+    allItems: items.length,
+    matches: matches.length,
+    pendingItems: items.filter((item) => item.moderation === 'pending').length,
+  };
 
   // Close menu when clicking outside
   useEffect(() => {
