@@ -20,6 +20,7 @@ import { authGet, authPost } from '../../lib/api';
 import { useCredits } from '../../hooks/useCredits';
 import { useFeedback } from '../../hooks/useFeedback';
 import { Feedback } from '../../components/ui/Feedback';
+import { CreditHistory } from '../../components/user/CreditHistory';
 
 interface UserStats {
   totalReports: number;
@@ -463,6 +464,12 @@ export function ProfilePage() {
               </div>
             </div>
           </div>
+
+          {user?.uid && (
+            <div className="mt-6">
+              <CreditHistory userId={user.uid} />
+            </div>
+          )}
         </div>
       </div>
     </UserLayout>

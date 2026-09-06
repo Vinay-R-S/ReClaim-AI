@@ -1,9 +1,9 @@
 /**
- * Match business logic: searching, claiming, and the admin decision.
+ * Match business logic: the admin decision on a proposed match.
  *
- * The admin decision is the delicate one. It moves two items, one match
- * record, a handover and possibly a credit penalty, and several of its rules
- * exist because an earlier version got one of those wrong.
+ * It moves two items, one match record, a handover and possibly a credit
+ * penalty, and several of its rules exist because an earlier version got one
+ * of those wrong.
  */
 
 import { FieldValue } from 'firebase-admin/firestore';
@@ -17,20 +17,14 @@ import {
   matchRepository,
   type StoredMatch,
 } from '../repositories/match.repository.js';
-import { findMatchesForFoundItem, findMatchesForLostItem } from './matching.service.js';
 import { penalizeFalseClaim } from './credits.service.js';
-import { sendMatchNotification } from './email.service.js';
 import { initiateHandover } from './handover.service.js';
 import { recordAdminAction } from './audit.service.js';
 import { AppError } from '../middleware/errorHandler.middleware.js';
-import type { AuthUser } from '../middleware/auth.middleware.js';
-import type { MatchClaimBody, MatchSearchBody, MatchVerifyBody } from '../schemas/index.js';
+import type { MatchVerifyBody } from '../schemas/index.js';
 
 /** The score a manually verified match records, having been decided by a human. */
 const MANUAL_MATCH_SCORE = 100;
-
-/** Placeholder score on the claim notification email. */
-const CLAIM_NOTIFICATION_SCORE = 85;
 
 export interface VerifyOutcome {
   success: true;
@@ -38,36 +32,11 @@ export interface VerifyOutcome {
   penalised?: boolean;
 }
 
-function isOwnerOrAdmin(user: AuthUser | undefined, ownerId: string | undefined): boolean {
-  if (!user) return false;
-  if (user.role === 'admin') return true;
-
-  return Boolean(ownerId) && user.uid === ownerId;
-}
-
 export class MatchService {
   constructor(
     private readonly matches: MatchRepository = matchRepository,
     private readonly items: ItemRepository = itemRepository,
   ) {}
-
-  search(body: MatchSearchBody) {
-    const searchParams = {
-      name: body.name,
-      description: body.description || '',
-      tags: body.tags || [],
-      color: body.color,
-      location: body.location,
-      category: body.category,
-      coordinates: body.coordinates,
-      date: body.date ? new Date(body.date) : new Date(),
-      imageBase64: body.imageBase64,
-    };
-
-    return body.type === 'Lost'
-      ? findMatchesForLostItem(searchParams)
-      : findMatchesForFoundItem(searchParams);
-  }
 
   listActive(): Promise<StoredMatch[]> {
     return this.matches.listActive();
@@ -87,49 +56,6 @@ export class MatchService {
       ...active.map((match) => ({ ...match, isActive: true })),
       ...history.map((match) => ({ ...match, isActive: false })),
     ];
-  }
-
-  listForItem(itemId: string): Promise<StoredMatch[]> {
-    return this.matches.listForItem(itemId);
-  }
-
-  /**
-   * A user claims a found item is theirs.
-   *
-   * The claim is always made by the caller, never on behalf of a body-supplied
-   * user id (defect SEC-01).
-   */
-  async claim(body: MatchClaimBody, user: AuthUser): Promise<void> {
-    const { itemId, lostItemId } = body;
-
-    const item = await this.items.findById(itemId);
-
-    if (!item) throw new AppError('Item not found', 404);
-
-    await this.items.update(itemId, {
-      status: 'Matched',
-      claimedBy: user.uid,
-      claimedAt: FieldValue.serverTimestamp(),
-    });
-
-    // If there is a corresponding lost item, update it too. It has to be the
-    // caller's own report: otherwise any active user could flip a stranger's
-    // lost item to Matched and point it at an unrelated found item.
-    if (lostItemId) {
-      const lostItem = await this.items.findById(lostItemId);
-
-      if (!lostItem) throw new AppError('Lost item not found', 404);
-
-      if (!isOwnerOrAdmin(user, lostItem.reportedBy)) {
-        throw new AppError('You can only claim against your own lost report', 403);
-      }
-
-      await this.items.update(lostItemId, { status: 'Matched', matchedItemId: itemId });
-    }
-
-    if (user.email) {
-      await sendMatchNotification(user.email, item.name, CLAIM_NOTIFICATION_SCORE, item.location);
-    }
   }
 
   /**
@@ -315,19 +241,26 @@ export class MatchService {
       await Promise.all(pairIds.map((id) => this.items.findById(id as string)))
     ).filter((found): found is StoredItem => found !== null);
 
-    // A penalty is for a person who claimed an item that was not theirs. The
-    // admin match list also shows pipeline proposals that nobody ever claimed,
-    // and dismissing one of those must not charge the reporter of the lost item
-    // 30 credits for a claim they never made.
-    //
-    // `claimedBy` is written by the claim endpoint onto the found item, which is
-    // not necessarily the item this request named, so the whole pair is checked
-    // rather than just that one document.
-    const claimant = pairItems.map((found) => found.claimedBy).find(Boolean);
-    const penalise = Boolean(claimant) && claimant === body.claimUserId;
+    // A penalty is for a person who claimed an item that was not theirs, and
+    // the admin says so on the rejection. It is never inferred: the same screen
+    // dismisses pipeline proposals nobody ever claimed, and one of those must
+    // not charge the reporter of the lost item 30 credits.
+    const claimUserId = body.claimUserId;
+    const penalise = Boolean(body.penaliseClaimant) && Boolean(claimUserId);
 
-    if (penalise) {
-      await penalizeFalseClaim(body.claimUserId, itemId);
+    if (penalise && claimUserId) {
+      // The person charged has to be part of this pair. The body names them,
+      // and a stale `claimedBy` left on an item by an older flow would
+      // otherwise debit an account that has nothing to do with this decision.
+      const belongs = pairItems.some(
+        (found) => found.reportedBy === claimUserId || found.claimedBy === claimUserId,
+      );
+
+      if (!belongs) {
+        throw new AppError('That user is not part of this match, so no penalty was applied', 400);
+      }
+
+      await penalizeFalseClaim(claimUserId, itemId);
     }
 
     // Reset both halves of the pair, not only the named item: verification moves
@@ -354,7 +287,7 @@ export class MatchService {
       targetId: itemId,
       actorId: adminId,
       details: {
-        claimUserId: body.claimUserId,
+        claimUserId: claimUserId ?? null,
         itemType: item.type,
         penalised: penalise,
         matchId: requestedMatchId ?? null,
@@ -366,81 +299,8 @@ export class MatchService {
       penalised: penalise,
       message: penalise
         ? 'Claim rejected. Penalty applied to user.'
-        : 'Match rejected. No claim was on record, so no penalty was applied.',
+        : 'Match rejected. No penalty was applied.',
     };
-  }
-
-  /**
-   * The matches already found for a user's open lost reports.
-   *
-   * This used to re-run the whole pipeline for every one of the user's lost
-   * items on every request: one LLM call per candidate per item, on a route a
-   * page could poll (defect PERF-04). Matching runs when an item is created or
-   * approved and persists what it finds, so this reads those records instead.
-   * The manual `POST /api/items/:id/rematch` is what re-runs the pipeline.
-   */
-  async listForUser(userId: string) {
-    const lostItems = await this.items.listByReporterAndType(userId, 'Lost');
-    const openItems = lostItems.filter((item) => item.status === 'Pending');
-
-    if (openItems.length === 0) return [];
-
-    const perItem = await Promise.all(
-      openItems.map(async (item) => ({
-        lostItem: item,
-        // Rejected proposals are kept as a record of what was refused, not
-        // offered back as candidates.
-        records: (await this.matches.listForItem(item.id)).filter(
-          (record) => record.status !== 'rejected',
-        ),
-      })),
-    );
-
-    // One read per counterpart, de-duplicated: two of the user's reports can
-    // legitimately match the same found item.
-    const counterpartIds = [
-      ...new Set(
-        perItem.flatMap(({ lostItem, records }) =>
-          records.map((record) =>
-            record.lostItemId === lostItem.id ? record.foundItemId : record.lostItemId,
-          ),
-        ),
-      ),
-    ].filter((id): id is string => Boolean(id));
-
-    const counterparts = new Map(
-      (await Promise.all(counterpartIds.map((id) => this.items.findById(id))))
-        .filter((item): item is StoredItem => item !== null)
-        .map((item) => [item.id, item]),
-    );
-
-    return perItem.map(({ lostItem, records }) => ({
-      lostItem,
-      matches: records
-        .map((record) => {
-          const counterpartId =
-            record.lostItemId === lostItem.id ? record.foundItemId : record.lostItemId;
-          const counterpart = counterpartId ? counterparts.get(counterpartId) : undefined;
-
-          if (!counterpart) return null;
-
-          return {
-            itemId: counterpart.id,
-            item: counterpart,
-            score: record.matchScore ?? 0,
-            breakdown: {
-              tagScore: record.tagScore ?? 0,
-              descriptionScore: record.descriptionScore ?? 0,
-              colorScore: record.colorScore ?? 0,
-              locationScore: record.locationScore ?? 0,
-              timeScore: record.timeScore ?? 0,
-              imageScore: record.imageScore ?? 0,
-            },
-          };
-        })
-        .filter((match): match is NonNullable<typeof match> => match !== null)
-        .sort((a, b) => b.score - a.score),
-    }));
   }
 }
 

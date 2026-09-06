@@ -51,7 +51,6 @@ export const collections = {
   items: db.collection('items'),
   creditTransactions: db.collection('creditTransactions'),
   collectionPoints: db.collection('collectionPoints'),
-  verifications: db.collection('verifications'),
   settings: db.collection('settings'),
   matches: db.collection('matches'), // Active automatic image matching records
   matchHistory: db.collection('matchHistory'), // Completed matches (persisted)

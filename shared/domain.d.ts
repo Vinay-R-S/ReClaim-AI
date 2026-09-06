@@ -190,6 +190,42 @@ export interface UserProfile {
   credits: number;
 }
 
+/* ============ Credits ============ */
+
+/**
+ * One entry in the credit ledger.
+ *
+ * The ledger is the record; `users/{uid}.credits` is the running total it adds
+ * up to (defect LOG-01).
+ */
+export type CreditReason =
+  | 'signup_bonus'
+  | 'report_found'
+  | 'successful_match_finder'
+  | 'successful_match_owner'
+  | 'false_claim'
+  | 'manual_adjustment';
+
+/** What `GET /api/credits/:userId` answers with. */
+export interface CreditBalance {
+  userId: string;
+  email: string;
+  credits: number;
+}
+
+export interface CreditTransaction<TTime = unknown> {
+  id: string;
+  userId: string;
+  amount: number;
+  reason: CreditReason;
+  relatedItemId?: string;
+  /** Balance after this entry was applied. */
+  balanceAfter?: number;
+  /** Free text, set on a manual admin adjustment. */
+  note?: string;
+  createdAt: TTime;
+}
+
 /* ============ Handovers ============ */
 
 /**
@@ -213,6 +249,21 @@ export interface VerifyCodeResult {
   success: boolean;
   message: string;
   attemptsLeft?: number;
+}
+
+/**
+ * A handover session that has not completed, as `GET /api/handover/sessions`
+ * returns it. The code hash is deliberately absent.
+ */
+export interface HandoverSession {
+  matchId: string;
+  lostItemId: string;
+  foundItemId: string;
+  status: HandoverCodeStatus;
+  attempts: number;
+  expiresAt: string | null;
+  blockedAt: string | null;
+  criteriaOverrideBy: string | null;
 }
 
 /** The item as it was at the moment of handover. Nulls are what was missing. */

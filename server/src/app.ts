@@ -13,9 +13,7 @@ import helmet from 'helmet';
 
 import itemsRoutes from './routes/items.js';
 import matchesRoutes from './routes/matches.js';
-import notificationsRoutes from './routes/notifications.js';
 import settingsRoutes from './routes/settings.js';
-import verificationRoutes from './routes/verification.js';
 import handoverRoutes from './routes/handover.js';
 import creditsRoutes from './routes/credits.js';
 import authRoutes from './routes/auth.js';
@@ -135,9 +133,7 @@ export function createApp(): express.Express {
 
   app.use('/api/items', itemsRoutes);
   app.use('/api/matches', matchesRoutes);
-  app.use('/api/notifications', notificationsRoutes);
   app.use('/api/settings', settingsRoutes);
-  app.use('/api/verification', verificationRoutes);
   // One router, two mount points. `/api/handovers/user/:userId` and
   // `/api/handover/verify` were separate files with no rule about which
   // endpoint lived where; both paths are kept so no client call changes.

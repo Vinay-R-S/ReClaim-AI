@@ -12,7 +12,7 @@
 import { DocumentReference, FieldValue } from 'firebase-admin/firestore';
 import { collections, db } from '../utils/firebase-admin.js';
 import { createLogger } from '../utils/logger.js';
-import type { HandoverCode, Item } from '../types/index.js';
+import type { HandoverCode, HandoverCodeStatus, Item } from '../types/index.js';
 
 const log = createLogger('handover.repository');
 
@@ -158,6 +158,32 @@ export class HandoverRepository {
     await batch.commit();
 
     return handoverRef;
+  }
+
+  /**
+   * The sessions an admin may still have to act on.
+   *
+   * A completed handover moves to the `handovers` collection; what is left
+   * here is open, blocked or expired. A blocked session cannot be reopened by
+   * anyone but an admin, so it has to be visible somewhere.
+   */
+  async listOpenSessions(limitPerStatus = 100): Promise<Array<HandoverCode & { id: string }>> {
+    // One query per status, each with its own cap. A single `in` query returns
+    // document-id order, so once expired sessions outnumber the cap, whether a
+    // blocked one appears at all comes down to how its match id sorts. Ordering
+    // by date alongside the status filter would need a composite index this
+    // deployment does not have; a budget per status does not.
+    const statuses: HandoverCodeStatus[] = ['blocked', 'expired', 'pending'];
+
+    const snapshots = await Promise.all(
+      statuses.map((status) =>
+        this.codes.where('status', '==', status).limit(limitPerStatus).get(),
+      ),
+    );
+
+    return snapshots.flatMap((snapshot) =>
+      snapshot.docs.map((doc) => ({ ...(doc.data() as HandoverCode), id: doc.id })),
+    );
   }
 
   async findCodeByMatch(matchId: string): Promise<HandoverCode | null> {

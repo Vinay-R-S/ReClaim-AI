@@ -10,6 +10,7 @@
 import type { Timestamp } from 'firebase/firestore';
 import type {
   AdminAuditEntry as SharedAdminAuditEntry,
+  CreditTransaction as SharedCreditTransaction,
   HandoverItemSnapshot as SharedHandoverItemSnapshot,
   HandoverRecord as SharedHandoverRecord,
   Item as SharedItem,
@@ -22,6 +23,8 @@ import type {
 export type {
   AdminAuditAction,
   AIProvider,
+  CreditBalance,
+  CreditReason,
   AnalyticsResponse,
   Coordinates,
   DashboardKpis,
@@ -32,6 +35,7 @@ export type {
   SystemSettingsResponse,
   HandoverCodeStatus,
   HandoverPersonSnapshot,
+  HandoverSession,
   HandoverStatus,
   ItemStatus,
   ItemType,
@@ -67,3 +71,4 @@ export interface ItemInput extends SharedItemInput {
 export type HandoverRecord = SharedHandoverRecord<SerializedTimestamp>;
 export type HandoverItemSnapshot = SharedHandoverItemSnapshot<SerializedTimestamp>;
 export type AdminAuditEntry = SharedAdminAuditEntry<SerializedTimestamp>;
+export type CreditTransaction = SharedCreditTransaction<SerializedTimestamp>;

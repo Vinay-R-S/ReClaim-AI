@@ -35,11 +35,12 @@ export function MatchReviewModal({
   const [error, setError] = useState<string | null>(null);
   const [criteriaFailure, setCriteriaFailure] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState('');
+  // Off by default. Most rows here are pipeline proposals nobody ever acted
+  // on, and dismissing one of those must not charge the reporter 30 credits.
+  const [penaliseClaimant, setPenaliseClaimant] = useState(false);
 
-  // A claim is recorded on the found item by POST /api/matches/claim. Without
-  // one this is a pipeline proposal nobody acted on, so rejecting it is a
-  // dismissal and carries no penalty: the server refuses to charge a reporter
-  // for a claim they never made, and the button has to say so.
+  // Legacy claims are recorded on the item; on everything else the person
+  // answering for the pair is the reporter of the lost item.
   const claimant = foundItem?.claimedBy ?? lostItem?.claimedBy;
   const claimUserId = claimant ?? lostItem?.reportedBy;
 
@@ -52,8 +53,11 @@ export function MatchReviewModal({
   ];
 
   const decide = async (isValid: boolean) => {
-    if (!claimUserId) {
-      setError('The lost item has no reporter on record, so there is nobody to verify against.');
+    // Only the penalty needs a person. A dismissal must stay possible for a
+    // proposal whose lost item has no reporter left on record, otherwise the
+    // match cannot be closed at all.
+    if (!isValid && penaliseClaimant && !claimUserId) {
+      setError('There is nobody on record to charge, so the penalty cannot be applied.');
       return;
     }
 
@@ -70,6 +74,8 @@ export function MatchReviewModal({
         // admin has written down why they are proceeding anyway.
         overrideCriteria: isValid && Boolean(criteriaFailure) && Boolean(overrideReason.trim()),
         overrideReason: overrideReason.trim() || undefined,
+        // Only on a rejection, and only because the admin said so.
+        penaliseClaimant: !isValid && penaliseClaimant,
       });
       onDecided();
     } catch (err) {
@@ -190,6 +196,19 @@ export function MatchReviewModal({
             </div>
           )}
 
+          <label className="flex items-start gap-2 text-sm text-text-secondary">
+            <input
+              type="checkbox"
+              checked={penaliseClaimant}
+              onChange={(e) => setPenaliseClaimant(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              This was a false claim. Charge the claimant the false-claim credit penalty when
+              rejecting.
+            </span>
+          </label>
+
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
               {error}
@@ -201,13 +220,13 @@ export function MatchReviewModal({
               onClick={() => decide(false)}
               disabled={submitting}
               title={
-                claimant
-                  ? 'Rejects the claim and charges the claimant the false-claim penalty'
-                  : 'Returns both items to Pending. Nobody claimed this, so no penalty applies'
+                penaliseClaimant
+                  ? 'Returns both items to Pending and charges the false-claim penalty'
+                  : 'Returns both items to Pending. No penalty is applied'
               }
               className="px-4 py-2 text-sm font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {claimant ? 'Reject claim and penalise' : 'Dismiss match'}
+              {penaliseClaimant ? 'Reject and penalise' : 'Dismiss match'}
             </button>
             <button
               onClick={() => decide(true)}

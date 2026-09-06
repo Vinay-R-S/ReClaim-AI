@@ -81,11 +81,6 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    match /verifications/{verificationId} {
-      allow read: if isAdmin();
-      allow write: if false;
-    }
-
     // The retired `credits/{uid}` collection: read-only for an admin while the
     // reconciliation is verified, then the collection can be dropped. Balances
     // live on `users/{uid}.credits` and the ledger is `creditTransactions`.

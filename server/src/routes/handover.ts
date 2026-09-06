@@ -21,7 +21,6 @@ import {
   validateParams,
 } from '../middleware/index.js';
 import {
-  handoverInitiateSchema,
   handoverReissueSchema,
   handoverVerifySchema,
   matchIdParamsSchema,
@@ -29,15 +28,6 @@ import {
 } from '../schemas/index.js';
 
 const router = Router();
-
-/** POST /initiate - admin: open a handover session and send the code */
-router.post(
-  '/initiate',
-  authMiddleware,
-  requireAdmin,
-  validate(handoverInitiateSchema),
-  asyncHandler(handoverController.initiate),
-);
 
 /**
  * POST /reissue - admin: a fresh code for a session blocked by failed attempts.
@@ -67,6 +57,9 @@ router.get(
   validateParams(matchIdParamsSchema),
   asyncHandler(handoverController.status),
 );
+
+/** GET /sessions - admin: the sessions that have not completed */
+router.get('/sessions', authMiddleware, requireAdmin, asyncHandler(handoverController.sessions));
 
 /** GET /history - admin: every completed handover */
 router.get('/history', authMiddleware, requireAdmin, asyncHandler(handoverController.history));
