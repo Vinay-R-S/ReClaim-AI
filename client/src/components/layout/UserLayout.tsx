@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { HelpCircle, LogOut, User, Settings, Menu, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../context/AuthContext';
-import { authFetch } from '../../lib/authApi';
+import { useCredits } from '../../hooks/useCredits';
 
 interface UserLayoutProps {
   children: React.ReactNode;
@@ -21,11 +21,7 @@ export function UserLayout({ children }: UserLayoutProps) {
   const { user, role, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [credits, setCredits] = useState(() => {
-    // Initialize from sessionStorage if available
-    const cached = sessionStorage.getItem('userCredits');
-    return cached ? parseInt(cached, 10) : 0;
-  });
+  const { credits } = useCredits();
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside
@@ -55,48 +51,6 @@ export function UserLayout({ children }: UserLayoutProps) {
       document.body.style.overflow = '';
     };
   }, [mobileMenuOpen]);
-
-  // Fetch credits only once per session
-  useEffect(() => {
-    if (!user?.uid) return;
-
-    // Check if we already have fresh credits in sessionStorage
-    const cachedCredits = sessionStorage.getItem('userCredits');
-    const cacheTimestamp = sessionStorage.getItem('userCreditsTimestamp');
-    const now = Date.now();
-    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
-    // Use cache if it's less than 5 minutes old
-    if (cachedCredits && cacheTimestamp && now - parseInt(cacheTimestamp, 10) < CACHE_DURATION) {
-      setCredits(parseInt(cachedCredits, 10));
-      return;
-    }
-
-    // Fetch fresh credits
-    authFetch(`/api/credits/${user.uid}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const newCredits = data.credits || 0;
-        setCredits(newCredits);
-        // Cache the result
-        sessionStorage.setItem('userCredits', newCredits.toString());
-        sessionStorage.setItem('userCreditsTimestamp', now.toString());
-      })
-      .catch((err) => console.error('Failed to fetch credits:', err));
-  }, [user?.uid]);
-
-  // Listen for credit updates (e.g., after handover)
-  useEffect(() => {
-    const handleCreditUpdate = (event: CustomEvent) => {
-      const newCredits = event.detail.credits;
-      setCredits(newCredits);
-      sessionStorage.setItem('userCredits', newCredits.toString());
-      sessionStorage.setItem('userCreditsTimestamp', Date.now().toString());
-    };
-
-    window.addEventListener('creditsUpdated' as any, handleCreditUpdate);
-    return () => window.removeEventListener('creditsUpdated' as any, handleCreditUpdate);
-  }, []);
 
   const handleSignOut = async () => {
     try {

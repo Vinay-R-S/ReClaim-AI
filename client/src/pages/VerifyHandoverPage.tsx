@@ -1,47 +1,116 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { handoverService } from '../services/handoverService';
-import { AlertTriangle, CheckCircle, Lock } from 'lucide-react';
+import { handoverService, type HandoverStatus } from '../services/handoverService';
+import { AlertTriangle, CheckCircle, Clock, Lock } from 'lucide-react';
+
+/**
+ * Page states.
+ *
+ * These are not the server's states. The server reports the code document as
+ * `pending`, `verified`, `blocked` or `expired`; this maps those onto what the
+ * page shows, and adds the states only the page has: the initial read, an
+ * in-flight submit, a rejected code, and a link with no session behind it.
+ */
+type PageStatus =
+  'checking' | 'idle' | 'loading' | 'success' | 'error' | 'blocked' | 'expired' | 'not_found';
+
+/**
+ * Whether a session has lapsed, whatever its stored status says.
+ *
+ * The document is only flipped to `expired` by a verification attempt, so a
+ * link opened after the deadline still reads `pending`. Without this the page
+ * would offer a live form for a code that cannot be accepted.
+ */
+function hasExpired(statusData: HandoverStatus): boolean {
+  if (!statusData.expiresAt) return false;
+
+  const expiresAt = new Date(statusData.expiresAt).getTime();
+  if (Number.isNaN(expiresAt)) return false;
+
+  return expiresAt < Date.now();
+}
 
 export default function VerifyHandoverPage() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
   const [code, setCode] = useState<string[]>(['', '', '', '', '', '']);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error' | 'blocked'>(
-    'idle',
-  );
+  const [status, setStatus] = useState<PageStatus>('checking');
   const [message, setMessage] = useState('');
   const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    if (matchId) {
-      checkStatus();
+    if (!matchId) {
+      setStatus('not_found');
+      setMessage('This verification link is missing its handover reference.');
+      return;
     }
+
+    checkStatus(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId]);
 
-  const checkStatus = async () => {
+  /**
+   * Map the code document status onto a page state.
+   *
+   * Returns false when the session is still live, so the caller knows to leave
+   * the form alone rather than overwrite the message it just set.
+   */
+  const applyStatus = (statusData: HandoverStatus): boolean => {
+    setAttemptsLeft(Math.max(statusData.maxAttempts - statusData.attempts, 0));
+
+    // Order matters. A handover completed weeks ago has a long-past
+    // `expiresAt`, so the settled states are decided first and expiry only
+    // describes a session that is still open.
+    if (statusData.status === 'verified') {
+      setStatus('success');
+      setMessage('This handover has already been completed.');
+      return true;
+    }
+
+    if (statusData.status === 'blocked') {
+      setStatus('blocked');
+      setMessage('Too many failed attempts. This handover is blocked.');
+      return true;
+    }
+
+    if (statusData.status === 'expired' || hasExpired(statusData)) {
+      setStatus('expired');
+      setMessage('This handover code has expired. Ask an admin to issue a new one.');
+      return true;
+    }
+
+    return false;
+  };
+
+  /**
+   * Read the session. `initial` is the page load; every other call is a
+   * refresh after a rejected code, where the form and its message must stay as
+   * they are unless the session itself has closed.
+   */
+  const checkStatus = async (initial = false) => {
     if (!matchId) return;
+
     try {
       const statusData = await handoverService.getStatus(matchId);
-      setAttemptsLeft(statusData.maxAttempts - statusData.attempts);
 
-      if (statusData.status === 'completed') {
-        setStatus('success');
-        setMessage('This handover has already been completed.');
-      } else if (statusData.status === 'failed' || statusData.status === 'blocked') {
-        setStatus('blocked');
-        setMessage('Too many failed attempts. This handover is blocked.');
-      }
-    } catch (error: any) {
-      console.error('Failed to get status', error);
-      // If 404, handover session doesn't exist
-      if (error?.message?.includes('404') || error?.message?.includes('Failed')) {
-        setStatus('error');
+      if (!statusData) {
+        setStatus('not_found');
         setMessage('Handover session not found. The verification link may be invalid or expired.');
+        return;
       }
+
+      if (applyStatus(statusData)) return;
+
+      if (initial) setStatus('idle');
+    } catch (error) {
+      console.error('Failed to get status', error);
+
+      if (!initial) return;
+
+      setStatus('error');
+      setMessage('Could not reach the verification service. Please try again.');
     }
   };
 
@@ -96,19 +165,25 @@ export default function VerifyHandoverPage() {
       if (result.success) {
         setStatus('success');
         setMessage('Handover verified successfully! Thank you for helping return the item.');
-      } else {
-        setStatus('error');
-        setMessage(result.message || 'Invalid code. Please try again.');
-        if (result.attemptsRemaining !== undefined) {
-          setAttemptsLeft(result.attemptsRemaining);
-        }
-        // Refresh status to check if blocked
-        checkStatus();
+        return;
       }
-    } catch (error: any) {
+
+      setStatus('error');
+      setMessage(result.message || 'Invalid code. Please try again.');
+
+      // The server sends `attemptsLeft`. The page read `attemptsRemaining`,
+      // which no response has ever carried, so the counter never moved
+      // (defect UI-05).
+      if (result.attemptsLeft !== undefined) {
+        setAttemptsLeft(result.attemptsLeft);
+      }
+
+      // Re-read the session so a blocked or expired code leaves the form.
+      await checkStatus();
+    } catch (error) {
       console.error('Verification error:', error);
       setStatus('error');
-      setMessage(error.response?.data?.error || 'Verification failed. Please try again.');
+      setMessage(error instanceof Error ? error.message : 'Verification failed. Please try again.');
     }
   };
 
@@ -158,7 +233,51 @@ export default function VerifyHandoverPage() {
           </div>
 
           <div className="p-8">
-            {status === 'success' ? (
+            {status === 'checking' ? (
+              <div className="flex flex-col items-center gap-3 py-6">
+                <div
+                  className="w-8 h-8 rounded-full border-4 border-gray-200 animate-spin"
+                  style={{ borderTopColor: googleBlue }}
+                />
+                <p className="text-sm text-gray-500">Checking this handover...</p>
+              </div>
+            ) : status === 'not_found' ? (
+              <div className="text-center">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                  style={{ backgroundColor: '#FCE8E6' }}
+                >
+                  <AlertTriangle className="w-8 h-8" style={{ color: googleRed }} />
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-1">Link not valid</h3>
+                <p className="text-gray-600 mb-6 text-sm">{message}</p>
+                <button
+                  onClick={() => navigate('/')}
+                  className="px-6 py-2 rounded text-white font-medium text-sm transition-colors hover:opacity-90"
+                  style={{ backgroundColor: googleBlue }}
+                >
+                  Return to Home
+                </button>
+              </div>
+            ) : status === 'expired' ? (
+              <div className="text-center">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                  style={{ backgroundColor: '#FEF7E0' }}
+                >
+                  <Clock className="w-8 h-8" style={{ color: '#B06000' }} />
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-1">Code expired</h3>
+                <p className="text-gray-600 mb-6 text-sm">{message}</p>
+                <button
+                  onClick={() => navigate('/under-construction')}
+                  className="text-sm font-medium hover:underline"
+                  style={{ color: googleBlue }}
+                >
+                  Contact Support
+                </button>
+              </div>
+            ) : status === 'success' ? (
               <div className="text-center">
                 <div
                   className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
@@ -189,7 +308,7 @@ export default function VerifyHandoverPage() {
                   Too many failed attempts. For security, this transaction has been blocked.
                 </p>
                 <button
-                  onClick={() => navigate('/contact')}
+                  onClick={() => navigate('/under-construction')}
                   className="text-sm font-medium hover:underline"
                   style={{ color: googleBlue }}
                 >
@@ -225,9 +344,9 @@ export default function VerifyHandoverPage() {
                   </div>
                 )}
 
-                {attemptsLeft !== null && attemptsLeft <= 2 && (
+                {attemptsLeft !== null && attemptsLeft > 0 && attemptsLeft <= 2 && (
                   <p className="text-center text-sm font-medium mb-4" style={{ color: '#D93025' }}>
-                    {attemptsLeft} attempts remaining
+                    {attemptsLeft} attempt{attemptsLeft === 1 ? '' : 's'} remaining
                   </p>
                 )}
 

@@ -1,6 +1,13 @@
 import { collection, doc, getDocs, getDoc, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { authFetch } from '../lib/authApi';
+import { compressImage } from '../lib/imageCompression';
+
+/**
+ * Longest edge for an image stored inline on the item document, which must
+ * stay under the 1 MB Firestore document limit.
+ */
+const IMAGE_MAX_EDGE = 800;
 
 /** Admin review state, independent of the match status. */
 export type ModerationStatus = 'pending' | 'approved' | 'rejected';
@@ -137,65 +144,25 @@ export async function deleteItemViaApi(id: string): Promise<void> {
   }
 }
 
-// Helper to compress image
-async function compressImage(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-
-        // Resize to max 800px width/height to keep size low (< 500KB)
-        const MAX_SIZE = 800;
-        if (width > height) {
-          if (width > MAX_SIZE) {
-            height *= MAX_SIZE / width;
-            width = MAX_SIZE;
-          }
-        } else {
-          if (height > MAX_SIZE) {
-            width *= MAX_SIZE / height;
-            height = MAX_SIZE;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        // Compress to JPEG 0.7 quality
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-        resolve(dataUrl);
-      };
-      img.onerror = (err) => reject(err);
-    };
-    reader.onerror = (err) => reject(err);
-  });
-}
-
 // Store image as Base64 in Firestore (Bypassing Storage Bucket)
 export async function uploadItemImage(file: File): Promise<string> {
+  let dataUrl: string;
+
   try {
-    console.log('Compressing image for Firestore storage...');
-    const base64String = await compressImage(file);
-    console.log('Image compressed successfully. Length:', base64String.length);
-
-    if (base64String.length > 900000) {
-      // Safety check for 1MB limit
-      throw new Error('Image too large even after compression. Please use a smaller image.');
-    }
-
-    return base64String;
+    ({ dataUrl } = await compressImage(file, IMAGE_MAX_EDGE));
   } catch (error) {
     console.error('Error processing image:', error);
-    throw new Error('Failed to process image for local storage');
+    // Compression already says what is wrong with this particular file, and
+    // replacing that with a generic message left the caller nothing to act on.
+    throw error instanceof Error ? error : new Error('Failed to process the image');
   }
+
+  if (dataUrl.length > 900000) {
+    // Safety check for the 1MB document limit
+    throw new Error('Image too large even after compression. Please use a smaller image.');
+  }
+
+  return dataUrl;
 }
 
 /**

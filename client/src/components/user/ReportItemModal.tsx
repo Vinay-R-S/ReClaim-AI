@@ -14,8 +14,18 @@ import { useAuth } from '../../context/AuthContext';
 import { ImageCarousel } from '../ui/ImageCarousel';
 import { analyzeItemImages, enhanceTextDescription } from '../../services/aiService';
 import { LazyLocationPicker } from '../ui/LazyLocationPicker';
+import {
+  MAX_PAYLOAD_BYTES,
+  compressImage,
+  formatBytes,
+  isImageFile,
+  payloadBytes,
+} from '../../lib/imageCompression';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+/** Images the server accepts on one item. */
+const MAX_IMAGES = 5;
 
 interface ReportItemModalProps {
   type: 'Lost' | 'Found';
@@ -49,8 +59,13 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
     };
   }, []);
   const [loading, setLoading] = useState(false);
+  // Both hold the compressed image, not the original. The picked file is
+  // scaled and re-encoded on selection, so analysis and submission send the
+  // same small payload and the preview is that payload (defect UI-15).
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [imageErrors, setImageErrors] = useState<string[]>([]);
+  const [processingImages, setProcessingImages] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,31 +86,66 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
   // Reporter email from auth
   const reporterEmail = user?.email || '';
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const newFiles = Array.from(e.target.files);
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
 
-      // Combine with existing files, limit to 5 total
-      const combinedFiles = [...imageFiles, ...newFiles].slice(0, 5);
-      setImageFiles(combinedFiles);
-
-      // Generate previews for ALL files (rebuild to ensure correct order)
-      const previewPromises = combinedFiles.map(
-        (file) =>
-          new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(file);
-          }),
-      );
-
-      Promise.all(previewPromises).then((previews) => {
-        setImagePreviews(previews);
-      });
-
-      // Reset input so same file can be re-selected
+    // A second selection while the first is still being compressed would be
+    // built on a stale list and silently lose images.
+    if (processingImages) {
       e.target.value = '';
+      setImageErrors(['Still preparing the previous images. Please try again in a moment.']);
+      return;
     }
+
+    const picked = Array.from(e.target.files);
+    // Reset the input up front so the same file can be re-selected after an
+    // error, and so it is cleared before any await.
+    e.target.value = '';
+
+    const room = MAX_IMAGES - imageFiles.length;
+    const errors: string[] = [];
+
+    if (room <= 0) {
+      setImageErrors([`You can attach at most ${MAX_IMAGES} images.`]);
+      return;
+    }
+
+    if (picked.length > room) {
+      errors.push(`Only the first ${room} of your ${picked.length} images were added.`);
+    }
+
+    setProcessingImages(true);
+
+    const acceptedFiles = [...imageFiles];
+    const acceptedPreviews = [...imagePreviews];
+
+    for (const file of picked.slice(0, room)) {
+      if (!isImageFile(file)) {
+        errors.push(`${file.name}: not an image file.`);
+        continue;
+      }
+
+      try {
+        // Sequential on purpose: decoding several phone photos onto canvases
+        // at once is what makes a mobile browser drop the tab.
+        const { file: compressed, dataUrl } = await compressImage(file);
+
+        if (payloadBytes([...acceptedPreviews, dataUrl]) > MAX_PAYLOAD_BYTES) {
+          errors.push(`${file.name}: skipped, the report would exceed the upload limit.`);
+          continue;
+        }
+
+        acceptedFiles.push(compressed);
+        acceptedPreviews.push(dataUrl);
+      } catch (err) {
+        errors.push(`${file.name}: ${err instanceof Error ? err.message : 'could not be read'}`);
+      }
+    }
+
+    setImageFiles(acceptedFiles);
+    setImagePreviews(acceptedPreviews);
+    setImageErrors(errors);
+    setProcessingImages(false);
   };
 
   const handleAnalyze = async () => {
@@ -200,15 +250,25 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
       return;
     }
 
+    // Last line of defence against a 413. Selection already refuses an image
+    // that would push the report over, so this only fires if the text fields
+    // are somehow the problem.
+    const size = payloadBytes(imagePreviews);
+    if (size > MAX_PAYLOAD_BYTES) {
+      alert(
+        `These images total ${formatBytes(size)}, over the ${formatBytes(
+          MAX_PAYLOAD_BYTES,
+        )} upload limit. Please remove one.`,
+      );
+      return;
+    }
+
     try {
       setLoading(true);
 
-      // Convert images to base64
-      const base64Images: string[] = [];
-      for (const file of imageFiles) {
-        const base64 = await fileToBase64(file);
-        base64Images.push(base64);
-      }
+      // The previews are already the compressed data URLs that go up, so there
+      // is nothing left to encode here.
+      const base64Images = imagePreviews;
 
       // Create date from form inputs
       const dateTime = new Date(`${formData.date}T${formData.time}:00`);
@@ -336,15 +396,6 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
     onClose();
   };
 
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
   const handleTagRemove = (tagToRemove: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -436,6 +487,7 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
                                 newPreviews.splice(index, 1);
                                 setImageFiles(newFiles);
                                 setImagePreviews(newPreviews);
+                                setImageErrors([]);
                               }}
                               className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
                               title="Remove image"
@@ -457,7 +509,8 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
                       </div>
                       <p className="text-xs text-gray-500 text-center mt-2">
                         {imagePreviews.length} image
-                        {imagePreviews.length > 1 ? 's' : ''} selected
+                        {imagePreviews.length > 1 ? 's' : ''} selected (
+                        {formatBytes(payloadBytes(imagePreviews))})
                       </p>
                     </div>
                   ) : (
@@ -506,6 +559,23 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
                   onChange={handleImageChange}
                   className="hidden"
                 />
+
+                {processingImages && (
+                  <p className="mt-2 text-xs text-text-secondary flex items-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Preparing images...
+                  </p>
+                )}
+
+                {imageErrors.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {imageErrors.map((error, index) => (
+                      <li key={index} className="text-xs text-red-600">
+                        {error}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               {/* Manual fields for Lost without image */}
@@ -623,6 +693,7 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
               <button
                 onClick={handleAnalyze}
                 disabled={
+                  processingImages ||
                   !formData.location ||
                   (type === 'Found' && (imageFiles.length === 0 || !formData.collectionLocation)) ||
                   (type === 'Lost' &&
