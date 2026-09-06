@@ -14,19 +14,32 @@ const log = createLogger('http');
 interface ApiError extends Error {
   statusCode?: number;
   code?: string;
+  isOperational?: boolean;
+  details?: Record<string, unknown>;
 }
 
 /**
- * Custom error class for API errors
+ * An error a service raises deliberately, with the status it should answer.
+ *
+ * `isOperational` is what separates "the caller asked for something we refuse"
+ * from "something broke". A refusal is written for the caller to read, so its
+ * message is sent as-is; anything else is sanitised below.
  */
 export class AppError extends Error {
   statusCode: number;
   isOperational: boolean;
+  /**
+   * Extra fields the caller needs alongside the message, merged into the
+   * response body. The admin match screen needs to know which handover check
+   * refused, not only that one did, so that it can offer the override.
+   */
+  details?: Record<string, unknown>;
 
-  constructor(message: string, statusCode: number = 500) {
+  constructor(message: string, statusCode: number = 500, details?: Record<string, unknown>) {
     super(message);
     this.statusCode = statusCode;
     this.isOperational = true;
+    this.details = details;
     Error.captureStackTrace(this, this.constructor);
   }
 }
@@ -77,15 +90,20 @@ export function errorHandler(
     500: 'Something went wrong. Please try again later.',
   };
 
-  // In production, use safe generic messages
-  // In development, show actual error message
-  const clientMessage = isProduction
-    ? safeMessages[statusCode] || 'An error occurred'
-    : err.message;
+  // A deliberate 4xx keeps its message in every environment: "Item is already
+  // approved" and "You can only edit your own reports" are the answer, and
+  // replacing them with "Invalid request" tells the caller nothing. Everything
+  // else, and every 5xx, is sanitised in production.
+  const isClientRefusal = err.isOperational === true && statusCode < 500;
+
+  const clientMessage =
+    isProduction && !isClientRefusal
+      ? safeMessages[statusCode] || 'An error occurred'
+      : err.message;
 
   res.status(statusCode).json({
-    error: clientMessage,
-    // Only include these in development
+    // Development diagnostics first, so a refusal's own fields win over them
+    // and the same request answers identically in every environment.
     ...(isProduction
       ? {}
       : {
@@ -93,6 +111,11 @@ export function errorHandler(
           code: err.code,
           path: req.path,
         }),
+    // A refusal may carry fields the caller acts on. Only for a deliberate
+    // 4xx: nothing internal is ever attached this way.
+    ...(isClientRefusal && err.details ? err.details : {}),
+    // Last, so `error` is always the message and never a detail key.
+    error: clientMessage,
   });
 }
 

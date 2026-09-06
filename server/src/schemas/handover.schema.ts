@@ -30,3 +30,7 @@ export const handoverVerifySchema = z.object({
     .trim()
     .regex(/^[0-9]{6}$/, 'Code must be 6 digits'),
 });
+
+export type HandoverInitiateBody = z.infer<typeof handoverInitiateSchema>;
+export type HandoverReissueBody = z.infer<typeof handoverReissueSchema>;
+export type HandoverVerifyBody = z.infer<typeof handoverVerifySchema>;

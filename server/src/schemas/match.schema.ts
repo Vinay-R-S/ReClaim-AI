@@ -48,3 +48,7 @@ export const matchVerifySchema = z.object({
   overrideCriteria: z.boolean().optional(),
   overrideReason: optionalMultilineText(500),
 });
+
+export type MatchSearchBody = z.infer<typeof matchSearchSchema>;
+export type MatchClaimBody = z.infer<typeof matchClaimSchema>;
+export type MatchVerifyBody = z.infer<typeof matchVerifySchema>;

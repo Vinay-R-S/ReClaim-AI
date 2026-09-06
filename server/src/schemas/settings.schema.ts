@@ -35,3 +35,6 @@ export const profilePictureSchema = z.object({
   // Accepted and ignored: the target user always comes from the token.
   userId: z.string().max(128).optional(),
 });
+
+export type SettingsUpdateBody = z.infer<typeof settingsUpdateSchema>;
+export type ProfilePictureBody = z.infer<typeof profilePictureSchema>;

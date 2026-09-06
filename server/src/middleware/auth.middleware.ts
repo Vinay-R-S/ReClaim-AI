@@ -12,7 +12,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { auth, collections } from '../utils/firebase-admin.js';
+import { auth } from '../utils/firebase-admin.js';
+import { userRepository } from '../repositories/user.repository.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('auth');
@@ -39,13 +40,12 @@ export interface AuthRequest extends Request {
  * that need a profile check `profileExists` themselves.
  */
 async function resolveUser(uid: string, email?: string): Promise<AuthUser> {
-  const userDoc = await collections.users.doc(uid).get();
+  const data = await userRepository.findById(uid);
 
-  if (!userDoc.exists) {
+  if (!data) {
     return { uid, email, role: 'user', status: 'active', profileExists: false };
   }
 
-  const data = userDoc.data() ?? {};
   return {
     uid,
     email,

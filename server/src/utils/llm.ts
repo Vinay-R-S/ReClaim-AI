@@ -230,7 +230,7 @@ async function callGemini(messages: LLMMessage[], options: LLMOptions = {}): Pro
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-import { collections } from './firebase-admin.js';
+import { settingsRepository } from '../repositories/settings.repository.js';
 import { createLogger } from './logger.js';
 import { singleFlight } from './async.js';
 import { env } from '../config/env.js';
@@ -258,9 +258,8 @@ const SETTINGS_CACHE_TTL = 60000; // 1 minute cache
  */
 const fetchAIProviderSetting = singleFlight(async (): Promise<AIProviderSetting> => {
   try {
-    const doc = await collections.settings.doc('system').get();
-    const data = doc.data();
-    const provider: AIProviderSetting = data?.aiProvider || 'groq_only'; // Default to groq_only
+    const data = await settingsRepository.getSystem();
+    const provider: AIProviderSetting = (data?.aiProvider as AIProviderSetting) || 'groq_only';
 
     cachedAIProvider = provider;
     lastSettingsFetch = Date.now();

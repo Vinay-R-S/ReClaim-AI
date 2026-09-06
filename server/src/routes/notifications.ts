@@ -1,15 +1,9 @@
 /**
- * Notifications API Routes - Email and push notifications
+ * Notification routes - email delivery and the credit summary behind it.
  */
 
-import { Router, Request, Response } from 'express';
-import {
-  sendMatchNotification,
-  sendClaimConfirmation,
-  sendCreditsNotification,
-  isEmailConfigured,
-} from '../services/email.js';
-import { getUserCredits, getCreditHistory } from '../services/credits.js';
+import { Router } from 'express';
+import { notificationController } from '../controllers/notification.controller.js';
 import {
   asyncHandler,
   authMiddleware,
@@ -25,75 +19,34 @@ import {
 
 const router = Router();
 
-/**
- * GET /api/notifications/status
- * Check notification services status
- */
-router.get(
-  '/status',
-  authMiddleware,
-  requireAdmin,
-  asyncHandler(async (req: Request, res: Response) => {
-    return res.json({
-      email: isEmailConfigured(),
-      push: false, // Not implemented yet
-    });
-  }),
-);
+/** GET /api/notifications/status - admin: which transports are configured */
+router.get('/status', authMiddleware, requireAdmin, asyncHandler(notificationController.status));
 
-/**
- * POST /api/notifications/send-match
- * Send match notification email
- */
+/** POST /api/notifications/send-match - admin */
 router.post(
   '/send-match',
   authMiddleware,
   requireAdmin,
   validate(sendMatchNotificationSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const { email, itemName, matchScore, collectionPoint } = req.body;
-
-    const success = await sendMatchNotification(email, itemName, matchScore || 80, collectionPoint);
-
-    return res.json({ success });
-  }),
+  asyncHandler(notificationController.sendMatch),
 );
 
-/**
- * POST /api/notifications/send-claim
- * Send claim confirmation email
- */
+/** POST /api/notifications/send-claim - admin */
 router.post(
   '/send-claim',
   authMiddleware,
   requireAdmin,
   validate(sendClaimNotificationSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const { email, itemName, collectionPoint } = req.body;
-
-    const success = await sendClaimConfirmation(email, itemName, collectionPoint);
-
-    return res.json({ success });
-  }),
+  asyncHandler(notificationController.sendClaim),
 );
 
-/**
- * GET /api/notifications/credits/:userId
- * Get user credits and history
- */
+/** GET /api/notifications/credits/:userId - admin */
 router.get(
   '/credits/:userId',
   authMiddleware,
   requireAdmin,
   validateParams(userIdParamsSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const { userId } = req.params;
-
-    const credits = await getUserCredits(userId);
-    const history = await getCreditHistory(userId);
-
-    return res.json({ credits, history });
-  }),
+  asyncHandler(notificationController.credits),
 );
 
 export default router;

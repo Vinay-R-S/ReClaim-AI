@@ -14,7 +14,11 @@ export const signupSchema = z.object({
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number'),
-  displayName: z.string().min(2, 'Name must be at least 2 characters').max(50, 'Name too long').optional(),
+  displayName: z
+    .string()
+    .min(2, 'Name must be at least 2 characters')
+    .max(50, 'Name too long')
+    .optional(),
 });
 
 export const loginSchema = z.object({
@@ -43,3 +47,6 @@ export const profileBootstrapSchema = z.object({
     .catch(undefined),
   photoURL: z.string().url().max(2048).optional().catch(undefined),
 });
+
+export type ProfileBootstrapBody = z.infer<typeof profileBootstrapSchema>;
+export type LoginNotificationBody = z.infer<typeof loginNotificationSchema>;
