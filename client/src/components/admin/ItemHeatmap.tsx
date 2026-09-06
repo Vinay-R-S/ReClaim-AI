@@ -8,8 +8,9 @@ import { useState, useEffect, useRef } from 'react';
 import { MapPin, Map as MapIcon, Loader2 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getItems, type Item } from '@/services/itemService';
-import { authFetch } from '../../lib/authApi';
+import { getItems } from '@/services/itemService';
+import type { Item } from '@/types/domain';
+import { authGet } from '../../lib/api';
 
 interface ItemHeatmapProps {
   radiusKm?: number;
@@ -54,11 +55,11 @@ export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
         // Fetch items and settings in parallel
         const [allItems, settingsResponse] = await Promise.all([
           getItems(),
-          authFetch('/api/settings')
-            .then((r) => (r.ok ? r.json() : null))
-            // Settings are decoration here; a rejected token refresh must not
-            // discard the items that loaded alongside them.
-            .catch(() => null),
+          // Settings are decoration here; a rejected token refresh must not
+          // discard the items that loaded alongside them.
+          authGet<{ mapCenter?: { lat?: number; lng?: number } }>('/api/settings').catch(
+            () => null,
+          ),
         ]);
 
         // Filter items that have coordinates

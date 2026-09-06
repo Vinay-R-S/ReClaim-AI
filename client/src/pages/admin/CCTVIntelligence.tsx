@@ -28,7 +28,7 @@ import {
 import { AddItemModal } from '../../components/admin/AddItemModal';
 import { CameraContextPanel } from '../../components/admin/CameraContextPanel';
 import { Link } from 'react-router-dom';
-import { authFetch } from '../../lib/authApi';
+import { authGet } from '../../lib/api';
 
 export function CCTVIntelligence() {
   // Feature toggle state
@@ -103,21 +103,22 @@ export function CCTVIntelligence() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await authFetch('/api/settings');
-        if (response.ok) {
-          const data = await response.json();
-          setCctvEnabled(data.cctvEnabled !== false);
+        const data = await authGet<{
+          cctvEnabled?: boolean;
+          mapCenter?: { lat?: number; lng?: number; address?: string };
+        }>('/api/settings');
 
-          // The configured map centre is the sensible default camera position:
-          // it is where this deployment operates. The admin can move the pin.
-          // Only as a default. A slow settings read must not overwrite a pin
-          // the admin has already dropped while it was in flight.
-          if (typeof data.mapCenter?.lat === 'number' && typeof data.mapCenter?.lng === 'number') {
-            setCameraCoordinates(
-              (current) => current ?? { lat: data.mapCenter.lat, lng: data.mapCenter.lng },
-            );
-            setCameraLocation((current) => current || data.mapCenter.address || '');
-          }
+        setCctvEnabled(data.cctvEnabled !== false);
+
+        // The configured map centre is the sensible default camera position:
+        // it is where this deployment operates. The admin can move the pin.
+        // Only as a default. A slow settings read must not overwrite a pin
+        // the admin has already dropped while it was in flight.
+        const mapCenter = data.mapCenter;
+        if (typeof mapCenter?.lat === 'number' && typeof mapCenter?.lng === 'number') {
+          const { lat, lng, address } = mapCenter;
+          setCameraCoordinates((current) => current ?? { lat, lng });
+          setCameraLocation((current) => current || address || '');
         }
       } catch (error) {
         console.error('Failed to fetch settings:', error);

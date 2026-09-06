@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { authGet } from '../lib/authApi';
+import { authGet } from '../lib/api';
 
 interface CreditsResponse {
   userId: string;

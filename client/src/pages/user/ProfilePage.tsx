@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { UserLayout } from '../../components/layout/UserLayout';
 import { useAuth } from '../../context/AuthContext';
-import { type Item } from '../../services/itemService';
+import type { Item } from '../../types/domain';
 import {
   Mail,
   Calendar,
@@ -16,7 +16,7 @@ import {
 import { Timestamp, doc, getDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db } from '../../lib/firebase';
-import { authFetch } from '../../lib/authApi';
+import { authGet, authPost } from '../../lib/api';
 import { useCredits } from '../../hooks/useCredits';
 
 interface UserStats {
@@ -94,27 +94,26 @@ export function ProfilePage() {
         // Fetch user's items. The list is capped by the endpoint, so the
         // report totals come from the counters the server maintains on the
         // user document and only the status breakdown is counted here.
-        const itemsResponse = await authFetch(`/api/items?reportedBy=${user.uid}&limit=100`);
-        if (itemsResponse.ok) {
-          const itemsData = await itemsResponse.json();
-          const items: Item[] = itemsData.items || [];
+        const itemsData = await authGet<{ items?: Item[] }>(
+          `/api/items?reportedBy=${user.uid}&limit=100`,
+        );
+        const items: Item[] = itemsData.items || [];
 
-          const lostItems = items.filter((item) => item.type === 'Lost').length;
-          const foundItems = items.filter((item) => item.type === 'Found').length;
-          const matchedItems = items.filter((item) => item.status === 'Matched').length;
-          const claimedItems = items.filter((item) => item.status === 'Claimed').length;
+        const lostItems = items.filter((item) => item.type === 'Lost').length;
+        const foundItems = items.filter((item) => item.type === 'Found').length;
+        const matchedItems = items.filter((item) => item.status === 'Matched').length;
+        const claimedItems = items.filter((item) => item.status === 'Claimed').length;
 
-          setStats((prev) => ({
-            ...prev,
-            // A profile that predates the counters has none of these fields,
-            // so fall back to what the list shows.
-            totalReports: profile?.totalItemsCount ?? items.length,
-            lostItems: profile?.lostItemsCount ?? lostItems,
-            foundItems: profile?.foundItemsCount ?? foundItems,
-            matchedItems,
-            claimedItems,
-          }));
-        }
+        setStats((prev) => ({
+          ...prev,
+          // A profile that predates the counters has none of these fields, so
+          // fall back to what the list shows.
+          totalReports: profile?.totalItemsCount ?? items.length,
+          lostItems: profile?.lostItemsCount ?? lostItems,
+          foundItems: profile?.foundItemsCount ?? foundItems,
+          matchedItems,
+          claimedItems,
+        }));
       } catch (error) {
         console.error('Error fetching profile data:', error);
       } finally {
@@ -257,21 +256,10 @@ export function ProfilePage() {
       const compressedBase64 = await compressImage(file);
 
       // Upload to server (Cloudinary)
-      const response = await authFetch('/api/settings/profile-picture', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // The server derives the uid from the ID token, so it is not sent here.
-        body: JSON.stringify({ imageData: compressedBase64 }),
+      // The server derives the uid from the ID token, so it is not sent here.
+      const data = await authPost<{ photoURL: string }>('/api/settings/profile-picture', {
+        imageData: compressedBase64,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to upload profile picture');
-      }
-
-      const data = await response.json();
 
       // Update Firebase Auth profile locally
       await updateProfile(user, { photoURL: data.photoURL });

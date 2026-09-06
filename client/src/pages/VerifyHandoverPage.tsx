@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { handoverService, type HandoverStatus } from '../services/handoverService';
+import { handoverService } from '../services/handoverService';
+import type { HandoverStatus } from '../types/domain';
 import { AlertTriangle, CheckCircle, Clock, Lock } from 'lucide-react';
 
 /**

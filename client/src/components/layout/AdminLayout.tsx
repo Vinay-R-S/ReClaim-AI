@@ -18,7 +18,7 @@ import { cn } from '../../lib/utils';
 import { useAuth } from '../../context/AuthContext';
 import { getItems } from '../../services/itemService';
 import { getAllMatches } from '../../services/matchService';
-import { authFetch } from '../../lib/authApi';
+import { authGet } from '../../lib/api';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -76,11 +76,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await authFetch('/api/settings');
-        if (response.ok) {
-          const data = await response.json();
-          setCctvEnabled(data.cctvEnabled !== false);
-        }
+        const data = await authGet<{ cctvEnabled?: boolean }>('/api/settings');
+        setCctvEnabled(data.cctvEnabled !== false);
       } catch (error) {
         console.error('Failed to fetch settings:', error);
       }

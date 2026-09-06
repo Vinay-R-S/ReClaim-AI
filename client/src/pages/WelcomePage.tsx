@@ -6,8 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Zap, Server, Code, ArrowRight, Loader2 } from 'lucide-react';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { apiGet, apiPost } from '../lib/api';
 
 export function WelcomePage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -21,8 +20,7 @@ export function WelcomePage() {
     // Check if testing mode is enabled
     const checkMode = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/settings/mode`);
-        const data = await response.json();
+        const data = await apiGet<{ testingMode?: boolean }>('/api/settings/mode');
 
         // If not in testing mode or already seen, skip to landing
         if (!data.testingMode || hasSeenWelcome) {
@@ -31,7 +29,10 @@ export function WelcomePage() {
         }
 
         // Track the visit
-        await fetch(`${API_BASE_URL}/api/settings/visit`, { method: 'POST' });
+        // Fire and forget. This runs only in testing mode, which is also when
+        // the shared daily API budget is tightest, and a refused counter
+        // increment is no reason to send the visitor past the page.
+        await apiPost('/api/settings/visit').catch(() => undefined);
 
         setIsLoading(false);
       } catch (error) {

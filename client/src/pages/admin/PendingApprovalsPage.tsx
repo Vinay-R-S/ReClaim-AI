@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Search, RefreshCw, Clock, Check, X } from 'lucide-react';
-import { getItems, moderateItem, type Item } from '@/services/itemService';
+import { getItems, moderateItem } from '@/services/itemService';
+import type { Item } from '@/types/domain';
 import { RejectItemDialog } from '@/components/admin/RejectItemDialog';
 import { Timestamp } from 'firebase/firestore';
 

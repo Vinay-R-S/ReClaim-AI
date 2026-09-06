@@ -14,6 +14,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ImageCarousel } from '../ui/ImageCarousel';
 import { analyzeItemImages, enhanceTextDescription } from '../../services/aiService';
 import { LazyLocationPicker } from '../ui/LazyLocationPicker';
+import { apiGet, authPost } from '../../lib/api';
 import {
   MAX_PAYLOAD_BYTES,
   compressImage,
@@ -21,8 +22,6 @@ import {
   isImageFile,
   payloadBytes,
 } from '../../lib/imageCompression';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 /** Images the server accepts on one item. */
 const MAX_IMAGES = 5;
@@ -295,29 +294,11 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
         }
       }
 
-      // Get auth token
-      const token = await user.getIdToken();
-
-      // Submit to API
-      const response = await fetch(`${API_URL}/api/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          userId: user.uid,
-          item: itemData,
-          images: base64Images,
-        }),
+      const data = await authPost<{ id: string; matching?: string }>('/api/items', {
+        userId: user.uid,
+        item: itemData,
+        images: base64Images,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to create item');
-      }
-
-      const data = await response.json();
       setStep('success');
 
       // `onSuccess` is deliberately not called here: on this screen it clears
@@ -364,11 +345,9 @@ export function ReportItemModal({ type, onClose, onSuccess }: ReportItemModalPro
       if (!mountedRef.current) return;
 
       try {
-        const response = await fetch(`${API_URL}/api/items/${itemId}`);
-
-        if (!response.ok) continue;
-
-        const { item } = await response.json();
+        const { item } = await apiGet<{
+          item?: { matchScore?: number; matchedItemId?: string };
+        }>(`/api/items/${itemId}`);
 
         if (typeof item?.matchScore === 'number' && item.matchScore > 0) {
           if (!mountedRef.current) return;

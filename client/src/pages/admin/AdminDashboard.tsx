@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ArrowUp, ArrowDown, Package } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { type Item, getItems } from '../../services/itemService';
+import { getItems } from '../../services/itemService';
+import type { Item } from '../../types/domain';
 import { ItemDetailModal } from '../../components/admin/ItemDetailModal';
 import { AddItemModal } from '../../components/admin/AddItemModal';
 import { Timestamp } from 'firebase/firestore';

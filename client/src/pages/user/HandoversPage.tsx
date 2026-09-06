@@ -2,31 +2,9 @@ import { useState, useEffect } from 'react';
 import { UserLayout } from '../../components/layout/UserLayout';
 import { useAuth } from '../../context/AuthContext';
 import { Package, Calendar, User, ExternalLink } from 'lucide-react';
-import { authFetch } from '../../lib/authApi';
-
-interface HandoverRecord {
-  id: string;
-  matchId: string;
-  lostItemId: string;
-  foundItemId: string;
-  lostItemDetails: {
-    name: string;
-  };
-  foundItemDetails: {
-    name: string;
-  };
-  lostPersonDetails: {
-    userId: string;
-    displayName: string;
-  };
-  foundPersonDetails: {
-    userId: string;
-    displayName: string;
-  };
-  handoverTime: { seconds: number } | Date | string | number;
-  blockchainTxHash?: string;
-  blockchainRecorded?: boolean;
-}
+import { authGet } from '../../lib/api';
+import type { HandoverRecord } from '../../types/domain';
+import { toDate, type TimestampLike } from '../../lib/timestamps';
 
 export function HandoversPage() {
   const { user } = useAuth();
@@ -37,8 +15,7 @@ export function HandoversPage() {
     if (!user?.uid) return;
 
     // Fetch user's handovers
-    authFetch(`/api/handovers/user/${user.uid}`)
-      .then((res) => res.json())
+    authGet<{ handovers?: HandoverRecord[] }>(`/api/handovers/user/${user.uid}`)
       .then((data) => {
         setHandovers(data.handovers || []);
       })
@@ -49,34 +26,11 @@ export function HandoversPage() {
       .finally(() => setLoading(false));
   }, [user?.uid]);
 
-  const formatDate = (date: { seconds: number } | Date | string | number | undefined | null) => {
-    if (!date) return 'Date not available';
+  const formatDate = (date: TimestampLike) => {
+    const parsed = toDate(date);
+    if (!parsed) return 'Date not available';
 
-    let d: Date;
-
-    // Handle Firestore Timestamp object
-    if (typeof date === 'object' && 'seconds' in date) {
-      d = new Date(date.seconds * 1000);
-    }
-    // Handle ISO string or other string formats
-    else if (typeof date === 'string') {
-      d = new Date(date);
-    }
-    // Handle numeric timestamp (milliseconds)
-    else if (typeof date === 'number') {
-      d = new Date(date);
-    }
-    // Handle Date object
-    else {
-      d = new Date(date);
-    }
-
-    // Check for invalid date
-    if (isNaN(d.getTime())) {
-      return 'Date not available';
-    }
-
-    return d.toLocaleDateString('en-US', {
+    return parsed.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -134,7 +88,7 @@ export function HandoversPage() {
 interface HandoverCardProps {
   handover: HandoverRecord;
   currentUserId: string;
-  formatDate: (date: { seconds: number } | Date | string | number | undefined | null) => string;
+  formatDate: (date: TimestampLike) => string;
 }
 
 function HandoverCard({ handover, currentUserId, formatDate }: HandoverCardProps) {

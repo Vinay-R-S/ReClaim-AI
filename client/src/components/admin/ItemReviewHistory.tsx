@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { ShieldCheck } from 'lucide-react';
-import { getItemAudit, type AdminAuditEntry, type Item } from '../../services/itemService';
+import { getItemAudit } from '../../services/itemService';
+import type { AdminAuditEntry, Item } from '../../types/domain';
 
 interface ItemReviewHistoryProps {
   item: Item;

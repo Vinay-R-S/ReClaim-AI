@@ -1,121 +1,53 @@
 import { Timestamp } from 'firebase-admin/firestore';
+import type {
+  AdminAuditEntry as SharedAdminAuditEntry,
+  Coordinates,
+  Item as SharedItem,
+  ItemInput as SharedItemInput,
+  Match as SharedMatch,
+  User as SharedUser,
+} from '../../../shared/domain.js';
 
-// ============ User Types ============
-export interface User {
-  uid: string;
-  email: string;
-  displayName?: string;
-  photoURL?: string;
-  role: 'user' | 'admin';
-  status: 'active' | 'blocked';
-  credits: number;
-  /** Set once the welcome bonus has landed in the ledger. */
-  signupBonusAwarded?: boolean;
-  createdAt?: Timestamp;
-  lastLoginAt?: Timestamp;
-  // Item submission counts
-  lostItemsCount?: number;
-  foundItemsCount?: number;
-  totalItemsCount?: number;
+/**
+ * Domain types come from `shared/domain.d.ts`, which the client imports too.
+ * Both packages used to declare their own and had drifted (defect ARCH-08).
+ * Only the timestamp class is local: this is the Admin SDK's.
+ */
+export type { Coordinates };
+
+export type {
+  AdminAuditAction,
+  HandoverCodeStatus,
+  HandoverItemSnapshot,
+  HandoverPersonSnapshot,
+  HandoverStatus,
+  ItemStatus,
+  ItemType,
+  MatchStatus,
+  ModerationStatus,
+  SerializedTimestamp,
+  UserProfile,
+  UserRole,
+  UserStatus,
+  VerifyCodeResult,
+} from '../../../shared/domain.js';
+
+export type User = SharedUser<Timestamp>;
+export type Item = SharedItem<Timestamp>;
+export type Match = SharedMatch<Timestamp>;
+export type AdminAuditEntry = SharedAdminAuditEntry<Timestamp>;
+
+/**
+ * The reporter's submission, plus what only the server holds: the images as
+ * they arrive on the request, and the owner it resolves from the token.
+ */
+export interface ItemInput extends SharedItemInput {
+  images?: File[] | string[];
+  reportedBy: string;
+  reporterEmail?: string;
 }
-
-// ============ Item Types ============
-export type ItemType = 'Lost' | 'Found';
-/**
- * The item lifecycle, in order.
- *
- * `Pending`  reported, looking for a match.
- * `Matched`  paired with a counterpart, handover not yet completed.
- * `Claimed`  handed over and closed. The only terminal state.
- *
- * `Resolved` used to be a second terminal state, set by the verification agent
- * while the handover flow set `Claimed`. Dashboards count `Claimed`, so
- * anything closed through verification disappeared from every metric. Both
- * paths now converge on `Claimed`; the migration rewrites existing documents.
- */
-export type ItemStatus = 'Pending' | 'Matched' | 'Claimed';
-
-/**
- * Whether an admin has reviewed the report, independent of the match state.
- *
- * `status` answers "has this item found its counterpart"; `moderation` answers
- * "may this item be seen and matched at all". Conflating the two in `status`
- * meant `Pending` had to mean both "not yet approved" and "not yet matched".
- *
- * A user report starts `pending` and is invisible to the browse list and to
- * the matching pipeline until an admin approves it, which is what stops an
- * unreviewed report from emailing a stranger a handover code. An item an admin
- * creates is `approved` on write: creating it is the review.
- *
- * A document with no `moderation` field predates this and reads as approved.
- */
-export type ModerationStatus = 'pending' | 'approved' | 'rejected';
 
 export * from './handover.js';
-
-export interface Coordinates {
-  lat: number;
-  lng: number;
-}
-
-export interface Item {
-  id: string;
-  name: string;
-  description: string;
-  type: ItemType;
-  status: ItemStatus;
-  /** Absent on items created before moderation existed, which read as approved. */
-  moderation?: ModerationStatus;
-  moderatedBy?: string;
-  moderatedAt?: Timestamp;
-  /** Why the report was rejected. Required on a rejection. */
-  moderationReason?: string;
-  location: string;
-  coordinates?: Coordinates;
-  date: Timestamp | Date;
-  tags?: string[];
-  color?: string; // Color of the item for matching
-  category?: string; // Electronics, Documents, Accessories, etc.
-  imageUrl?: string;
-  cloudinaryUrls?: string[];
-  embedding?: number[];
-  matchScore?: number;
-  /** Set while a matching run holds the item, so a second run does not start. */
-  matchingStartedAt?: Timestamp;
-  reportedBy: string; // User ID
-  reportedByEmail?: string; // For notifications
-  matchedItemId?: string; // ID of matched item
-  matchedUserId?: string; // User who claimed
-  verificationRequired?: boolean;
-  verificationConfidence?: number;
-  verifiedBy?: string;
-  verifiedAt?: Timestamp;
-  collectionPoint?: string;
-  collectionCoordinates?: Coordinates;
-  collectionInstructions?: string;
-  createdAt?: Timestamp;
-  updatedAt?: Timestamp;
-}
-
-export interface ItemInput {
-  name: string;
-  description: string;
-  type: ItemType;
-  location: string;
-  coordinates?: Coordinates;
-  date: Date;
-  tags?: string[];
-  color?: string;
-  category?: string;
-  images?: File[] | string[]; // Files or base64/urls
-  reportedBy: string;
-  reporterEmail?: string; // Email of reporter
-  /** For Found items: where the owner collects it. Canonical name. */
-  collectionPoint?: string;
-  /** Accepted alias for `collectionPoint`, mapped on write. */
-  collectionLocation?: string;
-  collectionCoordinates?: Coordinates;
-}
 
 // ============ Conversation Types ============
 export type ConversationContext =
@@ -131,7 +63,6 @@ export type ConversationState =
   | 'search_matches'
   | 'match_confirmation'
   | 'show_results'
-  | 'complete'
   | 'complete'
   | 'terminated';
 
@@ -175,24 +106,6 @@ export interface MatchResult {
     timeScore: number;
     imageScore: number;
   };
-}
-
-export interface Match {
-  id: string;
-  lostItemId: string;
-  foundItemId: string;
-  // Comprehensive scoring breakdown (100 points total)
-  tagScore: number; // 0-30 points from tag matching
-  descriptionScore: number; // 0-20 points from description similarity
-  colorScore: number; // 0-15 points from color matching
-  locationScore: number; // 0-20 points from location proximity
-  timeScore: number; // 0-10 points from time window
-  imageScore: number; // 0-5 points from image analysis (optional)
-  matchScore: number; // Total: sum of all scores
-  /** `rejected` is an admin refusal of a proposal, kept rather than deleted. */
-  status: 'matched' | 'rejected';
-  createdAt: Timestamp;
-  updatedAt?: Timestamp;
 }
 
 // ============ Credit Types ============
@@ -274,22 +187,3 @@ export const CREDIT_VALUES = {
   SUCCESSFUL_MATCH_OWNER: 10, // Credits awarded to claimer when handover completes
   FALSE_CLAIM: -30,
 } as const;
-
-// ============ Admin Audit Types ============
-export type AdminAuditAction =
-  'item_approved' | 'item_rejected' | 'match_verified' | 'match_rejected';
-
-/**
- * One admin decision, kept out of the item document so the trail survives the
- * next decision instead of being overwritten by it.
- */
-export interface AdminAuditEntry {
-  id: string;
-  action: AdminAuditAction;
-  /** The item the decision was about. */
-  targetId: string;
-  actorId: string;
-  reason?: string;
-  details?: Record<string, unknown>;
-  createdAt: Timestamp;
-}

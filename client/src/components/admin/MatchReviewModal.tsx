@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Package, AlertTriangle } from 'lucide-react';
-import { verifyMatch, type Match } from '@/services/matchService';
-import type { Item } from '@/services/itemService';
+import { verifyMatch } from '@/services/matchService';
+import type { Item, Match } from '@/types/domain';
 
 interface MatchReviewModalProps {
   match: Match;

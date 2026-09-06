@@ -1,6 +1,10 @@
 import { Timestamp } from 'firebase-admin/firestore';
+import type {
+  HandoverCodeStatus,
+  HandoverRecord as SharedHandoverRecord,
+} from '../../../shared/domain.js';
 
-export type HandoverCodeStatus = 'pending' | 'verified' | 'blocked' | 'expired';
+export type { HandoverCodeStatus };
 
 /**
  * Version of the algorithm behind `codeHash`.
@@ -35,18 +39,13 @@ export interface HandoverCode {
   completionError?: string;
 }
 
-export interface Handover {
-  id?: string;
-  matchId: string;
-  lostItemId: string;
-  foundItemId: string;
-  lostPersonId: string;
-  foundPersonId: string;
-  lostPersonEmail: string;
-  foundPersonEmail: string;
-  itemName: string;
-  itemDetails: any; // Snapshot
-  codeHash: string; // The code used
-  handoverTime: Timestamp;
-  createdAt: Timestamp;
-}
+/**
+ * A completed handover.
+ *
+ * The shape lives in `shared/domain.d.ts` because the admin history and the
+ * user's own list both read it. The interface declared here described a
+ * document the service has never written: `itemName`, `lostPersonEmail` and a
+ * single `itemDetails` blob, where the write puts `lostItemDetails`,
+ * `foundItemDetails` and a person snapshot on each side (defect ARCH-08).
+ */
+export type Handover = SharedHandoverRecord<Timestamp>;

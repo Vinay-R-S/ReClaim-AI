@@ -15,44 +15,8 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-
-interface ItemDetails {
-  name: string;
-  description: string;
-  location: string;
-  date: any;
-  color?: string;
-  category?: string;
-  tags?: string[];
-  imageUrl?: string;
-  collectionPoint?: string;
-}
-
-interface PersonDetails {
-  email: string | null;
-  displayName: string | null;
-}
-
-interface HandoverRecord {
-  id: string;
-  matchId: string;
-  lostItemId: string;
-  foundItemId: string;
-  lostPersonId: string;
-  foundPersonId: string;
-  matchScore: number;
-  matchCreatedAt: any;
-  lostItemDetails: ItemDetails;
-  foundItemDetails: ItemDetails;
-  lostPersonDetails: PersonDetails;
-  foundPersonDetails: PersonDetails;
-  verificationCode: string;
-  handoverTime: any;
-  createdAt: any;
-  status: string;
-  blockchainTxHash?: string;
-  blockchainRecorded?: boolean;
-}
+import type { HandoverRecord } from '../../types/domain';
+import { toDate, type TimestampLike } from '../../lib/timestamps';
 
 export function HandoversPage() {
   const [handovers, setHandovers] = useState<HandoverRecord[]>([]);
@@ -75,32 +39,17 @@ export function HandoversPage() {
     }
   };
 
-  // Format timestamp
-  const formatDate = (timestamp: any) => {
-    if (!timestamp) return 'N/A';
-    try {
-      // Handle Firestore Timestamp
-      const secs = timestamp._seconds ?? timestamp.seconds;
-      if (secs) {
-        return new Date(secs * 1000).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-      }
-      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-      return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return 'Invalid Date';
-    }
+  const formatDate = (timestamp: TimestampLike) => {
+    const parsed = toDate(timestamp);
+    if (!parsed) return 'N/A';
+
+    return parsed.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   const filteredHandovers = handovers.filter(

@@ -11,7 +11,8 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { type User, getUsers, updateUserStatus } from '../../services/userService';
+import { getUsers, updateUserStatus } from '../../services/userService';
+import type { User } from '../../types/domain';
 import { UserDetailModal } from '../../components/admin/UserDetailModal';
 import { Timestamp } from 'firebase/firestore';
 // ExcelJS is loaded dynamically on export to reduce bundle size

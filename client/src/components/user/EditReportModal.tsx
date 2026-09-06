@@ -1,12 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, Loader2, CheckCircle, AlertCircle, Upload, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import {
-  type Item,
-  type ItemInput,
-  updateItemViaApi,
-  uploadItemImage,
-} from '../../services/itemService';
+import { updateItemViaApi, uploadItemImage } from '../../services/itemService';
+import type { Item, ItemInput } from '../../types/domain';
 import { Timestamp } from 'firebase/firestore';
 
 interface EditReportModalProps {

@@ -10,17 +10,8 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
-import { authFetch } from '../lib/authApi';
-
-interface UserProfile {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  photoURL: string | null;
-  role: 'user' | 'admin';
-  status: 'active' | 'blocked';
-  credits: number;
-}
+import { authPost, isApiError } from '../lib/api';
+import type { UserProfile } from '../types/domain';
 
 /**
  * Create or refresh the caller's profile document.
@@ -31,38 +22,26 @@ interface UserProfile {
  * them. A 403 means the account is blocked.
  */
 const loadProfile = async (user: User): Promise<UserProfile | 'blocked'> => {
-  const response = await authFetch('/api/auth/profile', {
-    method: 'POST',
-    body: JSON.stringify({
+  try {
+    const data = await authPost<{ profile: UserProfile }>('/api/auth/profile', {
       displayName: user.displayName ?? undefined,
       photoURL: user.photoURL ?? undefined,
-    }),
-  });
+    });
 
-  if (response.status === 403) return 'blocked';
-
-  if (!response.ok) {
-    throw new Error('Failed to load user profile');
+    return data.profile;
+  } catch (error) {
+    if (isApiError(error) && error.status === 403) return 'blocked';
+    throw error;
   }
-
-  const data = (await response.json()) as { profile: UserProfile };
-  return data.profile;
 };
 
 // Helper function to send login notification.
 // The endpoint now derives the uid from the ID token, so nothing is sent in the body.
 const sendLoginNotification = async () => {
   try {
-    const response = await authFetch('/api/auth/login-notification', {
-      method: 'POST',
-      body: JSON.stringify({
-        loginTime: new Date().toLocaleString(),
-      }),
+    await authPost('/api/auth/login-notification', {
+      loginTime: new Date().toLocaleString(),
     });
-
-    if (!response.ok) {
-      console.error('Failed to send login notification');
-    }
   } catch (error) {
     console.error('Error sending login notification:', error);
   }
