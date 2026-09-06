@@ -36,8 +36,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
 
-  // Redirect admin to admin dashboard
-  if (role === 'admin') {
+  // Send an admin landing on the bare /app to their own dashboard, but leave
+  // the rest of /app/* open: an admin is also a reporter, with handovers,
+  // reports and a profile of their own to open (defect UI-12).
+  if (role === 'admin' && location.pathname.replace(/\/+$/, '') === '/app') {
     return <Navigate to="/admin" replace />;
   }
 

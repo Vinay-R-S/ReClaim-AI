@@ -1,7 +1,6 @@
 import { collection, doc, getDocs, getDoc, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { authPut } from '../lib/authApi';
-import { getItems } from './itemService';
 
 export interface User {
   uid: string;
@@ -73,23 +72,18 @@ export async function updateUserStatus(uid: string, status: 'active' | 'blocked'
   await authPut(`/api/users/${uid}/status`, { status });
 }
 
-// Get items count for a user (by userId if exists, or by email)
-export async function getUserItemsCount(userEmail: string, userId?: string): Promise<number> {
+/**
+ * How many items a user has reported.
+ *
+ * Reads the running total the server keeps on the user document. This used to
+ * pull the whole item collection and filter it on `userId` and `userEmail`,
+ * neither of which an item carries: items are stored with `reportedBy` and
+ * `reportedByEmail`, so the count was always 0 (defect UI-08).
+ */
+export async function getUserItemsCount(uid: string): Promise<number> {
   try {
-    const items = await getItems();
-
-    // Try to match by userId first, then by email if userId field exists
-    if (userId) {
-      const count = items.filter(
-        (item) => (item as any).userId === userId || (item as any).userEmail === userEmail,
-      ).length;
-      return count;
-    }
-
-    // Fallback: match by email if userId field exists in items
-    const count = items.filter((item) => (item as any).userEmail === userEmail).length;
-
-    return count;
+    const user = await getUserById(uid);
+    return user?.totalItemsCount ?? 0;
   } catch (error) {
     console.error('Error counting user items:', error);
     return 0;

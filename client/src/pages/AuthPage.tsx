@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Loader2, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export function AuthPage() {
@@ -29,10 +29,10 @@ export function AuthPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Clear blocked error on mount
-  useEffect(() => {
-    clearBlockedError();
-  }, [clearBlockedError]);
+  // The blocked message is deliberately not cleared on mount. A blocked
+  // account is signed straight back out and lands here, so clearing it on
+  // arrival meant the reason never rendered (defect UI-11). It clears when the
+  // next sign-in is attempted, or when the user dismisses it.
 
   // Redirect if already logged in
   useEffect(() => {
@@ -187,6 +187,14 @@ export function AuthPage() {
                 <p className="text-base font-medium text-google-red mb-1">Account Blocked</p>
                 <p className="text-sm text-google-red">{blockedError}</p>
               </div>
+              <button
+                type="button"
+                onClick={clearBlockedError}
+                className="text-google-red hover:opacity-70 transition-opacity"
+                aria-label="Dismiss"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           )}
 

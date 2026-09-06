@@ -111,7 +111,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(null);
         setRole(null);
         setUserStatus(null);
-        setBlockedError(null); // Clear blocked error on sign out
+        // `blockedError` is deliberately left alone. Rejecting a blocked
+        // account signs it straight back out, so clearing the message here
+        // wiped it before /auth could ever render it (defect UI-11). It is
+        // cleared when a new sign-in is attempted instead.
         setLoading(false);
       }
     });
@@ -151,6 +154,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signInWithGoogle = async () => {
     try {
       setError(null);
+      setBlockedError(null);
       setLoading(true);
       const result = await signInWithPopup(auth, googleProvider);
 
@@ -172,6 +176,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signInWithEmail = async (email: string, password: string) => {
     try {
       setError(null);
+      setBlockedError(null);
       setLoading(true);
       const result = await signInWithEmailAndPassword(auth, email, password);
       if (result.user) {
@@ -190,22 +195,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signUpWithEmail = async (email: string, password: string, displayName?: string) => {
     try {
       setError(null);
+      setBlockedError(null);
       setLoading(true);
       const result = await createUserWithEmailAndPassword(auth, email, password);
 
-      if (displayName && result.user) {
-        // Update Firebase Auth profile with displayName
+      if (!result.user) return;
+
+      if (displayName) {
         await updateProfile(result.user, { displayName });
-
-        // onAuthStateChanged may have already created the profile from a user
-        // object that had no displayName yet, so send it explicitly. The
-        // endpoint is idempotent and fills the name in if it is still blank.
-        await loadUserProfile(result.user);
       }
 
-      if (result.user) {
-        await sendLoginNotification();
-      }
+      // One code path creates the profile, with or without a display name
+      // (defect LOG-20). Without this the no-name signup raced
+      // `onAuthStateChanged` for the same write, and the login notification
+      // below could reach the server before a profile existed. The endpoint is
+      // idempotent and the signup bonus is awarded once, server side, so
+      // running it after onAuthStateChanged has already run is harmless.
+      await loadUserProfile(result.user);
+      await sendLoginNotification();
     } catch (err: any) {
       const errorMessage = getAuthErrorMessage(err.code);
       setError(errorMessage);

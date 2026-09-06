@@ -17,6 +17,7 @@ import { Timestamp, doc, getDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db } from '../../lib/firebase';
 import { authFetch } from '../../lib/authApi';
+import { useCredits } from '../../hooks/useCredits';
 
 interface UserStats {
   totalReports: number;
@@ -24,7 +25,6 @@ interface UserStats {
   foundItems: number;
   matchedItems: number;
   claimedItems: number;
-  credits: number;
 }
 
 // Extract name from email (e.g., "john.doe@example.com" -> "John Doe")
@@ -45,6 +45,8 @@ function getNameFromEmail(email: string | null | undefined): string {
 
 export function ProfilePage() {
   const { user } = useAuth();
+  // Shared with the header badge, so both show the same balance.
+  const { credits } = useCredits();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<UserStats>({
     totalReports: 0,
@@ -52,7 +54,6 @@ export function ProfilePage() {
     foundItems: 0,
     matchedItems: 0,
     claimedItems: 0,
-    credits: 0,
   });
   const [userData, setUserData] = useState<{
     createdAt?: Timestamp | Date;
@@ -72,16 +73,28 @@ export function ProfilePage() {
 
         // Fetch user document from Firestore
         const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data();
+        const profile = userDoc.exists() ? userDoc.data() : null;
+
+        if (profile) {
           setUserData({
-            createdAt: data.createdAt,
-            lastLoginAt: data.lastLoginAt,
+            createdAt: profile.createdAt,
+            lastLoginAt: profile.lastLoginAt,
           });
+
+          // Independent of the item list below, so a failed list request does
+          // not report a user with reports as having none.
+          setStats((prev) => ({
+            ...prev,
+            totalReports: profile.totalItemsCount ?? prev.totalReports,
+            lostItems: profile.lostItemsCount ?? prev.lostItems,
+            foundItems: profile.foundItemsCount ?? prev.foundItems,
+          }));
         }
 
-        // Fetch user's items
-        const itemsResponse = await authFetch(`/api/items?reportedBy=${user.uid}`);
+        // Fetch user's items. The list is capped by the endpoint, so the
+        // report totals come from the counters the server maintains on the
+        // user document and only the status breakdown is counted here.
+        const itemsResponse = await authFetch(`/api/items?reportedBy=${user.uid}&limit=100`);
         if (itemsResponse.ok) {
           const itemsData = await itemsResponse.json();
           const items: Item[] = itemsData.items || [];
@@ -93,21 +106,13 @@ export function ProfilePage() {
 
           setStats((prev) => ({
             ...prev,
-            totalReports: items.length,
-            lostItems,
-            foundItems,
+            // A profile that predates the counters has none of these fields,
+            // so fall back to what the list shows.
+            totalReports: profile?.totalItemsCount ?? items.length,
+            lostItems: profile?.lostItemsCount ?? lostItems,
+            foundItems: profile?.foundItemsCount ?? foundItems,
             matchedItems,
             claimedItems,
-          }));
-        }
-
-        // Fetch credits
-        const creditsResponse = await authFetch(`/api/credits/${user.uid}`);
-        if (creditsResponse.ok) {
-          const creditsData = await creditsResponse.json();
-          setStats((prev) => ({
-            ...prev,
-            credits: creditsData.credits || 0,
           }));
         }
       } catch (error) {
@@ -456,7 +461,7 @@ export function ProfilePage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-text-secondary mb-1">Credits</p>
-                  <p className="text-3xl font-bold text-text-primary">{stats.credits}</p>
+                  <p className="text-3xl font-bold text-text-primary">{credits}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-yellow-200 flex items-center justify-center">
                   <span className="text-3xl">🪙</span>

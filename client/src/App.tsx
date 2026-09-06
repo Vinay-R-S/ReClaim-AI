@@ -41,6 +41,9 @@ const VerifyHandoverPage = lazy(() => import('./pages/VerifyHandoverPage'));
 const WelcomePage = lazy(() =>
   import('./pages/WelcomePage').then((m) => ({ default: m.WelcomePage })),
 );
+const NotFoundPage = lazy(() =>
+  import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })),
+);
 
 // Loading fallback component
 function PageLoader() {
@@ -121,6 +124,8 @@ function App() {
                 </AdminRoute>
               }
             />
+            {/* Anything else is a 404 rather than a blank screen */}
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>
       </Router>
