@@ -18,6 +18,31 @@ export class UserService {
   constructor(private readonly users: UserRepository = userRepository) {}
 
   /**
+   * A page of the accounts the admin screen manages.
+   *
+   * Admins are excluded here rather than in the browser: filtering after the
+   * page was taken would return short pages and hide the fact that more exist.
+   * It used to be a build-time admin email, which went stale the moment a
+   * second admin existed (defect SEC-21).
+   */
+  async listPage(limit: number, cursor?: string) {
+    const page = await this.users.listPage(limit, cursor);
+
+    return {
+      users: page.users
+        .filter((user) => user.role !== 'admin')
+        .map((user) => ({
+          ...user,
+          status: user.status ?? 'active',
+          lostItemsCount: user.lostItemsCount ?? 0,
+          foundItemsCount: user.foundItemsCount ?? 0,
+          totalItemsCount: user.totalItemsCount ?? 0,
+        })),
+      nextCursor: page.nextCursor,
+    };
+  }
+
+  /**
    * Block or unblock an account.
    *
    * An admin cannot change their own status: locking yourself out of the only

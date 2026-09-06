@@ -12,6 +12,7 @@
     "deploy-contract": "tsx scripts/deploy-contract.ts",
     "migrate:credits": "tsx scripts/migrate-credits.ts",
     "migrate:items": "tsx scripts/migrate-items.ts",
+    "migrate:handovers": "tsx scripts/migrate-handovers.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

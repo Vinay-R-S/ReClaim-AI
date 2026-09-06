@@ -15,6 +15,11 @@ import type {
  */
 export type { Coordinates };
 
+// `SystemSettings` is deliberately not re-exported here: the server's own
+// version in `settings.types.ts` adds the write-time timestamp, and two
+// exported types under one name is how they drift apart again.
+export type { AIProvider, LlmProviderName, MapCenter } from '../../../shared/domain.js';
+
 export type {
   AdminAuditAction,
   HandoverCodeStatus,

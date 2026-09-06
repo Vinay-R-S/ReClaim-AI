@@ -18,7 +18,6 @@ import {
   type StoredMatch,
 } from '../repositories/match.repository.js';
 import { findMatchesForFoundItem, findMatchesForLostItem } from './matching.service.js';
-import { toDate } from './matching/matching.pipeline.js';
 import { penalizeFalseClaim } from './credits.service.js';
 import { sendMatchNotification } from './email.service.js';
 import { initiateHandover } from './handover.service.js';
@@ -372,42 +371,76 @@ export class MatchService {
   }
 
   /**
-   * Score a user's open lost reports against the current found items.
+   * The matches already found for a user's open lost reports.
    *
-   * Only items still looking for a match are worth scoring. Running the pipeline
-   * for every lost item the user ever reported turned one request into dozens of
-   * sequential LLM waves.
+   * This used to re-run the whole pipeline for every one of the user's lost
+   * items on every request: one LLM call per candidate per item, on a route a
+   * page could poll (defect PERF-04). Matching runs when an item is created or
+   * approved and persists what it finds, so this reads those records instead.
+   * The manual `POST /api/items/:id/rematch` is what re-runs the pipeline.
    */
   async listForUser(userId: string) {
     const lostItems = await this.items.listByReporterAndType(userId, 'Lost');
     const openItems = lostItems.filter((item) => item.status === 'Pending');
-    const results = [];
 
-    for (const item of openItems) {
-      const date = toDate(item.date);
+    if (openItems.length === 0) return [];
 
-      // A legacy item with no date used to throw on `item.date.toDate()` and
-      // fail the whole request. It cannot be time-scored, so it is skipped.
-      if (!date) {
-        results.push({ lostItem: item, matches: [] });
-        continue;
-      }
+    const perItem = await Promise.all(
+      openItems.map(async (item) => ({
+        lostItem: item,
+        // Rejected proposals are kept as a record of what was refused, not
+        // offered back as candidates.
+        records: (await this.matches.listForItem(item.id)).filter(
+          (record) => record.status !== 'rejected',
+        ),
+      })),
+    );
 
-      const matches = await findMatchesForLostItem({
-        name: item.name,
-        description: item.description,
-        tags: item.tags,
-        color: item.color,
-        location: item.location,
-        coordinates: item.coordinates,
-        cloudinaryUrls: item.cloudinaryUrls,
-        date,
-      });
+    // One read per counterpart, de-duplicated: two of the user's reports can
+    // legitimately match the same found item.
+    const counterpartIds = [
+      ...new Set(
+        perItem.flatMap(({ lostItem, records }) =>
+          records.map((record) =>
+            record.lostItemId === lostItem.id ? record.foundItemId : record.lostItemId,
+          ),
+        ),
+      ),
+    ].filter((id): id is string => Boolean(id));
 
-      results.push({ lostItem: item, matches });
-    }
+    const counterparts = new Map(
+      (await Promise.all(counterpartIds.map((id) => this.items.findById(id))))
+        .filter((item): item is StoredItem => item !== null)
+        .map((item) => [item.id, item]),
+    );
 
-    return results;
+    return perItem.map(({ lostItem, records }) => ({
+      lostItem,
+      matches: records
+        .map((record) => {
+          const counterpartId =
+            record.lostItemId === lostItem.id ? record.foundItemId : record.lostItemId;
+          const counterpart = counterpartId ? counterparts.get(counterpartId) : undefined;
+
+          if (!counterpart) return null;
+
+          return {
+            itemId: counterpart.id,
+            item: counterpart,
+            score: record.matchScore ?? 0,
+            breakdown: {
+              tagScore: record.tagScore ?? 0,
+              descriptionScore: record.descriptionScore ?? 0,
+              colorScore: record.colorScore ?? 0,
+              locationScore: record.locationScore ?? 0,
+              timeScore: record.timeScore ?? 0,
+              imageScore: record.imageScore ?? 0,
+            },
+          };
+        })
+        .filter((match): match is NonNullable<typeof match> => match !== null)
+        .sort((a, b) => b.score - a.score),
+    }));
   }
 }
 

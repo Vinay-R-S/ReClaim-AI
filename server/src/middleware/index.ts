@@ -10,8 +10,11 @@ export {
   type UserRole,
 } from './auth.middleware.js';
 export {
+  aiLimiter,
+  cctvScanLimiter,
   authLimiter,
   apiLimiter,
+  loginNotificationLimiter,
   resetLimiter,
   itemCreateLimiter,
   testingApiLimiter,

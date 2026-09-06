@@ -95,6 +95,18 @@ export const emailString = z.string().email('Invalid email format').max(255, 'Em
  * Base64 payload (data URL or bare base64). The upload service checks the
  * content, this only bounds the shape.
  */
+/**
+ * A page cursor: the id of the last document on the previous page.
+ *
+ * Constrained to one path segment. `?cursor=a/b` reaches `collection.doc()` as
+ * a two-segment path, which the Admin SDK rejects with a throw rather than a
+ * refusal, so it surfaced as a 500.
+ */
+export const cursorString = z
+  .string()
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/, 'Invalid cursor');
+
 export const imagePayload = z.string().min(1, 'Image data required');
 
 export const idParamsSchema = z.object({ id: idString });

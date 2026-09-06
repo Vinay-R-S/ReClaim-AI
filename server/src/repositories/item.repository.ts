@@ -17,6 +17,8 @@ export interface ItemListFilters {
   moderation?: ModerationStatus;
   reportedBy?: string;
   limit: number;
+  /** Id of the last item on the previous page. */
+  cursor?: string;
 }
 
 export type StoredItem = Item & { id: string };
@@ -44,7 +46,9 @@ export class ItemRepository {
    * `orderBy` for that case keeps the query to equality filters, which
    * Firestore serves from single-field indexes; the caller sorts the page.
    */
-  async list(filters: ItemListFilters): Promise<{ items: StoredItem[]; sortedByQuery: boolean }> {
+  async list(
+    filters: ItemListFilters,
+  ): Promise<{ items: StoredItem[]; sortedByQuery: boolean; nextCursor: string | null }> {
     const filterModeration = Boolean(filters.moderation);
 
     let query = filterModeration
@@ -55,12 +59,32 @@ export class ItemRepository {
     if (filters.status) query = query.where('status', '==', filters.status);
     if (filters.reportedBy) query = query.where('reportedBy', '==', filters.reportedBy);
 
-    const snapshot = await (filterModeration ? query.get() : query.limit(filters.limit).get());
+    // A cursor only means anything against an ordered query. The
+    // moderation-filtered branch is sorted after the fetch, so it has no stable
+    // page boundary to resume from.
+    if (!filterModeration && filters.cursor) {
+      const anchor = await this.items.doc(filters.cursor).get();
 
-    return {
-      items: snapshot.docs.map((doc) => ({ ...(doc.data() as Item), id: doc.id })),
-      sortedByQuery: !filterModeration,
-    };
+      // The anchor was deleted between pages. Ignoring it would restart the
+      // query at page one and hand back the same cursor, which is a caller
+      // that walks the first page until it hits its own page cap.
+      if (!anchor.exists) {
+        return { items: [], sortedByQuery: true, nextCursor: null };
+      }
+
+      query = query.startAfter(anchor);
+    }
+
+    const snapshot = await (filterModeration ? query.get() : query.limit(filters.limit).get());
+    const items = snapshot.docs.map((doc) => ({ ...(doc.data() as Item), id: doc.id }));
+
+    // A full page means there may be another; a short one is the end.
+    const nextCursor =
+      !filterModeration && items.length === filters.limit
+        ? (items[items.length - 1]?.id ?? null)
+        : null;
+
+    return { items, sortedByQuery: !filterModeration, nextCursor };
   }
 
   /**

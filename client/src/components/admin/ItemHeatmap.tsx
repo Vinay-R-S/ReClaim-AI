@@ -4,16 +4,27 @@
  * Uses Leaflet with the existing Geoapify tiles
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { MapPin, Map as MapIcon, Loader2 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getItems } from '@/services/itemService';
-import type { Item } from '@/types/domain';
-import { authGet } from '../../lib/api';
+import type { DashboardStats, MapCenter } from '@/types/domain';
+
+type HeatmapPoint = DashboardStats['heatmapPoints'][number];
 
 interface ItemHeatmapProps {
   radiusKm?: number;
+  /** The dashboard is still waiting for its first response. */
+  loading?: boolean;
+  /**
+   * Positions from the dashboard stats endpoint.
+   *
+   * This component used to read the whole item collection itself, which is one
+   * of the seven full-collection client reads PERF-07 is about. It draws what
+   * it is given now.
+   */
+  points: HeatmapPoint[];
+  mapCenter?: MapCenter;
 }
 
 // Custom marker icons using divIcon for better performance
@@ -33,13 +44,19 @@ const createMarkerIcon = (color: string, borderColor: string) =>
     popupAnchor: [0, -10],
   });
 
+/** Where the map opens when nothing else says otherwise. */
+const DEFAULT_CENTER = { lat: 12.9716, lng: 77.5946 };
+
 const lostMarkerIcon = createMarkerIcon('#EA4335', '#B91C1C');
 const foundMarkerIcon = createMarkerIcon('#34A853', '#166534');
 
-export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
-  const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
+export function ItemHeatmap({
+  radiusKm = 2.5,
+  loading = false,
+  points,
+  mapCenter,
+}: ItemHeatmapProps) {
+  const items = points;
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -48,57 +65,27 @@ export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
 
   const apiKey = import.meta.env.VITE_GEOAPIFY_API_KEY;
 
-  // Fetch items and settings
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch items and settings in parallel
-        const [allItems, settingsResponse] = await Promise.all([
-          getItems(),
-          // Settings are decoration here; a rejected token refresh must not
-          // discard the items that loaded alongside them.
-          authGet<{ mapCenter?: { lat?: number; lng?: number } }>('/api/settings').catch(
-            () => null,
-          ),
-        ]);
+  /**
+   * Priority: the configured map centre, then the average of what is on the
+   * map, then Bangalore.
+   *
+   * Memoised on the numbers rather than on the arrays. A silent refresh hands
+   * this component new array and object identities every thirty seconds, and
+   * the map init effect depends on the centre: recomputing it destroyed and
+   * rebuilt the Leaflet map twice a minute, throwing away the admin's pan and
+   * zoom and re-fetching every tile.
+   */
+  const averageLat = items.length
+    ? items.reduce((sum, item) => sum + item.lat, 0) / items.length
+    : null;
+  const averageLng = items.length
+    ? items.reduce((sum, item) => sum + item.lng, 0) / items.length
+    : null;
 
-        // Filter items that have coordinates
-        const itemsWithCoords = allItems.filter(
-          (item) => item.coordinates?.lat && item.coordinates?.lng,
-        );
-        setItems(itemsWithCoords);
+  const centerLat = mapCenter?.lat ?? averageLat ?? DEFAULT_CENTER.lat;
+  const centerLng = mapCenter?.lng ?? averageLng ?? DEFAULT_CENTER.lng;
 
-        // Priority for center:
-        // 1. Saved mapCenter from settings
-        // 2. Average of item coordinates
-        // 3. Default (Bangalore)
-        if (settingsResponse?.mapCenter?.lat && settingsResponse?.mapCenter?.lng) {
-          setCenter({
-            lat: settingsResponse.mapCenter.lat,
-            lng: settingsResponse.mapCenter.lng,
-          });
-        } else if (itemsWithCoords.length > 0) {
-          const avgLat =
-            itemsWithCoords.reduce((sum, item) => sum + (item.coordinates?.lat || 0), 0) /
-            itemsWithCoords.length;
-          const avgLng =
-            itemsWithCoords.reduce((sum, item) => sum + (item.coordinates?.lng || 0), 0) /
-            itemsWithCoords.length;
-          setCenter({ lat: avgLat, lng: avgLng });
-        } else {
-          // Default to Bangalore if no items
-          setCenter({ lat: 12.9716, lng: 77.5946 });
-        }
-      } catch (error) {
-        console.error('Failed to fetch data for heatmap:', error);
-        setCenter({ lat: 12.9716, lng: 77.5946 });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
+  const center = useMemo(() => ({ lat: centerLat, lng: centerLng }), [centerLat, centerLng]);
 
   // Initialize map when center is available
   useEffect(() => {
@@ -157,12 +144,8 @@ export function ItemHeatmap({ radiusKm = 2.5 }: ItemHeatmapProps) {
 
     // Add new markers
     items.forEach((item) => {
-      if (!item.coordinates?.lat || !item.coordinates?.lng) return;
-
       const icon = item.type === 'Lost' ? lostMarkerIcon : foundMarkerIcon;
-      const marker = L.marker([item.coordinates.lat, item.coordinates.lng], {
-        icon,
-      }).addTo(mapRef.current!);
+      const marker = L.marker([item.lat, item.lng], { icon }).addTo(mapRef.current!);
 
       // Create popup content
       const statusColor =

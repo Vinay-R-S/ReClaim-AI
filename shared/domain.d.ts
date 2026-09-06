@@ -265,10 +265,7 @@ export interface HandoverRecord<TTime = unknown> {
 /* ============ Admin audit ============ */
 
 export type AdminAuditAction =
-  | 'item_approved'
-  | 'item_rejected'
-  | 'match_verified'
-  | 'match_rejected';
+  'item_approved' | 'item_rejected' | 'match_verified' | 'match_rejected';
 
 export interface AdminAuditEntry<TTime = unknown> {
   id: string;
@@ -325,4 +322,53 @@ export interface SystemSettingsResponse extends SystemSettings {
 export interface AnalyticsResponse {
   visitorCount: number;
   lastVisit?: unknown;
+}
+
+/* ============ Dashboard statistics ============ */
+
+export interface DashboardKpis {
+  totalItems: number;
+  lostTotal: number;
+  foundTotal: number;
+  activeLost: number;
+  activeFound: number;
+  totalMatches: number;
+  pendingReview: number;
+  claimed: number;
+  matched: number;
+  matchSuccessRate: number;
+}
+
+/**
+ * `GET /api/stats/dashboard`: everything the admin dashboard draws, computed
+ * server side so the browser stops reading three whole collections to count
+ * them (defect PERF-07).
+ */
+export interface DashboardStats {
+  kpis: DashboardKpis;
+  scoreDistribution: { range: string; count: number }[];
+  matchTrend: { date: string; matches: number }[];
+  handoverTrend: { date: string; handovers: number }[];
+  /** All-time, not the windowed trend above. */
+  totalHandovers: number;
+  efficiency: { matched: number; unmatched: number };
+  recentMatches: {
+    id: string;
+    matchScore: number;
+    lostItemName: string;
+    foundItemName: string;
+    createdAt: string | null;
+  }[];
+  /** Just enough of an item to place and label a marker. */
+  heatmapPoints: {
+    id: string;
+    name: string;
+    type: ItemType;
+    status: ItemStatus;
+    location: string;
+    lat: number;
+    lng: number;
+  }[];
+  mapCenter?: MapCenter;
+  generatedAt: string;
 }

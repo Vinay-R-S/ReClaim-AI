@@ -39,13 +39,75 @@ export const authLimiter = rateLimit({
 });
 
 /**
- * General API routes: 10,000 requests per 15 minutes per IP
+ * General API routes.
+ *
+ * It was 10,000, which is not a limit in practice: a scraper hitting the
+ * browse list would never reach it (defect PERF-09). 1,500 is a real ceiling
+ * that still leaves room for how an admin session actually behaves now that
+ * the client pages through lists: one users screen is two walks, a dashboard
+ * poll is one request every thirty seconds, and every user modal is another
+ * walk.
  */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10000,
+  max: 1500,
   message: {
     error: 'Too many requests. Please slow down.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * The routes that cost money and time: image analysis, description
+ * enhancement, CCTV detection and video analysis.
+ *
+ * These sit behind `apiLimiter` too, but its ceiling is set for cheap reads.
+ * One video analysis is a YOLO pass over hundreds of frames plus an LLM call,
+ * so a much smaller budget applies to the group as a whole.
+ */
+export const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: {
+    error: 'Too many AI requests. Please wait a few minutes and try again.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * The live CCTV scan.
+ *
+ * Separate from `aiLimiter` because it is a different shape of work: the Live
+ * tab runs one detection every four seconds while it is open, which is 225 in
+ * a fifteen-minute window. Under the AI budget of 60 the tab died silently
+ * about four minutes after an admin opened it.
+ */
+export const cctvScanLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 400,
+  message: {
+    error: 'Too many detection requests. Please pause the live scan for a moment.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * Sign-in notifications.
+ *
+ * Deliberately not the auth limiter. That one allows five attempts per IP per
+ * fifteen minutes, which is right for credentials and wrong for a notice that
+ * fires once per successful sign-in: a household, an office or a phone on
+ * CGNAT would exhaust it with legitimate logins and then see failures on a
+ * path that has nothing to do with authentication (defect PERF-09).
+ */
+export const loginNotificationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: {
+    error: 'Too many sign-in notifications. Please try again shortly.',
   },
   standardHeaders: true,
   legacyHeaders: false,
