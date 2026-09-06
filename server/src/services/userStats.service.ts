@@ -3,7 +3,8 @@
  */
 
 import { FieldValue } from 'firebase-admin/firestore';
-import { collections } from '../utils/firebase-admin.js';
+import { itemRepository } from '../repositories/item.repository.js';
+import { userRepository } from '../repositories/user.repository.js';
 import { ItemType } from '../types/index.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -32,7 +33,7 @@ export async function updateUserItemCounts(
     }
 
     // Update user document
-    await collections.users.doc(userId).update(updateData);
+    await userRepository.update(userId, updateData);
 
     log.info(`Updated ${itemType} item count for user ${userId}: ${operation} by 1`);
 
@@ -49,7 +50,7 @@ export async function updateUserItemCounts(
           totalItemsCount: 1,
         };
 
-        await collections.users.doc(userId).set(initialData, { merge: true });
+        await userRepository.merge(userId, initialData);
         log.info(`Created initial item counts for user ${userId}`);
 
         return { success: true };
@@ -70,14 +71,11 @@ export async function initializeUserItemCounts(
   userId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await collections.users.doc(userId).set(
-      {
-        lostItemsCount: 0,
-        foundItemsCount: 0,
-        totalItemsCount: 0,
-      },
-      { merge: true },
-    );
+    await userRepository.merge(userId, {
+      lostItemsCount: 0,
+      foundItemsCount: 0,
+      totalItemsCount: 0,
+    });
 
     log.info(`Initialized item counts for new user ${userId}`);
 
@@ -96,16 +94,14 @@ export async function recalculateUserItemCounts(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Get all items for this user
-    const snapshot = await collections.items.where('reportedBy', '==', userId).get();
-
-    const items = snapshot.docs.map((doc) => doc.data());
+    const items = await itemRepository.listAllByReporter(userId);
 
     const lostCount = items.filter((item) => item.type === 'Lost').length;
     const foundCount = items.filter((item) => item.type === 'Found').length;
     const totalCount = items.length;
 
     // Update user with recalculated counts
-    await collections.users.doc(userId).update({
+    await userRepository.update(userId, {
       lostItemsCount: lostCount,
       foundItemsCount: foundCount,
       totalItemsCount: totalCount,
@@ -131,8 +127,7 @@ export async function getUserItemCounts(userId: string): Promise<{
   totalItemsCount: number;
 }> {
   try {
-    const userDoc = await collections.users.doc(userId).get();
-    const userData = userDoc.data();
+    const userData = await userRepository.findById(userId);
 
     return {
       lostItemsCount: userData?.lostItemsCount || 0,

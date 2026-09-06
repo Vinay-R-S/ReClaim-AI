@@ -17,7 +17,6 @@ import notificationsRoutes from './routes/notifications.js';
 import settingsRoutes from './routes/settings.js';
 import verificationRoutes from './routes/verification.js';
 import handoverRoutes from './routes/handover.js';
-import handoversRoutes from './routes/handovers.js';
 import creditsRoutes from './routes/credits.js';
 import authRoutes from './routes/auth.js';
 import cctvRoutes from './routes/cctv.js';
@@ -31,7 +30,7 @@ import {
   errorHandler,
   notFoundHandler,
 } from './middleware/index.js';
-import { collections } from './utils/firebase-admin.js';
+import { settingsRepository } from './repositories/settings.repository.js';
 import { env } from './config/env.js';
 import { createLogger } from './utils/logger.js';
 
@@ -49,8 +48,8 @@ async function isTestingModeEnabled(): Promise<boolean> {
   }
 
   try {
-    const doc = await collections.settings.doc('system').get();
-    testingModeCache = doc.exists ? doc.data()?.testingMode === true : false;
+    const settings = await settingsRepository.getSystem();
+    testingModeCache = settings?.testingMode === true;
     lastCacheUpdate = now;
     return testingModeCache;
   } catch (error) {
@@ -133,8 +132,11 @@ export function createApp(): express.Express {
   app.use('/api/notifications', notificationsRoutes);
   app.use('/api/settings', settingsRoutes);
   app.use('/api/verification', verificationRoutes);
+  // One router, two mount points. `/api/handovers/user/:userId` and
+  // `/api/handover/verify` were separate files with no rule about which
+  // endpoint lived where; both paths are kept so no client call changes.
   app.use('/api/handover', handoverRoutes);
-  app.use('/api/handovers', handoversRoutes);
+  app.use('/api/handovers', handoverRoutes);
   app.use('/api/credits', creditsRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/cctv', cctvRoutes);

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
-import { collections, db } from '../utils/firebase-admin.js';
+import { handoverRepository } from '../repositories/handover.repository.js';
+import { userRepository } from '../repositories/user.repository.js';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { DocumentReference } from 'firebase-admin/firestore';
 import { Item } from '../types/index.js';
@@ -8,7 +9,7 @@ import {
   sendHandoverCodeToLostPerson,
   sendHandoverLinkToFoundPerson,
   sendHandoverBlockedNotice,
-} from './email.js';
+} from './email.service.js';
 import { haversineDistance, calculateTimeDifference } from '../utils/scoring.js';
 import { createLogger } from '../utils/logger.js';
 import { env } from '../config/env.js';
@@ -209,12 +210,11 @@ async function writeAuditEntry(
   details: Record<string, unknown>,
 ): Promise<void> {
   try {
-    await collections.handoverAudit.add({
+    await handoverRepository.writeAudit({
       action,
       matchId,
       actorId: actorId || null,
       details,
-      createdAt: FieldValue.serverTimestamp(),
     });
   } catch (error) {
     // An audit write must never take the operation down with it.
@@ -232,22 +232,7 @@ async function writeAuditEntry(
  * newest rather than an arbitrary one.
  */
 async function resolveCodeRef(matchId: string): Promise<DocumentReference> {
-  const direct = collections.handoverCodes.doc(matchId);
-  const directSnap = await direct.get();
-
-  if (directSnap.exists) return direct;
-
-  const legacy = await collections.handoverCodes.where('matchId', '==', matchId).get();
-
-  if (legacy.empty) return direct;
-
-  const newest = legacy.docs.reduce((latest, doc) => {
-    const a = toDate(doc.data()?.createdAt)?.getTime() ?? 0;
-    const b = toDate(latest.data()?.createdAt)?.getTime() ?? 0;
-    return a > b ? doc : latest;
-  });
-
-  return newest.ref;
+  return handoverRepository.resolveCodeRef(matchId, toDate);
 }
 
 /**
@@ -264,17 +249,13 @@ export async function initiateHandover(
   options: InitiateHandoverOptions = {},
 ): Promise<HandoverResult> {
   try {
-    const [lostDoc, foundDoc] = await Promise.all([
-      collections.items.doc(lostItemId).get(),
-      collections.items.doc(foundItemId).get(),
-    ]);
+    const pair = await handoverRepository.loadPairForInitiate(lostItemId, foundItemId);
 
-    if (!lostDoc.exists || !foundDoc.exists) {
+    if (!pair.lostItem || !pair.foundItem) {
       return { success: false, message: 'Items not found' };
     }
 
-    const lostItem = { id: lostDoc.id, ...lostDoc.data() } as Item;
-    const foundItem = { id: foundDoc.id, ...foundDoc.data() } as Item;
+    const { lostItem, foundItem } = pair;
 
     // 1. Criteria. Automatic handovers must pass; an admin may override.
     const criteriaFailure = validateHandoverCriteria(lostItem, foundItem);
@@ -309,7 +290,7 @@ export async function initiateHandover(
 
     const codeRef = await resolveCodeRef(matchId);
 
-    const issue = await db.runTransaction<IssueOutcome>(async (tx) => {
+    const issue = await handoverRepository.runTransaction<IssueOutcome>(async (tx) => {
       const snap = await tx.get(codeRef);
       const existing = snap.exists ? (snap.data() as HandoverCode) : undefined;
 
@@ -439,8 +420,9 @@ async function resolveReporterEmail(item: Item): Promise<string | undefined> {
   if (item.reportedByEmail) return item.reportedByEmail;
   if (!item.reportedBy) return undefined;
 
-  const userDoc = await collections.users.doc(item.reportedBy).get();
-  return userDoc.data()?.email;
+  const user = await userRepository.findById(item.reportedBy);
+
+  return user?.email;
 }
 
 type VerifyOutcome =
@@ -466,7 +448,7 @@ export async function verifyHandoverCode(
   try {
     const codeRef = await resolveCodeRef(matchId);
 
-    const outcome = await db.runTransaction<VerifyOutcome>(async (tx) => {
+    const outcome = await handoverRepository.runTransaction<VerifyOutcome>(async (tx) => {
       const snap = await tx.get(codeRef);
 
       if (!snap.exists) return { kind: 'not_found' };
@@ -569,25 +551,16 @@ async function completeHandover(
   data: HandoverCode,
 ): Promise<boolean> {
   try {
-    const batch = db.batch();
-
-    const [lostItemDoc, foundItemDoc, matchDoc] = await Promise.all([
-      collections.items.doc(data.lostItemId).get(),
-      collections.items.doc(data.foundItemId).get(),
-      collections.matches.doc(matchId).get(),
-    ]);
-
-    const lostItem = lostItemDoc.exists
-      ? ({ id: lostItemDoc.id, ...lostItemDoc.data() } as Item)
-      : null;
-    const foundItem = foundItemDoc.exists
-      ? ({ id: foundItemDoc.id, ...foundItemDoc.data() } as Item)
-      : null;
-    const matchData = matchDoc.exists ? matchDoc.data() : null;
+    const context = await handoverRepository.loadCompletionContext(
+      matchId,
+      data.lostItemId,
+      data.foundItemId,
+    );
+    const { lostItem, foundItem, matchData } = context;
 
     if (!lostItem || !foundItem) {
       log.warn(
-        `Handover ${matchId} completing with a missing item document (lost: ${lostItemDoc.exists}, found: ${foundItemDoc.exists})`,
+        `Handover ${matchId} completing with a missing item document (lost: ${context.lostItemExists}, found: ${context.foundItemExists})`,
       );
     }
 
@@ -596,11 +569,10 @@ async function completeHandover(
       loadUser(foundItem?.reportedBy),
     ]);
 
-    // 1. Handover record. Written from whatever survives, never skipped. The
-    //    id is the match id, so a retry after a partial failure rewrites the
-    //    same document instead of leaving a second one behind.
-    const handoverRef = collections.handovers.doc(matchId);
-    batch.set(handoverRef, {
+    // The record is written from whatever survives, never skipped: a handover
+    // that happened is worth recording even when one of its items has since
+    // been deleted.
+    const record = {
       matchId,
       lostItemId: data.lostItemId,
       foundItemId: data.foundItemId,
@@ -631,38 +603,18 @@ async function completeHandover(
       handoverTime: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(),
       status: 'completed',
+    };
+
+    const handoverRef = await handoverRepository.completeHandover({
+      matchId,
+      codeDocRef,
+      record,
+      matchData,
+      lostItemId: data.lostItemId,
+      foundItemId: data.foundItemId,
+      lostItemExists: context.lostItemExists,
+      foundItemExists: context.foundItemExists,
     });
-
-    // 2. Link the completed handover back to the code document.
-    batch.set(codeDocRef, { handoverId: handoverRef.id }, { merge: true });
-
-    // 3. Archive the match, then remove it from the active collection. Both
-    //    steps are skipped when the match was synthesized and never persisted.
-    if (matchData) {
-      batch.set(collections.matchHistory.doc(matchId), {
-        ...matchData,
-        status: 'claimed',
-        claimedAt: FieldValue.serverTimestamp(),
-        handoverId: handoverRef.id,
-      });
-      batch.delete(collections.matches.doc(matchId));
-    }
-
-    // 4. Items, only the ones that still exist.
-    if (lostItemDoc.exists) {
-      batch.update(collections.items.doc(data.lostItemId), {
-        status: 'Claimed',
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    }
-    if (foundItemDoc.exists) {
-      batch.update(collections.items.doc(data.foundItemId), {
-        status: 'Claimed',
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    }
-
-    await batch.commit();
 
     await awardHandoverCredits(data, lostItem, foundItem, lostUser?.role, foundUser?.role);
     await recordOnBlockchain(
@@ -720,10 +672,11 @@ async function loadUser(
 ): Promise<{ email?: string; displayName?: string; role?: string } | null> {
   if (!userId) return null;
 
-  const doc = await collections.users.doc(userId).get();
-  if (!doc.exists) return null;
+  const user = await userRepository.findById(userId);
 
-  return doc.data() as { email?: string; displayName?: string; role?: string };
+  if (!user) return null;
+
+  return user as { email?: string; displayName?: string; role?: string };
 }
 
 /**
@@ -743,7 +696,7 @@ async function awardHandoverCredits(
 
     if (!lostUserId || !foundUserId) return;
 
-    const { awardOwnerCredits, awardFinderCredits } = await import('./credits.js');
+    const { awardOwnerCredits, awardFinderCredits } = await import('./credits.service.js');
 
     // Keyed on the item, so a retried handover cannot pay out twice.
     if (lostUserRole !== 'admin') {
@@ -835,17 +788,10 @@ async function onSessionBlocked(matchId: string, data: HandoverCode): Promise<vo
   log.warn(`Handover session ${matchId} blocked after ${HANDOVER_CONFIG.MAX_ATTEMPTS} attempts`);
 
   try {
-    const [lostItemDoc, foundItemDoc] = await Promise.all([
-      collections.items.doc(data.lostItemId).get(),
-      collections.items.doc(data.foundItemId).get(),
-    ]);
-
-    const lostItem = lostItemDoc.exists
-      ? ({ id: lostItemDoc.id, ...lostItemDoc.data() } as Item)
-      : null;
-    const foundItem = foundItemDoc.exists
-      ? ({ id: foundItemDoc.id, ...foundItemDoc.data() } as Item)
-      : null;
+    const { lostItem, foundItem } = await handoverRepository.loadSessionItems(
+      data.lostItemId,
+      data.foundItemId,
+    );
 
     const itemName = lostItem?.name || foundItem?.name || 'your item';
 
@@ -870,14 +816,7 @@ async function onSessionBlocked(matchId: string, data: HandoverCode): Promise<vo
 }
 
 async function loadAdminEmails(): Promise<string[]> {
-  const snapshot = await collections.users
-    .where('role', '==', 'admin')
-    .limit(ADMIN_NOTIFY_LIMIT)
-    .get();
-
-  return snapshot.docs
-    .map((doc) => doc.data()?.email)
-    .filter((email): email is string => typeof email === 'string' && email.length > 0);
+  return userRepository.listAdminEmails(ADMIN_NOTIFY_LIMIT);
 }
 
 /**

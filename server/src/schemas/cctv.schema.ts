@@ -34,3 +34,7 @@ export const cctvDescribeSchema = z.object({
   image: imagePayload,
   detectedClass: optionalText(100),
 });
+
+export type CctvDetectBody = z.infer<typeof cctvDetectSchema>;
+export type CctvAnalyzeBody = z.infer<typeof cctvAnalyzeSchema>;
+export type CctvDescribeBody = z.infer<typeof cctvDescribeSchema>;

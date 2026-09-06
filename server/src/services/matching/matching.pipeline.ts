@@ -12,7 +12,7 @@
  * not here.
  */
 
-import { collections } from '../../utils/firebase-admin.js';
+import { itemRepository } from '../../repositories/item.repository.js';
 import { Item, ItemType } from '../../types/index.js';
 import {
   LOCATION_TEXT_MAX_SCORE,
@@ -197,14 +197,10 @@ export class MatchingService {
   private async retrieve(subjectType: ItemType, excludeId?: string): Promise<Item[]> {
     const oppositeType: ItemType = subjectType === 'Lost' ? 'Found' : 'Lost';
 
-    const snapshot = await collections.items
-      .where('type', '==', oppositeType)
-      .where('status', '==', 'Pending')
-      .get();
+    const candidates = await itemRepository.listPendingByType(oppositeType);
 
-    return snapshot.docs
-      .filter((doc) => doc.id !== excludeId)
-      .map((doc) => ({ id: doc.id, ...doc.data() }) as Item)
+    return candidates
+      .filter((item) => item.id !== excludeId)
       .filter((item) => item.moderation === undefined || item.moderation === 'approved');
   }
 

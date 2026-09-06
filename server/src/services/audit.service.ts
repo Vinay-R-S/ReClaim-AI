@@ -11,7 +11,7 @@
  */
 
 import { FieldValue } from 'firebase-admin/firestore';
-import { collections } from '../utils/firebase-admin.js';
+import { auditRepository } from '../repositories/audit.repository.js';
 import { AdminAuditAction, AdminAuditEntry } from '../types/index.js';
 import { stripUndefined } from '../utils/firestore.js';
 import { createLogger } from '../utils/logger.js';
@@ -38,16 +38,13 @@ interface RecordOptions {
  */
 export async function recordAdminAction(options: RecordOptions): Promise<void> {
   try {
-    await collections.adminAudit.add(
-      stripUndefined({
-        action: options.action,
-        targetId: options.targetId,
-        actorId: options.actorId,
-        reason: options.reason,
-        details: options.details,
-        createdAt: FieldValue.serverTimestamp(),
-      }),
-    );
+    await auditRepository.add({
+      action: options.action,
+      targetId: options.targetId,
+      actorId: options.actorId,
+      reason: options.reason,
+      details: options.details,
+    });
   } catch (error) {
     log.error(`Failed to record admin action ${options.action} on ${options.targetId}`, error);
   }
@@ -62,12 +59,9 @@ export async function listAdminAuditForTarget(
 ): Promise<AdminAuditEntry[]> {
   const bounded = Math.min(Math.max(limit, 1), MAX_LIMIT);
 
-  // Ordered in memory rather than with `orderBy`, which would need a composite
-  // index on (targetId, createdAt) for a list that is a handful of entries long.
-  const snapshot = await collections.adminAudit.where('targetId', '==', targetId).get();
+  const entries = await auditRepository.listForTarget(targetId);
 
-  return snapshot.docs
-    .map((doc) => ({ id: doc.id, ...doc.data() }) as AdminAuditEntry)
+  return entries
     .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
     .slice(0, bounded);
 }

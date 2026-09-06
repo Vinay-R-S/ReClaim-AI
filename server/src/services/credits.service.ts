@@ -11,9 +11,10 @@
  */
 
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { collections, db } from '../utils/firebase-admin.js';
+import { creditRepository } from '../repositories/credit.repository.js';
+import { userRepository } from '../repositories/user.repository.js';
 import { CREDIT_VALUES, CreditTransaction } from '../types/index.js';
-import { sendCreditsNotification } from './email.js';
+import { sendCreditsNotification } from './email.service.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('credits');
@@ -74,8 +75,9 @@ export function creditKey(reason: CreditReason, userId: string, itemId?: string)
  */
 export async function getUserCredits(userId: string): Promise<number> {
   try {
-    const userDoc = await collections.users.doc(userId).get();
-    return (userDoc.data()?.credits as number | undefined) ?? 0;
+    const user = await userRepository.findById(userId);
+
+    return user?.credits ?? 0;
   } catch (error) {
     log.error('Error getting user credits:', error);
     return 0;
@@ -100,14 +102,15 @@ export async function applyCredits(
   const amount = CREDIT_VALUES[reason];
 
   try {
-    const userRef = collections.users.doc(userId);
-    const ledgerRef = idempotencyKey
-      ? collections.creditTransactions.doc(idempotencyKey)
-      : collections.creditTransactions.doc();
+    const userRef = creditRepository.userRef(userId);
+    const ledgerRef = creditRepository.ledgerRef(idempotencyKey);
 
-    const outcome = await db.runTransaction(async (tx) => {
+    const outcome = await creditRepository.runTransaction(async (tx) => {
       // Every read has to happen before any write in a Firestore transaction.
-      const [userSnapshot, ledgerSnapshot] = await Promise.all([tx.get(userRef), tx.get(ledgerRef)]);
+      const [userSnapshot, ledgerSnapshot] = await Promise.all([
+        tx.get(userRef),
+        tx.get(ledgerRef),
+      ]);
       const current = (userSnapshot.data()?.credits as number | undefined) ?? 0;
 
       // A merge-set would otherwise create a `users/{uid}` document holding
@@ -115,7 +118,12 @@ export async function applyCredits(
       // deleted account. `authMiddleware` would then resolve a role from a
       // document that was never a profile.
       if (!userSnapshot.exists) {
-        return { missing: true, applied: false, newBalance: 0, email: undefined as string | undefined };
+        return {
+          missing: true,
+          applied: false,
+          newBalance: 0,
+          email: undefined as string | undefined,
+        };
       }
 
       if (ledgerSnapshot.exists) {
@@ -123,7 +131,12 @@ export async function applyCredits(
         // this call, and skipping the write here would leave the flag
         // permanently absent once the ledger entry exists.
         if (userPatch) tx.set(userRef, userPatch, { merge: true });
-        return { missing: false, applied: false, newBalance: current, email: undefined as string | undefined };
+        return {
+          missing: false,
+          applied: false,
+          newBalance: current,
+          email: undefined as string | undefined,
+        };
       }
 
       const newBalance = current + amount;
@@ -242,10 +255,10 @@ export async function adjustCredits(
   note?: string,
 ): Promise<CreditResult> {
   try {
-    const userRef = collections.users.doc(userId);
-    const ledgerRef = collections.creditTransactions.doc();
+    const userRef = creditRepository.userRef(userId);
+    const ledgerRef = creditRepository.ledgerRef();
 
-    const newBalance = await db.runTransaction(async (tx) => {
+    const newBalance = await creditRepository.runTransaction(async (tx) => {
       const userSnapshot = await tx.get(userRef);
 
       if (!userSnapshot.exists) {
@@ -285,7 +298,7 @@ export async function getCreditHistory(
   userId: string,
   limit: number = 10,
 ): Promise<CreditTransaction[]> {
-  const base = collections.creditTransactions.where('userId', '==', userId);
+  const base = creditRepository.historyQuery(userId);
 
   try {
     // Ordering has to happen in the query. Ledger ids are deterministic for the
@@ -309,9 +322,7 @@ export async function getCreditHistory(
   }
 }
 
-function toTransactions(
-  docs: FirebaseFirestore.QueryDocumentSnapshot[],
-): CreditTransaction[] {
+function toTransactions(docs: FirebaseFirestore.QueryDocumentSnapshot[]): CreditTransaction[] {
   return docs.map((doc) => ({ id: doc.id, ...doc.data() })) as CreditTransaction[];
 }
 

@@ -3,7 +3,8 @@
  * AI-powered verification to confirm item ownership
  */
 
-import { collections, db } from '../utils/firebase-admin.js';
+import { itemRepository } from '../repositories/item.repository.js';
+import { verificationRepository } from '../repositories/verification.repository.js';
 import { callLLM } from '../utils/llm.js';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { Item, Verification, VerificationQuestion } from '../types/index.js';
@@ -174,13 +175,12 @@ export async function startVerification(
   claimantEmail: string,
 ): Promise<Verification | null> {
   // Get the item
-  const itemDoc = await collections.items.doc(itemId).get();
-  if (!itemDoc.exists) {
+  const item = await itemRepository.findById(itemId);
+
+  if (!item) {
     log.error('Item not found:', itemId);
     return null;
   }
-
-  const item = { id: itemDoc.id, ...itemDoc.data() } as Item;
 
   // Generate questions
   const questions = await generateVerificationQuestions(item, 3);
@@ -196,12 +196,9 @@ export async function startVerification(
     createdAt: Timestamp.now(),
   };
 
-  const docRef = await collections.verifications.add(verification);
+  const id = await verificationRepository.create(verification);
 
-  return {
-    id: docRef.id,
-    ...verification,
-  } as Verification;
+  return { id, ...verification } as Verification;
 }
 
 /**
@@ -212,7 +209,7 @@ export async function submitVerificationAnswer(
   questionIndex: number,
   answer: string,
 ): Promise<{ success: boolean; verification: Verification | null; error?: string }> {
-  const ref = collections.verifications.doc(verificationId);
+  const ref = verificationRepository.ref(verificationId);
   const snapshot = await ref.get();
 
   if (!snapshot.exists) {
@@ -226,7 +223,7 @@ export async function submitVerificationAnswer(
   // concurrent submissions all passed the check, all called the model, and
   // forty-nine were rejected afterwards. The counter has to move first, in its
   // own transaction, for the cap to mean anything.
-  const reservation = await db.runTransaction(async (tx) => {
+  const reservation = await verificationRepository.runTransaction(async (tx) => {
     const fresh = await tx.get(ref);
 
     if (!fresh.exists) return { error: 'Verification not found' as const };
@@ -245,19 +242,18 @@ export async function submitVerificationAnswer(
     return { success: false, verification, error: reservation.error };
   }
 
-  const itemDoc = await collections.items.doc(verification.itemId).get();
+  const item = await itemRepository.findById(verification.itemId);
 
-  if (!itemDoc.exists) {
+  if (!item) {
     return { success: false, verification, error: 'Item not found' };
   }
 
-  const item = { id: itemDoc.id, ...itemDoc.data() } as Item;
   const question = reservation.current.questions[questionIndex].question;
   const score = await scoreAnswer(item, question, answer);
 
   // Second transaction writes the answer. It re-reads because the reservation
   // released the document while the model was working.
-  const outcome = await db.runTransaction(async (tx) => {
+  const outcome = await verificationRepository.runTransaction(async (tx) => {
     const fresh = await tx.get(ref);
 
     if (!fresh.exists) return { error: 'Verification not found' as const };
@@ -353,12 +349,11 @@ function checkSubmittable(verification: Verification, questionIndex: number): st
 export async function completeVerification(
   verificationId: string,
 ): Promise<{ success: boolean; item?: Item; error?: string }> {
-  const verificationDoc = await collections.verifications.doc(verificationId).get();
-  if (!verificationDoc.exists) {
+  const verification = await verificationRepository.findById(verificationId);
+
+  if (!verification) {
     return { success: false, error: 'Verification not found' };
   }
-
-  const verification = { id: verificationDoc.id, ...verificationDoc.data() } as Verification;
 
   if (verification.status !== 'passed') {
     return { success: false, error: 'Verification did not pass' };
@@ -367,28 +362,19 @@ export async function completeVerification(
   // `Claimed` is the single terminal state. This path used to set `Resolved`
   // while the handover flow set `Claimed`, and every dashboard counts
   // `Claimed`, so verified claims vanished from the metrics.
-  const itemRef = collections.items.doc(verification.itemId);
-  await itemRef.update({
+  const updatedItem = await itemRepository.updateAndFetch(verification.itemId, {
     status: 'Claimed',
     matchedUserId: verification.claimantUserId,
     verificationConfidence: verification.confidenceScore,
     verifiedAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
   });
 
-  const updatedItem = await itemRef.get();
-
-  return {
-    success: true,
-    item: { id: updatedItem.id, ...updatedItem.data() } as Item,
-  };
+  return { success: true, item: updatedItem as Item };
 }
 
 /**
  * Get verification by ID
  */
 export async function getVerification(verificationId: string): Promise<Verification | null> {
-  const doc = await collections.verifications.doc(verificationId).get();
-  if (!doc.exists) return null;
-  return { id: doc.id, ...doc.data() } as Verification;
+  return verificationRepository.findById(verificationId);
 }

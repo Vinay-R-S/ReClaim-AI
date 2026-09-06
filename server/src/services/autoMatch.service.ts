@@ -7,7 +7,8 @@
  * moving item status, and starting exactly one handover.
  */
 
-import { collections } from '../utils/firebase-admin.js';
+import { itemRepository } from '../repositories/item.repository.js';
+import { matchRepository } from '../repositories/match.repository.js';
 import { ItemType } from '../types/index.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import { MATCH_CONFIG } from '../utils/scoring.js';
@@ -47,22 +48,11 @@ async function findExistingMatchId(
   foundItemId: string,
 ): Promise<string | null> {
   const [forward, reverse] = await Promise.all([
-    collections.matches
-      .where('lostItemId', '==', lostItemId)
-      .where('foundItemId', '==', foundItemId)
-      .limit(1)
-      .get(),
-    collections.matches
-      .where('lostItemId', '==', foundItemId)
-      .where('foundItemId', '==', lostItemId)
-      .limit(1)
-      .get(),
+    matchRepository.findByPair(lostItemId, foundItemId),
+    matchRepository.findByPair(foundItemId, lostItemId),
   ]);
 
-  if (!forward.empty) return forward.docs[0].id;
-  if (!reverse.empty) return reverse.docs[0].id;
-
-  return null;
+  return forward?.id ?? reverse?.id ?? null;
 }
 
 function matchRecordFrom(
@@ -129,7 +119,7 @@ export async function triggerAutoMatching(
       // it to `matchScore` made the UI show a match percentage for an item
       // that has none.
       if (best) {
-        await collections.items.doc(itemId).update({ bestCandidateScore: best.score });
+        await itemRepository.patch(itemId, { bestCandidateScore: best.score });
       }
 
       log.info(`[AUTO-MATCH] No matches for item ${itemId} (best candidate ${best?.score ?? 0}%)`);
@@ -151,11 +141,11 @@ export async function triggerAutoMatching(
         continue;
       }
 
-      const ref = await collections.matches.add(
+      const newMatchId = await matchRepository.create(
         matchRecordFrom(lostItemId, foundItemId, candidate),
       );
-      log.info(`[AUTO-MATCH] Match record ${ref.id} created at ${candidate.score}%`);
-      created.push({ matchId: ref.id, candidate });
+      log.info(`[AUTO-MATCH] Match record ${newMatchId} created at ${candidate.score}%`);
+      created.push({ matchId: newMatchId, candidate });
     }
 
     // 2. Move both items on the single best match.
@@ -164,19 +154,17 @@ export async function triggerAutoMatching(
     const highestScore = winner.score;
 
     await Promise.all([
-      collections.items.doc(itemId).update({
+      itemRepository.update(itemId, {
         status: 'Matched',
         matchScore: highestScore,
         matchedItemId: bestMatchId,
         bestCandidateScore: FieldValue.delete(),
-        updatedAt: FieldValue.serverTimestamp(),
       }),
-      collections.items.doc(bestMatchId).update({
+      itemRepository.update(bestMatchId, {
         status: 'Matched',
         matchScore: highestScore,
         matchedItemId: itemId,
         bestCandidateScore: FieldValue.delete(),
-        updatedAt: FieldValue.serverTimestamp(),
       }),
     ]);
 
