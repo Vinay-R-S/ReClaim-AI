@@ -58,8 +58,13 @@ export default function VerifyHandoverPage() {
    * Returns false when the session is still live, so the caller knows to leave
    * the form alone rather than overwrite the message it just set.
    */
-  const applyStatus = (statusData: HandoverStatus): boolean => {
-    setAttemptsLeft(Math.max(statusData.maxAttempts - statusData.attempts, 0));
+  const applyStatus = (statusData: HandoverStatus, initial: boolean): boolean => {
+    // Only the first read decides the count. After a refusal the response has
+    // already reported `attemptsLeft`, and it is the fresher authority: it is
+    // the request that counted the attempt, while this read can race it.
+    if (initial) {
+      setAttemptsLeft(Math.max(statusData.maxAttempts - statusData.attempts, 0));
+    }
 
     // Order matters. A handover completed weeks ago has a long-past
     // `expiresAt`, so the settled states are decided first and expiry only
@@ -102,7 +107,7 @@ export default function VerifyHandoverPage() {
         return;
       }
 
-      if (applyStatus(statusData)) return;
+      if (applyStatus(statusData, initial)) return;
 
       if (initial) setStatus('idle');
     } catch (error) {
@@ -347,7 +352,7 @@ export default function VerifyHandoverPage() {
 
                 {attemptsLeft !== null && attemptsLeft > 0 && attemptsLeft <= 2 && (
                   <p className="text-center text-sm font-medium mb-4" style={{ color: '#D93025' }}>
-                    {attemptsLeft} attempt{attemptsLeft === 1 ? '' : 's'} remaining
+                    {`${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining`}
                   </p>
                 )}
 

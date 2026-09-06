@@ -10,18 +10,11 @@ import {
   sendHandoverLinkToFoundPerson,
   sendHandoverBlockedNotice,
 } from './email.service.js';
-import { haversineDistance, calculateTimeDifference } from '../utils/scoring.js';
+import { HANDOVER_CONFIG, toDate, validateHandoverCriteria } from './handover.criteria.js';
 import { createLogger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 
 const log = createLogger('handover');
-
-const HANDOVER_CONFIG = {
-  MAX_ATTEMPTS: 3,
-  CODE_EXPIRY_DAYS: 7,
-  LOCATION_RADIUS_KM: 0.6, // 600 meters
-  TIME_WINDOW_HOURS: 2, // +/- 2 hours
-};
 
 /** Codes issued from now on. Older documents carry version 1 or nothing. */
 const CURRENT_HASH_VERSION: HandoverCodeHashVersion = 2;
@@ -57,66 +50,6 @@ export interface HandoverResult {
 }
 
 /**
- * Validate strict handover criteria.
- *
- * Returns an error string when the pair must not be handed over, null when it
- * may. A check that cannot be evaluated (no coordinates, no date) is a failure,
- * not a pass: silently treating unknown as valid is what let unrelated items
- * through before.
- */
-export function validateHandoverCriteria(lostItem: Item, foundItem: Item): string | null {
-  const radiusMetres = Math.round(HANDOVER_CONFIG.LOCATION_RADIUS_KM * 1000);
-
-  // 1. Location, by coordinates when both sides have them
-  if (lostItem.coordinates && foundItem.coordinates) {
-    const dist = haversineDistance(
-      lostItem.coordinates.lat,
-      lostItem.coordinates.lng,
-      foundItem.coordinates.lat,
-      foundItem.coordinates.lng,
-    );
-
-    if (dist > HANDOVER_CONFIG.LOCATION_RADIUS_KM) {
-      return `Location mismatch: items are ${dist.toFixed(2)}km apart (max ${radiusMetres}m allowed)`;
-    }
-  } else if (!sameLocationText(lostItem.location, foundItem.location)) {
-    // Without coordinates the only evidence left is the typed location. Equal
-    // text is accepted, anything else is unverifiable and therefore a failure.
-    return `Location cannot be verified: one of the items has no coordinates and the reported locations differ`;
-  }
-
-  // 2. Date, same calendar day
-  const lostDate = toDate(lostItem.date);
-  const foundDate = toDate(foundItem.date);
-
-  if (!lostDate || !foundDate) {
-    return `Date missing: both items must carry a report date to be handed over`;
-  }
-
-  const isSameDay =
-    lostDate.getFullYear() === foundDate.getFullYear() &&
-    lostDate.getMonth() === foundDate.getMonth() &&
-    lostDate.getDate() === foundDate.getDate();
-
-  if (!isSameDay) {
-    return `Date mismatch: items reported on different days`;
-  }
-
-  // 3. Time window
-  const timeDiffHours = calculateTimeDifference(lostDate, foundDate);
-  if (timeDiffHours > HANDOVER_CONFIG.TIME_WINDOW_HOURS) {
-    return `Time mismatch: items are ${timeDiffHours.toFixed(1)} hours apart (max ${HANDOVER_CONFIG.TIME_WINDOW_HOURS} hours allowed)`;
-  }
-
-  return null;
-}
-
-function sameLocationText(a?: string, b?: string): boolean {
-  if (!a || !b) return false;
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
-}
-
-/**
  * Generate a 6-digit code from the CSPRNG.
  *
  * `randomInt` is uniform over the range, unlike the old `Math.random()` which
@@ -148,34 +81,6 @@ function codeMatches(code: string, stored: HandoverCode): boolean {
 
   if (expected.length !== actual.length) return false;
   return crypto.timingSafeEqual(expected, actual);
-}
-
-/**
- * Convert a Firestore timestamp to a Date, or null when there is no value.
- *
- * Returning `new Date()` for a missing value made every date check pass, which
- * is the opposite of what an absent date should mean.
- */
-function toDate(val: unknown): Date | null {
-  if (val instanceof Date) return Number.isNaN(val.getTime()) ? null : val;
-
-  if (val && typeof val === 'object') {
-    const candidate = val as { toDate?: () => Date; seconds?: number };
-
-    if (typeof candidate.toDate === 'function') {
-      const converted = candidate.toDate();
-      return Number.isNaN(converted.getTime()) ? null : converted;
-    }
-
-    if (typeof candidate.seconds === 'number') return new Date(candidate.seconds * 1000);
-  }
-
-  if (typeof val === 'string' || typeof val === 'number') {
-    const parsed = new Date(val);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  return null;
 }
 
 /**
@@ -846,4 +751,7 @@ export async function getHandoverStatus(matchId: string) {
   };
 }
 
-export { HANDOVER_CONFIG };
+// Both live in `handover.criteria.ts`, which is where a caller should take
+// them from. Re-exported only because this module's own signatures reference
+// them; nothing else imports them from here.
+export { HANDOVER_CONFIG, validateHandoverCriteria };
