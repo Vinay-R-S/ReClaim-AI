@@ -161,3 +161,21 @@ export function apiGet<T>(endpoint: string): Promise<T> {
 export function apiPost<T>(endpoint: string, data?: unknown): Promise<T> {
   return request<T>('POST', endpoint, data ?? {}, { authenticated: false });
 }
+
+/** An error carrying the handover check that refused, when the server named one. */
+export type ErrorWithCriteria = Error & { criteriaFailure?: string };
+
+/**
+ * Lift `criteriaFailure` out of a refusal body onto the error itself.
+ *
+ * Which handover check refused is a decision the admin can override, so it has
+ * to survive to the screen rather than being flattened into the message.
+ */
+export function withCriteriaFailure(error: unknown): unknown {
+  if (!isApiError(error)) return error;
+
+  const failure = (error.body as { criteriaFailure?: string } | null)?.criteriaFailure;
+  if (failure) (error as ErrorWithCriteria).criteriaFailure = failure;
+
+  return error;
+}

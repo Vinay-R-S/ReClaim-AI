@@ -1,4 +1,4 @@
-import { authGet, authPost, isApiError } from '../lib/api';
+import { authGet, authPost, withCriteriaFailure } from '../lib/api';
 import type { Match } from '../types/domain';
 
 /**
@@ -32,11 +32,14 @@ export interface VerifyMatchInput {
   itemId: string;
   /** The match record being decided on, so a runner-up pair resolves too. */
   matchId?: string;
-  claimUserId: string;
+  /** Only needed to name who a false-claim penalty is for. */
+  claimUserId?: string;
   isValid: boolean;
   /** Proceed despite the distance, day and time handover checks failing. */
   overrideCriteria?: boolean;
   overrideReason?: string;
+  /** Charge the false-claim penalty on a rejection. The admin's own decision. */
+  penaliseClaimant?: boolean;
 }
 
 export interface VerifyMatchResult {
@@ -53,18 +56,6 @@ export const verifyMatch = async (input: VerifyMatchInput): Promise<VerifyMatchR
   try {
     return await authPost<VerifyMatchResult>('/api/matches/verify', input);
   } catch (error) {
-    // A refusal on the handover criteria is a decision the admin can override,
-    // so which check failed has to reach the modal rather than being flattened
-    // into the message.
-    if (isApiError(error)) {
-      const failure = (error.body as { criteriaFailure?: string } | null)?.criteriaFailure;
-      if (failure) {
-        (error as ApiErrorWithCriteria).criteriaFailure = failure;
-      }
-    }
-
-    throw error;
+    throw withCriteriaFailure(error);
   }
 };
-
-type ApiErrorWithCriteria = Error & { criteriaFailure?: string };

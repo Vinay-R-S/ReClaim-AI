@@ -7,7 +7,9 @@ __pycache__/
 # Environment and secrets
 .env
 .env.*
+# The templates carry no values and are meant to be committed.
 !.env.example
+!**/.env.example
 
 # AI working agreement (local only)
 CLAUDE.md

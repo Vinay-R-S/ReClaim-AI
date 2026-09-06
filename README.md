@@ -15,7 +15,7 @@ An AI-powered lost and found management platform that uses LLM-based semantic ma
 
 ### CCTV Intelligence
 
-- **Live Webcam Detection** - Real-time object detection using YOLOv8
+- **Live Webcam Detection** - Real-time object detection using YOLOv11
 - **Video Analysis** - Upload surveillance footage to find lost items
 - **Keyframe Extraction** - Automatically captures timestamps when items appear
 - **Groq AI Analysis** - Semantic analysis with match confidence scoring
@@ -29,10 +29,10 @@ An AI-powered lost and found management platform that uses LLM-based semantic ma
 
 ### AI Technologies
 
-- **YOLOv8** - Real-time object detection for CCTV
-- **Groq/Gemini LLM** - Natural language understanding
+- **YOLOv11** - Real-time object detection for CCTV
+- **Groq / Gemini / Grok** - Item description and the semantic half of matching,
+  with the active provider chosen by an admin setting
 - **Clarifai** - Visual similarity matching for images
-- **LangGraph** - Stateful AI workflows
 
 ## Project Structure
 
@@ -40,25 +40,33 @@ An AI-powered lost and found management platform that uses LLM-based semantic ma
 ReClaim-AI/
 ├── client/              # React + Vite frontend
 │   ├── src/
-│   │   ├── components/  # Reusable UI components
-│   │   ├── pages/       # Page components (User, Admin)
-│   │   ├── services/    # API service functions
-│   │   ├── context/     # React context providers
-│   │   ├── hooks/       # Custom React hooks
-│   │   └── lib/         # Utilities, icons, Firebase
+│   │   ├── components/  # UI, split by area (item, admin, landing, ui)
+│   │   ├── pages/       # Screens (user, admin, public)
+│   │   ├── services/    # One module per API area
+│   │   ├── hooks/       # Data access and shared state
+│   │   ├── context/     # Auth provider
+│   │   ├── types/       # The client's view of the shared contract
+│   │   └── lib/         # api client, Firebase, compression, timestamps
 │   └── package.json
 ├── server/              # Express + TypeScript backend
 │   ├── src/
-│   │   ├── routes/      # API endpoints
-│   │   ├── services/    # Business logic (matching, handover, blockchain)
-│   │   ├── middleware/  # Auth middleware
-│   │   ├── graph/       # LangGraph AI workflows
-│   │   └── utils/       # LLM, email utilities
+│   │   ├── routes/      # Path, middleware, delegate. No logic
+│   │   ├── controllers/ # Request in, response out
+│   │   ├── services/    # Business logic
+│   │   ├── repositories/# Every Firestore query lives here
+│   │   ├── schemas/     # zod validation per route group
+│   │   ├── middleware/  # auth, roles, validation, rate limits, errors
+│   │   ├── types/       # Server types and the shared re-exports
+│   │   └── utils/       # llm, logger, scoring, firebase-admin
+│   ├── scripts/         # One-off migrations
 │   └── package.json
 ├── models/              # Python YOLO service
 │   ├── app.py           # Flask API for object detection
 │   └── requirements.txt # Python dependencies
-├── .env.example         # Environment variables template
+├── shared/
+│   └── domain.d.ts      # The one description of every document, imported by both packages
+├── firestore.rules      # What the browser may read. Deploy with `firebase deploy`
+├── firestore.indexes.json
 └── README.md
 ```
 
@@ -71,7 +79,8 @@ ReClaim-AI/
 - npm or yarn
 - Firebase project
 - Cloudinary account (for image storage)
-- Groq/Gemini API key (for AI)
+- Groq, Gemini or Grok API key (at least one, for AI)
+- Java 21+ (only to run the Firestore rules tests)
 
 ### 1. Clone & Install
 
@@ -97,13 +106,18 @@ pip install -r models/requirements.txt
 
 ### 2. Configure Environment Variables
 
-Copy the example file and fill in your values:
+There are two, and the split is the point: the root file is compiled into the
+browser bundle and holds nothing secret, while `server/.env` holds every
+credential and never reaches the client.
 
 ```bash
-cp .env.example .env
+cp .env.example .env               # client, read by Vite from the repo root
+cp server/.env.example server/.env # server, read by the API
 ```
 
-Then edit `.env` with your credentials (see [Environment Variables](#-environment-variables) section below).
+Then fill both in (see [Environment Variables](#environment-variables) below).
+The Flask service needs `YOLO_SERVICE_TOKEN` set to the same value as
+`server/.env`, or it refuses every request.
 
 ### 3. Run Development Servers
 
@@ -140,37 +154,61 @@ npm run dev
 
 ### Client Variables (prefix: `VITE_`)
 
-| Variable                            | Description               | How to Get                                                                           |
-| ----------------------------------- | ------------------------- | ------------------------------------------------------------------------------------ |
-| `VITE_FIREBASE_API_KEY`             | Firebase Web API Key      | [Firebase Console](https://console.firebase.google.com) → Project Settings → General |
-| `VITE_FIREBASE_AUTH_DOMAIN`         | Firebase Auth Domain      | Same as above, format: `{project-id}.firebaseapp.com`                                |
-| `VITE_FIREBASE_PROJECT_ID`          | Firebase Project ID       | Same as above                                                                        |
-| `VITE_FIREBASE_STORAGE_BUCKET`      | Firebase Storage Bucket   | Same as above, format: `{project-id}.appspot.com`                                    |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Messaging Sender ID       | Same as above                                                                        |
-| `VITE_FIREBASE_APP_ID`              | Firebase App ID           | Same as above                                                                        |
-| `VITE_ADMIN_EMAIL`                  | Admin user's email        | Your admin email address                                                             |
-| `VITE_GROQ_API_KEY`                 | Groq API Key (optional)   | [Groq Console](https://console.groq.com)                                             |
-| `VITE_GEMINI_API_KEY`               | Gemini API Key (optional) | [Google AI Studio](https://aistudio.google.com/apikey)                               |
-| `VITE_GEOAPIFY_API_KEY`             | Geoapify API Key          | [Geoapify](https://myprojects.geoapify.com/)                                         |
-| `VITE_API_URL`                      | Backend API URL           | Default: `http://localhost:3001`                                                     |
+Everything here reaches the browser in the bundle, so nothing secret belongs in
+this list. The Groq and Gemini keys used to be here and were readable by anyone
+who loaded the site; they are server-side now and every model call goes through
+`/api/ai/*`.
+
+| Variable                            | Description             | How to Get                                                                           |
+| ----------------------------------- | ----------------------- | ------------------------------------------------------------------------------------ |
+| `VITE_FIREBASE_API_KEY`             | Firebase Web API Key    | [Firebase Console](https://console.firebase.google.com) → Project Settings → General |
+| `VITE_FIREBASE_AUTH_DOMAIN`         | Firebase Auth Domain    | Same as above, format: `{project-id}.firebaseapp.com`                                |
+| `VITE_FIREBASE_PROJECT_ID`          | Firebase Project ID     | Same as above                                                                        |
+| `VITE_FIREBASE_STORAGE_BUCKET`      | Firebase Storage Bucket | Same as above, format: `{project-id}.appspot.com`                                    |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Messaging Sender ID     | Same as above                                                                        |
+| `VITE_FIREBASE_APP_ID`              | Firebase App ID         | Same as above                                                                        |
+| `VITE_FIREBASE_MEASUREMENT_ID`      | Analytics ID (optional) | Same as above. Analytics is skipped when absent                                      |
+| `VITE_GEOAPIFY_API_KEY`             | Geoapify API Key        | [Geoapify](https://myprojects.geoapify.com/)                                         |
+| `VITE_API_URL`                      | Backend API URL         | Default: `http://localhost:3001`                                                     |
+
+The six Firebase values are read at module scope and the app throws on load
+without them. The admin is decided by the `role` field on the user document,
+not by an email in the bundle.
 
 ### Server Variables
 
-| Variable                       | Description                         | How to Get                                                        |
-| ------------------------------ | ----------------------------------- | ----------------------------------------------------------------- |
-| `GROQ_API_KEY`                 | Groq API Key for LLM                | [Groq Console](https://console.groq.com)                          |
-| `GEMINI_API_KEY`               | Gemini API Key for LLM              | [Google AI Studio](https://aistudio.google.com/apikey)            |
-| `FIREBASE_SERVICE_ACCOUNT_KEY` | Base64 encoded service account JSON | See [Firebase Admin Setup](#firebase-admin-sdk-setup)             |
-| `FIREBASE_PROJECT_ID`          | Firebase Project ID                 | Firebase Console                                                  |
-| `CLOUDINARY_CLOUD_NAME`        | Cloudinary Cloud Name               | [Cloudinary Console](https://console.cloudinary.com/) → Dashboard |
-| `CLOUDINARY_API_KEY`           | Cloudinary API Key                  | Same as above                                                     |
-| `CLOUDINARY_API_SECRET`        | Cloudinary API Secret               | Same as above                                                     |
-| `RESEND_API_KEY`               | Resend API Key for emails           | [Resend Dashboard](https://resend.com/)                           |
-| `FROM_EMAIL`                   | Sender email address                | Your verified domain email                                        |
-| `CLIENT_URL`                   | Frontend URL                        | Default: `http://localhost:5173`                                  |
-| `PORT`                         | Server port                         | Default: `3001`                                                   |
-| `ADMIN_PRIVATE_KEY`            | Ethereum wallet private key         | See [Blockchain Setup](#blockchain-setup-ethereum-sepolia)        |
-| `CONTRACT_ADDRESS`             | Deployed smart contract address     | See [Blockchain Setup](#blockchain-setup-ethereum-sepolia)        |
+| Variable                                              | Required  | Description                                                                                                                                                                                     |
+| ----------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FIREBASE_SERVICE_ACCOUNT_KEY`                        | Yes       | Base64 encoded service account JSON. See [Firebase Admin Setup](#firebase-admin-sdk-setup)                                                                                                      |
+| `FIREBASE_PROJECT_ID`                                 | Yes       | Firebase Project ID                                                                                                                                                                             |
+| `HANDOVER_CODE_SECRET`                                | In prod   | HMAC key for handover codes. The server refuses to start in production without at least 32 characters: a six-digit code with no server-side key is reversible by brute force from a leaked hash |
+| `GROQ_API_KEY`                                        | One of    | [Groq Console](https://console.groq.com)                                                                                                                                                        |
+| `GEMINI_API_KEY`                                      | One of    | [Google AI Studio](https://aistudio.google.com/apikey)                                                                                                                                          |
+| `GROK_API_KEY`                                        | One of    | [xAI Console](https://console.x.ai)                                                                                                                                                             |
+| `CLARIFAI_PAT`                                        | No        | Personal access token for image similarity                                                                                                                                                      |
+| `CLARIFAI_USER_ID`                                    | No        | Clarifai user id                                                                                                                                                                                |
+| `CLARIFAI_APP_ID`                                     | No        | Clarifai app id                                                                                                                                                                                 |
+| `CLARIFAI_MODEL_ID`                                   | No        | Clarifai model id                                                                                                                                                                               |
+| `CLARIFAI_API_KEY`                                    | No        | Legacy Clarifai key, if not using a PAT                                                                                                                                                         |
+| `CLOUDINARY_CLOUD_NAME`                               | No        | Without Cloudinary an item is created with no images rather than failing                                                                                                                        |
+| `CLOUDINARY_API_KEY`                                  | No        | [Cloudinary Console](https://console.cloudinary.com/) → Dashboard                                                                                                                               |
+| `CLOUDINARY_API_SECRET`                               | No        | Same as above                                                                                                                                                                                   |
+| `RESEND_API_KEY`                                      | No        | [Resend](https://resend.com/). Without an email transport a handover cannot send its code                                                                                                       |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | No        | Alternative to Resend                                                                                                                                                                           |
+| `FROM_EMAIL`                                          | No        | Sender address on a verified domain                                                                                                                                                             |
+| `YOLO_SERVICE_URL`                                    | No        | Flask detection service. Default `http://localhost:5000`                                                                                                                                        |
+| `YOLO_SERVICE_TOKEN`                                  | For CCTV  | Shared secret between this server and the Flask service. Flask refuses every request without it, so CCTV returns 502 until both sides have the same value                                       |
+| `BLOCKCHAIN_ENABLED`                                  | No        | `false` skips the chain record entirely                                                                                                                                                         |
+| `ADMIN_PRIVATE_KEY`                                   | For chain | Ethereum wallet private key. See [Blockchain Setup](#blockchain-setup-ethereum-sepolia)                                                                                                         |
+| `CONTRACT_ADDRESS`                                    | For chain | Deployed contract address                                                                                                                                                                       |
+| `SEPOLIA_RPC_URL`                                     | No        | RPC endpoint. A public default is used when absent                                                                                                                                              |
+| `CLIENT_URL`                                          | No        | Frontend URL, used in emails and CORS. Default `http://localhost:5173`                                                                                                                          |
+| `PORT`                                                | No        | Default `3001`                                                                                                                                                                                  |
+| `NODE_ENV`                                            | No        | `production` turns on the stricter startup checks                                                                                                                                               |
+| `LOG_LEVEL`                                           | No        | `debug`, `info`, `warn` or `error`. Default `info`                                                                                                                                              |
+
+"One of" means at least one LLM provider must have a key, and the admin
+settings screen will only offer the providers that do.
 
 ## Detailed Setup Guides
 
@@ -235,13 +273,13 @@ npm run dev
 1. Go to [Groq Console](https://console.groq.com/)
 2. Sign up (free tier available)
 3. Create an API key
-4. Copy to `GROQ_API_KEY` and `VITE_GROQ_API_KEY`
+4. Copy to `GROQ_API_KEY`. There is no client-side copy: the browser never holds a provider key
 
 ### Gemini API Setup
 
 1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
 2. Create an API key
-3. Copy to `GEMINI_API_KEY` and `VITE_GEMINI_API_KEY`
+3. Copy to `GEMINI_API_KEY`. There is no client-side copy
 
 ### Geoapify Setup (for Location Picker)
 
@@ -300,15 +338,65 @@ Blockchain service initialized
    RPC: https://ethereum-sepolia-rpc.publicnode.com
 ```
 
-## Firestore Indexes
+## Firestore Rules and Indexes
 
-If you see Firestore index errors, create these composite indexes:
+Both are in the repo and both are inert until deployed:
 
-1. **creditTransactions** collection:
-   - `userId` (Ascending) + `createdAt` (Descending)
+```bash
+firebase deploy --only firestore
+```
 
-2. **items** collection:
-   - `reportedBy` (Ascending) + `createdAt` (Descending)
+`firestore.rules` decides what a browser may read. It is deliberately narrow:
+items and matches are closed to the client entirely and served by the API, a
+user may read their own profile but cannot list the collection, and no client
+write is allowed anywhere. Until this is deployed the project keeps whatever
+rules it had, which for a new project means the default test rules.
+
+`firestore.indexes.json` carries every composite index the code issues,
+including the `handovers` `participantIds` array-contains index that the user
+handover list depends on. A missing index shows up as a failed query at
+runtime, and two paths carry an in-memory fallback so a screen degrades rather
+than breaking.
+
+The rules have their own test suite, run against the Firestore emulator:
+
+```bash
+cd server
+npm run test:rules
+```
+
+## Migrations
+
+Three one-off migrations live in `server/scripts` and must run before the
+matching deploy. Each is a dry run by default and safe to run twice.
+
+```bash
+cd server
+npm run migrate:items          # then: npm run migrate:items -- --apply
+npm run migrate:credits        # then: npm run migrate:credits -- --apply
+npm run migrate:handovers      # then: npm run migrate:handovers -- --apply
+```
+
+- `migrate:items` moves `collectionLocation` onto `collectionPoint`, converts
+  the retired `Resolved` status to `Claimed`, and backfills `moderation` on
+  items that predate review.
+- `migrate:credits` backfills the signup bonus ledger entry for existing
+  profiles and reconciles balances stranded in the retired `credits`
+  collection.
+- `migrate:handovers` backfills `participantIds`, which turns the user handover
+  list from a full-collection scan into one indexed query, and records the flag
+  that stops the fallback scan running.
+
+## Testing
+
+```bash
+cd server && npm test     # unit tests
+cd server && npm run test:rules   # Firestore rules, needs Java for the emulator
+cd client && npm test     # component and hook tests
+```
+
+CI runs both suites, the rules suite, both builds, both lints and a formatting
+check on every pull request into `develop`.
 
 ## Tech Stack
 
@@ -327,15 +415,15 @@ If you see Firestore index errors, create these composite indexes:
 - TypeScript
 - Firebase Admin SDK
 - Cloudinary (Image storage)
-- Groq/Gemini (AI/LLM)
-- LangGraph (AI workflows)
-- Resend (Email)
+- Groq / Gemini / Grok (AI/LLM, selected by an admin setting)
+- Resend or SMTP (Email)
+- Vitest (tests)
 - Ethers.js (Blockchain)
 
 ### Backend (Python)
 
 - Flask + Flask-CORS
-- YOLOv8 (Ultralytics)
+- YOLOv11 (Ultralytics)
 - OpenCV
 - NumPy
 
@@ -407,8 +495,6 @@ If you see Firestore index errors, create these composite indexes:
 **All Rights Reserved** © 2026 ReClaim AI Team
 
 This project and its source code are proprietary. Unauthorized copying, modification, distribution, or use of this software is strictly prohibited without explicit written permission from the authors.
-
----
 
 ## Acknowledgments
 

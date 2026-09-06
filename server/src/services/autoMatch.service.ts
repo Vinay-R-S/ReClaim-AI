@@ -1,10 +1,13 @@
 /**
  * Automatic matching on item creation.
  *
- * This is one of two entry points onto `MatchingService`; the other is manual
- * search in `matching.ts`. Scoring lives entirely in the pipeline. What is left
- * here is the part specific to the create path: persisting match records,
- * moving item status, and starting exactly one handover.
+ * The entry point onto `MatchingService`. It used to be one of two; the other
+ * was a search route with no caller anywhere in the client, which phase 18
+ * removed along with the wrapper it went through.
+ *
+ * Scoring lives entirely in the pipeline. What is left here is the part
+ * specific to the create path: persisting match records, moving item status,
+ * and starting exactly one handover.
  */
 
 import { itemRepository } from '../repositories/item.repository.js';

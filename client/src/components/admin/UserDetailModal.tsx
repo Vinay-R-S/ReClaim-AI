@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { Item, User } from '../../types/domain';
 import { getItems } from '../../services/itemService';
+import { creditService } from '../../services/creditService';
 import { Timestamp } from 'firebase/firestore';
 import { cn } from '../../lib/utils';
+import { Feedback } from '../ui/Feedback';
+import { useFeedback } from '../../hooks/useFeedback';
 
 interface UserDetailModalProps {
   user: User;
@@ -14,6 +17,11 @@ interface UserDetailModalProps {
 export function UserDetailModal({ user, itemsCount, onClose }: UserDetailModalProps) {
   const [userItems, setUserItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
+  const [balance, setBalance] = useState(user.credits ?? 0);
+  const [adjustment, setAdjustment] = useState('');
+  const [adjustmentReason, setAdjustmentReason] = useState('');
+  const [adjusting, setAdjusting] = useState(false);
+  const { feedback, showError, showSuccess, clear } = useFeedback();
 
   useEffect(() => {
     const fetchUserItems = async () => {
@@ -58,6 +66,35 @@ export function UserDetailModal({ user, itemsCount, onClose }: UserDetailModalPr
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  /**
+   * Move the balance by a delta, not to a total. The ledger is the record and
+   * every entry is a change, so a target figure has nothing to write.
+   */
+  const adjust = async () => {
+    const amount = Number(adjustment);
+
+    if (!Number.isInteger(amount) || amount === 0) {
+      showError('Enter a whole number of credits to add or take away.');
+      return;
+    }
+
+    clear();
+    setAdjusting(true);
+
+    try {
+      const result = await creditService.adjust(user.uid, amount, adjustmentReason.trim());
+
+      setBalance(result.credits);
+      setAdjustment('');
+      setAdjustmentReason('');
+      showSuccess(`Balance is now ${result.credits}.`);
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Could not adjust the balance.');
+    } finally {
+      setAdjusting(false);
+    }
   };
 
   return (
@@ -147,6 +184,41 @@ export function UserDetailModal({ user, itemsCount, onClose }: UserDetailModalPr
             <div>
               <label className="text-sm text-text-secondary mb-1 block">Last Login</label>
               <p className="text-text-primary">{formatDate(user.lastLoginAt)}</p>
+            </div>
+          </div>
+
+          {/* Credits */}
+          <div className="mb-6 p-4 border border-border rounded-xl">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm text-text-secondary">Credits</label>
+              <p className="text-2xl font-bold text-text-primary">{balance}</p>
+            </div>
+
+            {feedback && <Feedback {...feedback} onDismiss={clear} className="mb-3" />}
+
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="number"
+                value={adjustment}
+                onChange={(e) => setAdjustment(e.target.value)}
+                placeholder="+10 or -30"
+                className="w-28 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <input
+                type="text"
+                value={adjustmentReason}
+                onChange={(e) => setAdjustmentReason(e.target.value)}
+                placeholder="Why (kept on the ledger entry)"
+                maxLength={200}
+                className="flex-1 min-w-40 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <button
+                onClick={() => void adjust()}
+                disabled={adjusting || !adjustment.trim()}
+                className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary-hover disabled:opacity-50 transition-colors"
+              >
+                {adjusting ? 'Saving...' : 'Apply'}
+              </button>
             </div>
           </div>
 

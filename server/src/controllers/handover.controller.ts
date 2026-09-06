@@ -12,26 +12,27 @@ import { HandoverRepository, handoverRepository } from '../repositories/handover
 import { settingsRepository } from '../repositories/settings.repository.js';
 import { AppError } from '../middleware/errorHandler.middleware.js';
 import type { AuthRequest } from '../middleware/auth.middleware.js';
-import type { HandoverInitiateBody, HandoverVerifyBody } from '../schemas/index.js';
+import type { HandoverReissueBody, HandoverVerifyBody } from '../schemas/index.js';
 
 export class HandoverController {
   constructor(private readonly handovers: HandoverRepository = handoverRepository) {}
 
   /**
-   * Open a session, or re-open one that failed attempts blocked.
+   * Re-open a session that failed attempts blocked, or that expired.
    *
-   * `reissueBlocked` is the only difference between the two endpoints, so they
-   * share a handler rather than diverging over time.
+   * A session is normally opened by the admin verifying the match; this is the
+   * only way back once one has been blocked, because the code is hashed and
+   * verification refuses a blocked session outright.
    */
-  private issue = (reissueBlocked: boolean) => async (req: AuthRequest, res: Response) => {
+  reissue = async (req: AuthRequest, res: Response): Promise<Response> => {
     const { matchId, lostItemId, foundItemId, overrideCriteria, overrideReason } =
-      req.body as HandoverInitiateBody;
+      req.body as HandoverReissueBody;
 
     const result = await initiateHandover(matchId, lostItemId, foundItemId, {
       actorId: req.user?.uid,
       overrideCriteria,
       overrideReason,
-      reissueBlocked,
+      reissueBlocked: true,
     });
 
     if (!result.success) {
@@ -40,10 +41,6 @@ export class HandoverController {
 
     return res.json(result);
   };
-
-  initiate = this.issue(false);
-
-  reissue = this.issue(true);
 
   /**
    * A wrong code is a 200 with `success: false`, not an error: the page shows
@@ -65,6 +62,27 @@ export class HandoverController {
     return res.json(status);
   };
 
+  /**
+   * Sessions that have not completed.
+   *
+   * The hash is deliberately not included: it is the only thing standing
+   * between a leaked response and a guessable code.
+   */
+  sessions = async (_req: Request, res: Response): Promise<Response> => {
+    const sessions = (await this.handovers.listOpenSessions()).map((session) => ({
+      matchId: session.matchId,
+      lostItemId: session.lostItemId,
+      foundItemId: session.foundItemId,
+      status: session.status,
+      attempts: session.attempts ?? 0,
+      expiresAt: toIso(session.expiresAt),
+      blockedAt: toIso(session.blockedAt),
+      criteriaOverrideBy: session.criteriaOverrideBy ?? null,
+    }));
+
+    return res.json({ sessions });
+  };
+
   history = async (req: Request, res: Response): Promise<Response> => {
     const history = await this.handovers.listCompleted();
 
@@ -81,6 +99,13 @@ export class HandoverController {
 
     return res.json({ handovers });
   };
+}
+
+/** A Firestore timestamp as the JSON the screen reads. */
+function toIso(value: unknown): string | null {
+  const timestamp = value as { toDate?: () => Date } | undefined;
+
+  return timestamp?.toDate?.().toISOString() ?? null;
 }
 
 export const handoverController = new HandoverController();

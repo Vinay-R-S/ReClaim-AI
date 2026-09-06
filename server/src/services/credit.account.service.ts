@@ -8,13 +8,7 @@
 import { adjustCredits, getCreditHistory } from './credits.service.js';
 import { UserRepository, userRepository } from '../repositories/user.repository.js';
 import { AppError } from '../middleware/errorHandler.middleware.js';
-import type { CreditTransaction } from '../types/index.js';
-
-export interface CreditBalance {
-  userId: string;
-  email: string;
-  credits: number;
-}
+import type { CreditBalance, CreditTransaction } from '../types/index.js';
 
 export class CreditAccountService {
   constructor(private readonly users: UserRepository = userRepository) {}

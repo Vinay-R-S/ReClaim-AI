@@ -1,65 +1,99 @@
-# Server Source Files Documentation
+# Server source structure
 
-This document explains the structure and purpose of the files in `server/src`.
+What lives where in `server/src`, and why. The layering is
+`route -> controller -> service -> repository`: routes only wire middleware,
+controllers only translate HTTP, services hold the rules, repositories are the
+only code that talks to Firestore.
 
-## Top-Level Files
+## Top level
 
-- **`index.ts`**: The entry point of the server. It loads environment variables (using `dotenv`) and then dynamically imports `app.ts` to start the server. This ensures env vars are ready before app initialization.
-- **`app.ts`**: The main Express application file. It configures middleware (CORS, Helmet, compression, Body parsers), registers all API routes (`/api/auth`, `/api/items`, etc.), and sets up global error handling and the server listener.
+- `index.ts` loads the environment, then imports `app.ts` so nothing reads a
+  variable before `dotenv` has run.
+- `app.ts` builds the Express app: security headers, CORS, compression, body
+  parsers, the rate limiters, the route table and the error handler last.
+- `server.ts` starts the listener.
+- `config/env.ts` reads and validates every environment variable once. Nothing
+  else touches `process.env`.
 
-## Directories
+## `routes/`
 
-### `routes/`
+Wiring only: path, middleware, controller method. One file per domain.
 
-Defines the API endpoints and maps them to controllers or logic.
+`auth.ts`, `items.ts`, `matches.ts`, `handover.ts`, `settings.ts`, `credits.ts`,
+`cctv.ts`, `users.ts`, `stats.ts`, `ai.ts`.
 
-- **`auth.ts`**: Endpoints for user authentication (register, login, verify).
-- **`items.ts`**: Endpoints for creating, retrieving, and updating lost/found items.
-- **`matches.ts`**: Endpoints for matching logic and retrieving potential matches.
-- **`handover.ts` / `handovers.ts`**: Endpoints for managing the item handover workflow.
-- **`verification.ts`**: Endpoints for verifying ownership or users.
-- **`settings.ts`**: Endpoints for application settings.
-- **`notifications.ts`**: Endpoints for user notifications.
-- **`credits.ts`**: Endpoints for managing user credits or rewards.
-- **`cctv.ts`**: Endpoints for CCTV integration features.
+`handover.ts` is mounted at both `/api/handover` and `/api/handovers` so no
+client call had to change when the two old routers were merged.
 
-### `services/`
+## `controllers/`
 
-Contains the core business logic, separating it from the HTTP layer.
+Read the request, call one service, shape the response. No business rules, no
+Firestore. One per route file.
 
-- **`autoMatch.service.ts`**: Background service or logic for automatically finding matches between items.
-- **`clarifaiMatch.service.ts`**: Specific service using Clarifai for image recognition/matching.
-- **`matching.ts`**: Core matching algorithms.
-- **`handover.service.ts`**: Logic handling the state machine of item handovers.
-- **`verificationAgent.ts`**: AI or logic to assist in verifying claims.
-- **`email.ts`**: Service for sending transactional emails.
-- **`blockchain.service.ts`**: Integration for blockchain features (possibly for immutable records of items/handovers).
-- **`cloudinary.ts`**: Service for uploading and managing images.
-- **`userStats.ts`**: Logic for calculating and retrieving user statistics.
+## `services/`
 
-### `middleware/`
+The rules.
 
-Express middleware functions that run before route handlers.
+- `item.service.ts` reporting, approval, rejection and the item lifecycle.
+- `match.service.ts` the admin decision on a proposed match, including the
+  false-claim penalty.
+- `matching/` the pipeline itself: `matching.pipeline.ts` orchestrates,
+  `semanticScorer.service.ts` and `visualScorer.service.ts` score, and
+  `matching.types.ts` holds the shared shapes.
+- `autoMatch.service.ts` runs the pipeline when an item is approved.
+- `clarifaiMatch.service.ts` image similarity, optional: without a key it
+  scores 0 rather than failing the run.
+- `handover.service.ts` the code lifecycle: issue, verify, block, complete.
+- `handover.criteria.ts` the distance, day and time rules, kept pure so they
+  can be tested without booting firebase-admin.
+- `credits.service.ts` the ledger, `credit.account.service.ts` the balance.
+- `blockchain.service.ts` the Sepolia record, off unless configured.
+- `email.service.ts` Resend with an SMTP fallback, `cloudinary.service.ts`
+  images, `ai.service.ts` and `cctv.service.ts` the model calls.
+- `audit.service.ts` writes the admin action trail.
+- `auth.service.ts`, `user.service.ts`, `userStats.service.ts`,
+  `settings.service.ts`, `stats.service.ts`.
 
-- **`auth.middleware.ts`**: Verifies JWT tokens or sessions to protect routes.
-- **`role.middleware.ts`**: Checks if an authenticated user has the required permissions (e.g., Admin).
-- **`rateLimit.middleware.ts`**: Limits the number of requests a user/IP can make.
-- **`validation.middleware.ts`**: Validates incoming request bodies (likely using Zod or Joi).
-- **`errorHandler.middleware.ts`**: Standardized error response formatting.
+## `repositories/`
 
-### `utils/`
+Every Firestore read and write. Nothing outside this directory imports the
+collection references.
 
-Helper functions and shared configurations.
+`item`, `match`, `handover`, `user`, `credit`, `settings`, `stats`, `audit`.
 
-- **`firebase-admin.ts`**: Configuration for Firebase Admin SDK (server-side Firebase access).
-- **`llm.ts`**: Utilities for interacting with Large Language Models.
-- **`embeddings.ts`**: Utilities for generating or managing vector embeddings (for semantic search/matching).
-- **`scoring.ts`**: Algorithms for scoring the quality of matches.
-- **`safety.ts`**: Content safety checks or sanitization.
+## `middleware/`
 
-### `contracts/`
+- `auth.middleware.ts` verifies the Firebase ID token and loads the caller.
+- `role.middleware.ts` `requireAdmin`, `requireActiveUser`, `requireOwnership`.
+- `validation.middleware.ts` runs a zod schema over body, params or query.
+- `rateLimit.middleware.ts` the per-surface limiters.
+- `errorHandler.middleware.ts` `AppError` and the single error responder: it
+  keeps the message and details of a deliberate 4xx and sanitizes everything
+  else in production.
+- `index.ts` is the barrel the routes import from.
 
-Contains blockchain smart contracts.
+## `schemas/`
 
-- **`ReclaimHandover.sol`**: Solidity smart contract managing the secure handover process on the blockchain.
-- **`Deploy.md`**: Instructions or notes regarding contract deployment.
+One zod schema file per domain, plus `common.schema.ts` for the shared field
+builders. Every mutating route validates through one of these.
+
+## `types/`
+
+Server-only types. The document shapes both packages share live in
+`shared/domain.d.ts` and are imported from there.
+
+## `utils/`
+
+- `logger.ts` the only logging entry point. It redacts identifiers and drops
+  stack traces in production.
+- `firebase-admin.ts` initialises the SDK and exports the collections.
+- `firestore.ts` cursor pagination and serialization helpers.
+- `scoring.ts` the distance and time maths behind matching and handover.
+- `llm.ts` provider selection, `html.ts` escaping for email bodies,
+  `async.ts` the retry and timeout helpers.
+
+## Tests
+
+Vitest, next to the code they cover (`*.test.ts`). `npm test` runs them;
+`npm run test:rules` runs `rules/firestore.rules.test.ts` against the Firestore
+emulator.

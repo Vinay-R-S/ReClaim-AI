@@ -119,20 +119,6 @@
       ]
     },
     {
-      "collectionGroup": "verifications",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "itemId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "creditTransactions",
       "queryScope": "COLLECTION",
       "fields": [

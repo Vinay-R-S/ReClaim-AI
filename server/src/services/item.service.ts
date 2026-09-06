@@ -17,7 +17,6 @@ import { deleteImage, isCloudinaryConfigured, uploadMultipleImages } from './clo
 import { recordAdminAction } from './audit.service.js';
 import { triggerAutoMatching } from './autoMatch.service.js';
 import { updateUserItemCounts } from './userStats.service.js';
-import { createItemEmbeddingString } from '../utils/embeddings.js';
 import { stripUndefined } from '../utils/firestore.js';
 import { createLogger } from '../utils/logger.js';
 import { AppError } from '../middleware/errorHandler.middleware.js';
@@ -175,8 +174,6 @@ export class ItemService {
       collectionCoordinates: input.collectionCoordinates,
       coordinates: input.coordinates,
     });
-
-    this.logSemanticText(input);
 
     const created = await this.items.create(document);
 
@@ -428,21 +425,6 @@ export class ItemService {
       await updateUserItemCounts(userId, type, operation);
     } catch (error) {
       log.error(`Failed to ${operation} user item counts:`, error);
-    }
-  }
-
-  private logSemanticText(input: ItemInput): void {
-    try {
-      const embeddingText = createItemEmbeddingString({
-        name: input.name,
-        description: input.description,
-        tags: input.tags,
-        color: input.color,
-      });
-
-      log.info(`[ITEM-CREATE] Semantic text prepared: "${embeddingText}"`);
-    } catch (error) {
-      log.error('Failed to prepare semantic text:', error);
     }
   }
 

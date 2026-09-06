@@ -5,20 +5,12 @@
 import { z } from 'zod';
 import { idString, optionalText } from './common.schema.js';
 
-export const handoverInitiateSchema = z.object({
+export const handoverReissueSchema = z.object({
   matchId: idString,
   lostItemId: idString,
   foundItemId: idString,
   // Issue the code even though the strict distance, day and time checks fail.
   // Admin only, recorded in the handover audit trail.
-  overrideCriteria: z.boolean().optional(),
-  overrideReason: optionalText(500),
-});
-
-export const handoverReissueSchema = z.object({
-  matchId: idString,
-  lostItemId: idString,
-  foundItemId: idString,
   overrideCriteria: z.boolean().optional(),
   overrideReason: optionalText(500),
 });
@@ -31,6 +23,5 @@ export const handoverVerifySchema = z.object({
     .regex(/^[0-9]{6}$/, 'Code must be 6 digits'),
 });
 
-export type HandoverInitiateBody = z.infer<typeof handoverInitiateSchema>;
 export type HandoverReissueBody = z.infer<typeof handoverReissueSchema>;
 export type HandoverVerifyBody = z.infer<typeof handoverVerifySchema>;

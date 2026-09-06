@@ -1,5 +1,10 @@
-import { ApiError, apiGet, apiPost, authGet } from '../lib/api';
-import type { HandoverRecord, HandoverStatus, VerifyCodeResult } from '../types/domain';
+import { ApiError, apiGet, apiPost, authGet, authPost, withCriteriaFailure } from '../lib/api';
+import type {
+  HandoverRecord,
+  HandoverSession,
+  HandoverStatus,
+  VerifyCodeResult,
+} from '../types/domain';
 
 export const handoverService = {
   /**
@@ -23,6 +28,36 @@ export const handoverService = {
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;
+    }
+  },
+
+  /** Sessions that have not completed: open, blocked or expired (admin). */
+  getSessions: async (): Promise<HandoverSession[]> => {
+    const data = await authGet<{ sessions?: HandoverSession[] }>('/api/handover/sessions');
+
+    return data.sessions ?? [];
+  },
+
+  /**
+   * Issue a fresh code for a session (admin).
+   *
+   * The only way to reopen one that failed attempts have blocked: the code is
+   * hashed, so nobody can look up the old one, and verification refuses a
+   * blocked session outright.
+   */
+  reissue: async (session: {
+    matchId: string;
+    lostItemId: string;
+    foundItemId: string;
+    overrideCriteria?: boolean;
+    overrideReason?: string;
+  }): Promise<{ success: boolean; message: string }> => {
+    try {
+      return await authPost('/api/handover/reissue', session);
+    } catch (error) {
+      // A session issued over a criteria override fails those same checks
+      // again on re-issue, so the admin has to be able to override once more.
+      throw withCriteriaFailure(error);
     }
   },
 

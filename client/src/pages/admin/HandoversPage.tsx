@@ -15,6 +15,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { HandoverSessions } from '../../components/admin/HandoverSessions';
 import type { HandoverRecord } from '../../types/domain';
 import { toDate, type TimestampLike } from '../../lib/timestamps';
 
@@ -83,6 +84,8 @@ export function HandoversPage() {
           />
         </div>
       </div>
+
+      <HandoverSessions />
 
       {loading ? (
         <div className="flex justify-center py-12">

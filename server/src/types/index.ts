@@ -2,6 +2,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import type {
   AdminAuditEntry as SharedAdminAuditEntry,
   Coordinates,
+  CreditTransaction as SharedCreditTransaction,
   Item as SharedItem,
   ItemInput as SharedItemInput,
   Match as SharedMatch,
@@ -22,6 +23,8 @@ export type { AIProvider, LlmProviderName, MapCenter } from '../../../shared/dom
 
 export type {
   AdminAuditAction,
+  CreditBalance,
+  CreditReason,
   HandoverCodeStatus,
   HandoverItemSnapshot,
   HandoverPersonSnapshot,
@@ -54,135 +57,8 @@ export interface ItemInput extends SharedItemInput {
 
 export * from './handover.js';
 
-// ============ Conversation Types ============
-export type ConversationContext =
-  'report_lost' | 'report_found' | 'check_matches' | 'find_collection' | 'idle';
-
-export type ConversationState =
-  | 'idle'
-  | 'ask_description'
-  | 'ask_location'
-  | 'ask_datetime'
-  | 'ask_image'
-  | 'confirm_details'
-  | 'search_matches'
-  | 'match_confirmation'
-  | 'show_results'
-  | 'complete'
-  | 'terminated';
-
-export interface Message {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: Date;
-  metadata?: {
-    chips?: { label: string; icon?: string }[];
-    imageUrls?: string[];
-    location?: Coordinates;
-  };
-}
-
-export interface Conversation {
-  id: string;
-  userId: string;
-  context: ConversationContext;
-  state: ConversationState;
-  messages: Message[];
-  extractedData: Partial<ItemInput>;
-  pendingMatch?: MatchResult;
-  pendingLostItemId?: string;
-  invalidAttempts: number;
-  turnCount: number;
-  createdAt: Timestamp;
-  expiresAt: Timestamp; // TTL: 7 days
-}
-
-// ============ Matching Types ============
-export interface MatchResult {
-  itemId: string;
-  item: Item;
-  score: number;
-  breakdown: {
-    tagScore: number;
-    descriptionScore: number;
-    colorScore: number;
-    locationScore: number;
-    timeScore: number;
-    imageScore: number;
-  };
-}
-
 // ============ Credit Types ============
-export interface CreditTransaction {
-  id: string;
-  userId: string;
-  amount: number;
-  reason:
-    | 'signup_bonus'
-    | 'report_found'
-    | 'successful_match_finder'
-    | 'successful_match_owner'
-    | 'false_claim'
-    | 'manual_adjustment';
-  relatedItemId?: string;
-  /** Balance after this entry was applied. */
-  balanceAfter?: number;
-  /** Free text, set on a manual admin adjustment. */
-  note?: string;
-  createdAt: Timestamp;
-}
-
-// ============ Verification Types ============
-export interface VerificationQuestion {
-  question: string;
-  expectedAnswer?: string; // From item attributes
-  userAnswer?: string;
-  score?: number; // 0-100
-}
-
-export interface Verification {
-  id: string;
-  itemId: string; // Found item being verified
-  claimantUserId: string; // User claiming the item
-  claimantEmail: string;
-  questions: VerificationQuestion[];
-  confidenceScore: number; // Weighted average
-  status: 'pending' | 'passed' | 'failed';
-  /** Scored submissions so far, capped to stop repeated guessing. */
-  submissions?: number;
-  createdAt: Timestamp;
-  completedAt?: Timestamp;
-}
-
-// ============ API Types ============
-export interface ChatRequest {
-  conversationId?: string;
-  message: string;
-  context?: ConversationContext;
-  imageData?: string | string[]; // Base64 - single image or array
-  location?: Coordinates;
-}
-
-export interface ChatResponse {
-  conversationId: string;
-  message: string;
-  state: ConversationState;
-  chips?: { label: string; icon?: string }[];
-  matches?: MatchResult[];
-  isComplete: boolean;
-}
-
-// ============ Safety Constants ============
-export const SAFETY_LIMITS = {
-  MAX_INVALID_ATTEMPTS: 3,
-  MAX_TURNS_PER_CONVERSATION: 15,
-  SESSION_TIMEOUT_MINUTES: 5,
-  CHAT_HISTORY_TTL_DAYS: 7,
-  MATCH_THRESHOLD_PERCENT: 75, // Restored to 75%
-  LOCATION_RADIUS_KM: 10, // Maximum distance for matching (km)
-  TIME_WINDOW_HOURS: 72, // Maximum time difference (hours)
-} as const;
+export type CreditTransaction = SharedCreditTransaction<Timestamp>;
 
 // ============ Credit Constants ============
 export const CREDIT_VALUES = {
