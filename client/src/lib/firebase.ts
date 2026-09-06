@@ -12,7 +12,7 @@ import { getAnalytics } from 'firebase/analytics';
 function required(name: string, value: string | undefined): string {
   if (!value) {
     throw new Error(
-      `Missing ${name}. Copy client/.env.example to client/.env and fill in the Firebase web config.`,
+      `Missing ${name}. Copy .env.example to .env in the repository root and fill in the Firebase web config.`,
     );
   }
   return value;

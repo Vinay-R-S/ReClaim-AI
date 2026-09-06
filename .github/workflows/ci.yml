@@ -136,3 +136,5 @@ jobs:
           "server/src/**/*.ts"
           "server/scripts/*.ts"
           "shared/*.d.ts"
+          "docs/**/*.md"
+          "docs/api/*.json"

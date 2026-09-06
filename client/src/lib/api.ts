@@ -54,8 +54,31 @@ export async function getAuthToken(): Promise<string | null> {
   }
 }
 
+/**
+ * The API version this client is written against.
+ *
+ * Call sites keep writing `/api/items`; the version is added in one place, so
+ * moving to `v2` is a change here rather than in ninety strings. The server
+ * still answers the unversioned path, but it marks those responses deprecated.
+ */
+const API_VERSION = 'v1';
+
+/**
+ * A path that already names a version, any version.
+ *
+ * Matching the segment rather than the literal `/api/v1/` prefix keeps this
+ * right on the day the version becomes `v10`, where a prefix comparison starts
+ * mangling `/api/v1/...` into `/api/v10/v1/...`.
+ */
+const ALREADY_VERSIONED = /^\/api\/v\d+(\/|$)/;
+
 function resolveUrl(endpoint: string): string {
-  return endpoint.startsWith('http') ? endpoint : `${API_URL}${endpoint}`;
+  if (endpoint.startsWith('http')) return endpoint;
+
+  const needsVersion = endpoint.startsWith('/api/') && !ALREADY_VERSIONED.test(endpoint);
+  const versioned = needsVersion ? `/api/${API_VERSION}${endpoint.slice('/api'.length)}` : endpoint;
+
+  return `${API_URL}${versioned}`;
 }
 
 async function buildHeaders(authenticated: boolean): Promise<Headers> {
