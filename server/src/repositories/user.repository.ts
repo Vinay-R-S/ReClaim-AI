@@ -51,6 +51,38 @@ export class UserRepository {
     await this.users.doc(uid).set(data, { merge: true });
   }
 
+  /**
+   * A page of users, newest first.
+   *
+   * The admin screen used to read the whole collection from the browser
+   * (defect PERF-07). A cursor rather than an offset, for the same reason the
+   * item list uses one: Firestore has no offset that does not read what it
+   * skips.
+   */
+  async listPage(
+    limit: number,
+    cursor?: string,
+  ): Promise<{ users: StoredUser[]; nextCursor: string | null }> {
+    let query = this.users.orderBy('createdAt', 'desc').limit(limit);
+
+    if (cursor) {
+      const anchor = await this.users.doc(cursor).get();
+
+      // A deleted anchor ends the walk rather than silently restarting it.
+      if (!anchor.exists) return { users: [], nextCursor: null };
+
+      query = query.startAfter(anchor);
+    }
+
+    const snapshot = await query.get();
+    const users = snapshot.docs.map((doc) => ({ ...(doc.data() as User), uid: doc.id }));
+
+    return {
+      users,
+      nextCursor: users.length === limit ? (users[users.length - 1]?.uid ?? null) : null,
+    };
+  }
+
   async listByRole(role: UserRole, limit: number): Promise<StoredUser[]> {
     const snapshot = await this.users.where('role', '==', role).limit(limit).get();
 

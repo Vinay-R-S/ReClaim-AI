@@ -22,9 +22,12 @@ export class ItemController {
   constructor(private readonly items: ItemService = itemService) {}
 
   list = async (req: AuthRequest, res: Response): Promise<Response> => {
-    const items = await this.items.list(req.query as unknown as ItemListQuery, req.user);
+    const { items, nextCursor } = await this.items.list(
+      req.query as unknown as ItemListQuery,
+      req.user,
+    );
 
-    return res.json({ items });
+    return res.json({ items, nextCursor });
   };
 
   getById = async (req: AuthRequest, res: Response): Promise<Response> => {

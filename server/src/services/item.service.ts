@@ -62,7 +62,10 @@ export class ItemService {
    * drop every one of them. An owner sees their own unreviewed reports;
    * everyone else sees approved items only.
    */
-  async list(filters: ItemListQuery, user: AuthUser | undefined): Promise<StoredItem[]> {
+  async list(
+    filters: ItemListQuery,
+    user: AuthUser | undefined,
+  ): Promise<{ items: StoredItem[]; nextCursor: string | null }> {
     const isAdmin = user?.role === 'admin';
 
     // The browse list is public, but filtering by owner is not: without this,
@@ -72,7 +75,7 @@ export class ItemService {
       throw new AppError('You can only list your own reports', 403);
     }
 
-    const { items, sortedByQuery } = await this.items.list({
+    const { items, sortedByQuery, nextCursor } = await this.items.list({
       type: filters.type,
       status: filters.status,
       // A moderation filter is an admin tool. A non-admin asking for one gets
@@ -80,17 +83,27 @@ export class ItemService {
       moderation: isAdmin ? filters.moderation : undefined,
       reportedBy: filters.reportedBy,
       limit: filters.limit,
+      cursor: filters.cursor,
     });
 
     if (!sortedByQuery) {
-      return items
-        .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
-        .slice(0, filters.limit);
+      return {
+        items: items
+          .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
+          .slice(0, filters.limit),
+        nextCursor: null,
+      };
     }
 
     const ownList = Boolean(filters.reportedBy) && isOwnerOrAdmin(user, filters.reportedBy);
 
-    return isAdmin || ownList ? items : items.filter(isPubliclyVisible);
+    // Visibility is applied after the page is taken, so a page can come back
+    // shorter than the limit while more pages remain: `nextCursor` is what says
+    // whether to ask again, not the length of what arrived.
+    return {
+      items: isAdmin || ownList ? items : items.filter(isPubliclyVisible),
+      nextCursor,
+    };
   }
 
   /**

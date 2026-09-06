@@ -6,7 +6,13 @@
 
 import { Router } from 'express';
 import { aiController } from '../controllers/ai.controller.js';
-import { asyncHandler, authMiddleware, requireActiveUser, validate } from '../middleware/index.js';
+import {
+  aiLimiter,
+  asyncHandler,
+  authMiddleware,
+  requireActiveUser,
+  validate,
+} from '../middleware/index.js';
 import { analyzeImageSchema, enhanceDescriptionSchema } from '../schemas/index.js';
 
 const router = Router();
@@ -19,6 +25,7 @@ router.post(
   '/analyze-image',
   authMiddleware,
   requireActiveUser,
+  aiLimiter,
   validate(analyzeImageSchema),
   asyncHandler(aiController.analyzeImage),
 );
@@ -28,6 +35,7 @@ router.post(
   '/enhance-description',
   authMiddleware,
   requireActiveUser,
+  aiLimiter,
   validate(enhanceDescriptionSchema),
   asyncHandler(aiController.enhanceDescription),
 );

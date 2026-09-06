@@ -24,6 +24,8 @@ export type {
   AIProvider,
   AnalyticsResponse,
   Coordinates,
+  DashboardKpis,
+  DashboardStats,
   LlmProviderName,
   MapCenter,
   SystemSettings,

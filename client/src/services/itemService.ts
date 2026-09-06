@@ -1,6 +1,4 @@
-import { collection, doc, getDocs, getDoc, query, orderBy } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { authDelete, authGet, authPost, authPut } from '../lib/api';
+import { ApiError, authDelete, authGet, authPost, authPut } from '../lib/api';
 import { compressImage } from '../lib/imageCompression';
 import type { AdminAuditEntry, Item, ItemInput, ModerationStatus } from '../types/domain';
 
@@ -10,33 +8,61 @@ import type { AdminAuditEntry, Item, ItemInput, ModerationStatus } from '../type
  */
 const IMAGE_MAX_EDGE = 800;
 
-const ITEMS_COLLECTION = 'items';
+/** Items per request. The endpoint refuses anything above 100. */
+const PAGE_SIZE = 100;
 
-// Get all items
+/**
+ * A ceiling on how many pages one call will walk.
+ *
+ * The admin screens want the whole list, and the honest way to give it to them
+ * is to page through it rather than to ask Firestore for every document at
+ * once from the browser. The cap is what stops a growing project turning a
+ * screen load into an unbounded sequence of requests; PERF-01 is what removes
+ * the need for the walk at all, by filtering server side per screen.
+ */
+const MAX_PAGES = 20;
+
+/**
+ * Every item the caller may see, newest first.
+ *
+ * This used to read the `items` collection directly from the browser, which
+ * needed a rule that let an admin read every document and pulled the whole
+ * corpus over the wire (defect PERF-07). It goes through the API now, a page
+ * at a time.
+ */
 export async function getItems(): Promise<Item[]> {
-  const itemsRef = collection(db, ITEMS_COLLECTION);
-  const q = query(itemsRef, orderBy('createdAt', 'desc'));
-  const snapshot = await getDocs(q);
+  const items: Item[] = [];
+  let cursor: string | null = null;
 
-  return snapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Item[];
-}
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const query: string = cursor
+      ? `/api/items?limit=${PAGE_SIZE}&cursor=${encodeURIComponent(cursor)}`
+      : `/api/items?limit=${PAGE_SIZE}`;
 
-// Get single item by ID
-export async function getItemById(id: string): Promise<Item | null> {
-  const docRef = doc(db, ITEMS_COLLECTION, id);
-  const docSnap = await getDoc(docRef);
+    const data: { items?: Item[]; nextCursor?: string | null } = await authGet(query);
 
-  if (!docSnap.exists()) {
-    return null;
+    items.push(...(data.items ?? []));
+
+    if (!data.nextCursor) return items;
+
+    cursor = data.nextCursor;
   }
 
-  return {
-    id: docSnap.id,
-    ...docSnap.data(),
-  } as Item;
+  console.warn(`Item list stopped at ${MAX_PAGES} pages; some items were not loaded.`);
+
+  return items;
+}
+
+export async function getItemById(id: string): Promise<Item | null> {
+  try {
+    const { item } = await authGet<{ item?: Item }>(`/api/items/${id}`);
+
+    return item ?? null;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+
+    throw error;
+  }
 }
 
 // Update item via server API (requires authentication)

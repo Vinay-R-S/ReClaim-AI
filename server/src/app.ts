@@ -22,8 +22,10 @@ import authRoutes from './routes/auth.js';
 import cctvRoutes from './routes/cctv.js';
 import aiRoutes from './routes/ai.js';
 import usersRoutes from './routes/users.js';
+import statsRoutes from './routes/stats.js';
 import {
   authLimiter,
+  loginNotificationLimiter,
   profileLimiter,
   apiLimiter,
   testingApiLimiter,
@@ -95,10 +97,14 @@ export function createApp(): express.Express {
     }),
   );
 
-  // Rate limiting on auth routes (stricter). The profile bootstrap is exempt:
-  // it runs on every app mount rather than per credential attempt.
+  // Rate limiting on auth routes (stricter). Two paths are exempt from the
+  // credential limiter: the profile bootstrap runs on every app mount rather
+  // than per credential attempt, and the login notice fires once per
+  // successful sign-in, so five per IP per fifteen minutes was tripped by
+  // ordinary use from a shared address (defect PERF-09).
   app.use('/api/auth', (req: Request, res: Response, next: NextFunction) => {
     if (req.path === '/profile') return profileLimiter(req, res, next);
+    if (req.path === '/login-notification') return loginNotificationLimiter(req, res, next);
     return authLimiter(req, res, next);
   });
 
@@ -142,6 +148,7 @@ export function createApp(): express.Express {
   app.use('/api/cctv', cctvRoutes);
   app.use('/api/ai', aiRoutes);
   app.use('/api/users', usersRoutes);
+  app.use('/api/stats', statsRoutes);
 
   // ERROR HANDLING
 

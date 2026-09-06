@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { format, startOfDay, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import {
   CheckCircle,
   Clock,
@@ -18,10 +18,9 @@ import {
   TrendingUp,
   Users,
 } from '@/lib/icons';
-import { useItems } from '@/hooks/useItems';
-import { useMatches } from '@/hooks/useMatches';
-import { useHandovers } from '@/hooks/useHandovers';
-import { toDate } from '@/lib/timestamps';
+import { useDashboardStats } from '@/hooks/useDashboardStats';
+import { fromDayKey } from '@/lib/timestamps';
+import { Feedback } from '@/components/ui/Feedback';
 import {
   KPICard,
   SkeletonCard,
@@ -39,33 +38,44 @@ import {
 } from '@/components/admin/dashboard/DashboardCharts';
 import { ItemHeatmap } from '@/components/admin/ItemHeatmap';
 
-/** How often the dashboard re-reads its three collections. */
+/** How often the dashboard asks the server for a fresh set of numbers. */
 const REFRESH_INTERVAL_MS = 30000;
 
+/** The colour each score band is drawn in. */
+const BAND_COLOURS: Record<string, string> = {
+  '0-30%': '#ef4444',
+  '31-50%': '#f59e0b',
+  '51-70%': '#3b82f6',
+  '71-100%': '#22c55e',
+};
+
+/** What the KPI row shows before the first response arrives. */
+const EMPTY_KPIS: KPIData = {
+  totalItems: 0,
+  lostTotal: 0,
+  foundTotal: 0,
+  activeLost: 0,
+  activeFound: 0,
+  totalMatches: 0,
+  pendingReview: 0,
+  claimed: 0,
+  matched: 0,
+  matchSuccessRate: 0,
+};
+
 export function MainDashboard() {
-  const { items, loading: itemsLoading, reload: reloadItems } = useItems();
-  const { matches, reload: reloadMatches } = useMatches({ includeHistory: true });
-  const { handovers, reload: reloadHandovers } = useHandovers('all');
+  const { stats, loading, error, reload } = useDashboardStats();
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('7d');
 
-  const loading = itemsLoading;
-
   const fetchData = useCallback(
     async ({ silent = false } = {}) => {
-      await Promise.all([
-        reloadItems({ silent }),
-        reloadMatches({ silent }),
-        reloadHandovers({ silent }),
-      ]);
+      await reload({ silent });
       setLastRefresh(new Date());
     },
-    [reloadItems, reloadMatches, reloadHandovers],
+    [reload],
   );
 
-  // Auto-refresh. PERF-06 replaces the three collection reads with one
-  // aggregate endpoint; until then this is the same three the screen already
-  // needed on mount.
   useEffect(() => {
     // Silent: replacing every chart with a skeleton twice a minute is not a
     // refresh anyone asked for.
@@ -76,92 +86,31 @@ export function MainDashboard() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Create items map for quick lookup
-  const itemsMap = new Map(items.map((item) => [item.id, item]));
+  const kpiData: KPIData = stats?.kpis ?? EMPTY_KPIS;
 
-  // Calculate KPI data
-  // Note: Claimed/Matched should only count LOST items (owners claim, finders hand over)
-  const lostItems = items.filter((i) => i.type === 'Lost');
-  const foundItems = items.filter((i) => i.type === 'Found');
+  const scoreDistribution: ScoreDistribution[] = (stats?.scoreDistribution ?? []).map((band) => ({
+    ...band,
+    color: BAND_COLOURS[band.range] ?? '#94a3b8',
+  }));
 
-  const kpiData: KPIData = {
-    totalItems: items.length,
-    activeLost: lostItems.filter((i) => i.status === 'Pending').length,
-    activeFound: foundItems.filter((i) => i.status === 'Pending').length,
-    totalMatches: matches.length, // Match pairs from AI matching
-    pendingReview: items.filter((i) => i.status === 'Pending').length,
-    // Only Lost items can be "Claimed" (owner claims their item)
-    claimed: lostItems.filter((i) => i.status === 'Claimed').length,
-    // Count Lost items that are matched (awaiting handover)
-    matched: lostItems.filter((i) => i.status === 'Matched').length,
-    // Success rate based on Lost items (how many lost items were reunited)
-    matchSuccessRate:
-      lostItems.length > 0
-        ? Math.round(
-            (lostItems.filter((i) => i.status === 'Matched' || i.status === 'Claimed').length /
-              lostItems.length) *
-              100,
-          )
-        : 0,
-  };
-
-  // Calculate score distribution
-  const scoreDistribution: ScoreDistribution[] = [
-    {
-      range: '0-30%',
-      count: matches.filter((m) => m.matchScore <= 30).length,
-      color: '#ef4444',
-    },
-    {
-      range: '31-50%',
-      count: matches.filter((m) => m.matchScore > 30 && m.matchScore <= 50).length,
-      color: '#f59e0b',
-    },
-    {
-      range: '51-70%',
-      count: matches.filter((m) => m.matchScore > 50 && m.matchScore <= 70).length,
-      color: '#3b82f6',
-    },
-    {
-      range: '71-100%',
-      count: matches.filter((m) => m.matchScore > 70).length,
-      color: '#22c55e',
-    },
-  ];
-
-  // Calculate trend data based on time range
+  /**
+   * The trend, cut to the range the admin picked.
+   *
+   * The server sends ninety days once; switching between 7, 30 and all is a
+   * slice rather than another request.
+   */
   const getTrendData = (): TrendData[] => {
     const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
-    const result: TrendData[] = [];
+    const series = stats?.matchTrend ?? [];
 
-    for (let i = days - 1; i >= 0; i--) {
-      const day = startOfDay(subDays(new Date(), i));
-      const dayEnd = new Date(day.getTime() + 24 * 60 * 60 * 1000);
-
-      const count = matches.filter((m) => {
-        const matchDate = toDate(m.createdAt);
-        if (!matchDate) return false;
-        return matchDate >= day && matchDate < dayEnd;
-      }).length;
-
-      result.push({
-        date: format(day, timeRange === '7d' ? 'EEE' : 'MMM d'),
-        matches: count,
-      });
-    }
-
-    return result;
+    return series.slice(-days).map((point) => ({
+      date: format(fromDayKey(point.date), timeRange === '7d' ? 'EEE' : 'MMM d'),
+      matches: point.matches,
+    }));
   };
 
-  // Efficiency data - count only LOST items for success metrics
-  // (Lost items get matched/claimed when they are successfully reunited)
-  const lostItemsForEfficiency = items.filter((i) => i.type === 'Lost');
-  const matchedLostItems = lostItemsForEfficiency.filter(
-    (i) => i.status === 'Matched' || i.status === 'Claimed',
-  ).length;
-  const unmatchedLostItems = lostItemsForEfficiency.filter(
-    (i) => i.status !== 'Matched' && i.status !== 'Claimed',
-  ).length;
+  const matchedLostItems = stats?.efficiency.matched ?? 0;
+  const unmatchedLostItems = stats?.efficiency.unmatched ?? 0;
 
   if (loading) {
     return (
@@ -177,6 +126,23 @@ export function MainDashboard() {
           <SkeletonChart />
           <SkeletonChart />
         </div>
+      </div>
+    );
+  }
+
+  if (error && !stats) {
+    return (
+      <div className="space-y-6">
+        <Feedback
+          tone="error"
+          message="Could not load the dashboard. The numbers below would be zeros rather than an empty project, so nothing is shown."
+        />
+        <button
+          onClick={() => void fetchData()}
+          className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors"
+        >
+          Try again
+        </button>
       </div>
     );
   }
@@ -262,15 +228,24 @@ export function MainDashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <EfficiencyDonut matched={matchedLostItems} unmatched={unmatchedLostItems} />
         <div className="xl:col-span-2">
-          <RecentMatchesPanel matches={matches} itemsMap={itemsMap} />
+          <RecentMatchesPanel matches={stats?.recentMatches ?? []} />
         </div>
       </div>
 
       {/* Charts Row 3: Handover History */}
-      <HandoverTrendChart handovers={handovers} timeRange={timeRange} />
+      <HandoverTrendChart
+        trend={stats?.handoverTrend ?? []}
+        total={stats?.totalHandovers ?? 0}
+        timeRange={timeRange}
+      />
 
       {/* Item Location Heatmap */}
-      <ItemHeatmap radiusKm={2.5} />
+      <ItemHeatmap
+        radiusKm={2.5}
+        loading={loading}
+        points={stats?.heatmapPoints ?? []}
+        mapCenter={stats?.mapCenter}
+      />
 
       {/* Quick Stats Section */}
       <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
@@ -280,15 +255,11 @@ export function MainDashboard() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
           <div className="text-center p-4 bg-red-50 rounded-xl">
-            <p className="text-2xl font-bold text-red-600">
-              {items.filter((i) => i.type === 'Lost').length}
-            </p>
+            <p className="text-2xl font-bold text-red-600">{kpiData.lostTotal}</p>
             <p className="text-sm text-text-secondary">Lost</p>
           </div>
           <div className="text-center p-4 bg-blue-50 rounded-xl">
-            <p className="text-2xl font-bold text-blue-600">
-              {items.filter((i) => i.type === 'Found').length}
-            </p>
+            <p className="text-2xl font-bold text-blue-600">{kpiData.foundTotal}</p>
             <p className="text-sm text-text-secondary">Found</p>
           </div>
           <div className="text-center p-4 bg-green-50 rounded-xl">

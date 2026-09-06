@@ -4,7 +4,14 @@
 
 import { Router } from 'express';
 import { cctvController } from '../controllers/cctv.controller.js';
-import { asyncHandler, authMiddleware, requireAdmin, validate } from '../middleware/index.js';
+import {
+  aiLimiter,
+  asyncHandler,
+  cctvScanLimiter,
+  authMiddleware,
+  requireAdmin,
+  validate,
+} from '../middleware/index.js';
 import { cctvAnalyzeSchema, cctvDescribeSchema, cctvDetectSchema } from '../schemas/index.js';
 
 const router = Router();
@@ -17,6 +24,7 @@ router.post(
   '/detect',
   authMiddleware,
   requireAdmin,
+  cctvScanLimiter,
   validate(cctvDetectSchema),
   asyncHandler(cctvController.detect),
 );
@@ -26,6 +34,7 @@ router.post(
   '/analyze',
   authMiddleware,
   requireAdmin,
+  aiLimiter,
   validate(cctvAnalyzeSchema),
   asyncHandler(cctvController.analyze),
 );
@@ -35,6 +44,7 @@ router.post(
   '/describe',
   authMiddleware,
   requireAdmin,
+  aiLimiter,
   validate(cctvDescribeSchema),
   asyncHandler(cctvController.describe),
 );

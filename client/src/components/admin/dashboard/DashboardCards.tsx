@@ -9,16 +9,7 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
-export interface KPIData {
-  totalItems: number;
-  activeLost: number;
-  activeFound: number;
-  totalMatches: number;
-  pendingReview: number;
-  claimed: number;
-  matched: number;
-  matchSuccessRate: number;
-}
+export type { DashboardKpis as KPIData } from '@/types/domain';
 
 export interface ScoreDistribution {
   range: string;

@@ -43,8 +43,11 @@ export async function getAuthToken(): Promise<string | null> {
   if (!user) return null;
 
   try {
-    // Force refresh ensures token is valid
-    return await user.getIdToken(true);
+    // Not `getIdToken(true)`. Forcing a refresh made every single API call
+    // wait on a network round trip to Google before it could start; the SDK
+    // already refreshes a token that is expired or close to it (defect
+    // PERF-08).
+    return await user.getIdToken();
   } catch (error) {
     console.error('Failed to get auth token:', error);
     return null;

@@ -15,6 +15,9 @@ import { userIdParamsSchema, userStatusUpdateSchema } from '../schemas/index.js'
 
 const router = Router();
 
+/** GET /api/users - admin: a page of accounts, newest first */
+router.get('/', authMiddleware, requireAdmin, asyncHandler(userController.list));
+
 /** PUT /api/users/:userId/status - admin: block or unblock an account */
 router.put(
   '/:userId/status',

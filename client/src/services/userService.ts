@@ -1,49 +1,58 @@
-import { collection, doc, getDocs, getDoc, query, orderBy } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { authPut } from '../lib/api';
+import { authGet, authPut } from '../lib/api';
 import type { User } from '../types/domain';
 
 const USERS_COLLECTION = 'users';
 
-// Get all users (admins are managed elsewhere and excluded from this list)
+/** Users per request. The endpoint refuses anything above 100. */
+const PAGE_SIZE = 100;
+
+/** A ceiling on how many pages one call will walk. */
+const MAX_PAGES = 20;
+
+/**
+ * Every non-admin account, newest first.
+ *
+ * This used to read the whole `users` collection from the browser, which is
+ * one of the full-collection client reads PERF-07 is about. It goes through
+ * the API a page at a time, and the admin filter is applied server side.
+ */
 export async function getUsers(): Promise<User[]> {
-  const usersRef = collection(db, USERS_COLLECTION);
+  const users: User[] = [];
+  let cursor: string | null = null;
 
-  const q = query(usersRef, orderBy('createdAt', 'desc'));
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const query: string = cursor
+      ? `/api/users?limit=${PAGE_SIZE}&cursor=${encodeURIComponent(cursor)}`
+      : `/api/users?limit=${PAGE_SIZE}`;
 
-  const snapshot = await getDocs(q);
-  const users = snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      uid: doc.id,
-      ...data,
-      status: data.status || 'active', // Default to active if not set
-      lostItemsCount: data.lostItemsCount || 0,
-      foundItemsCount: data.foundItemsCount || 0,
-      totalItemsCount: data.totalItemsCount || 0,
-    } as User;
-  });
+    const data: { users?: User[]; nextCursor?: string | null } = await authGet(query);
 
-  // Filter by role rather than by a build-time admin email: the email was
-  // compiled into the bundle and went stale the moment a second admin existed
-  // (defect SEC-21).
-  return users.filter((user) => user.role !== 'admin');
-}
+    users.push(...(data.users ?? []));
 
-// Get single user by ID
-export async function getUserById(uid: string): Promise<User | null> {
-  const docRef = doc(db, USERS_COLLECTION, uid);
-  const docSnap = await getDoc(docRef);
+    if (!data.nextCursor) return users;
 
-  if (!docSnap.exists()) {
-    return null;
+    cursor = data.nextCursor;
   }
 
+  console.warn(`User list stopped at ${MAX_PAGES} pages; some users were not loaded.`);
+
+  return users;
+}
+
+/** One account. Readable by its owner and by an admin. */
+export async function getUserById(uid: string): Promise<User | null> {
+  const docSnap = await getDoc(doc(db, USERS_COLLECTION, uid));
+
+  if (!docSnap.exists()) return null;
+
   const data = docSnap.data();
+
   return {
-    uid: docSnap.id,
     ...data,
-    status: data.status || 'active', // Default to active if not set
+    uid: docSnap.id,
+    status: data.status || 'active',
     lostItemsCount: data.lostItemsCount || 0,
     foundItemsCount: data.foundItemsCount || 0,
     totalItemsCount: data.totalItemsCount || 0,

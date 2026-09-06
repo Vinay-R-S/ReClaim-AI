@@ -30,6 +30,18 @@ export class SettingsRepository {
     return doc.exists ? (doc.data() ?? null) : null;
   }
 
+  /**
+   * Whether `migrate:handovers` has run.
+   *
+   * Read on the user handover list so it can stop paying for the legacy scan
+   * once every record carries `participantIds`.
+   */
+  async handoverParticipantsBackfilled(): Promise<boolean> {
+    const settings = await this.getSystem();
+
+    return settings?.handoverParticipantsBackfilled === true;
+  }
+
   async recordVisit(): Promise<void> {
     await this.settings.doc(ANALYTICS_DOC).set(
       {

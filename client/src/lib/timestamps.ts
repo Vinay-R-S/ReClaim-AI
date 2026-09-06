@@ -37,3 +37,15 @@ export function toDate(value: TimestampLike): Date | null {
 
   return new Date(seconds * 1000);
 }
+
+/**
+ * Read a `YYYY-MM-DD` bucket key as a local date.
+ *
+ * `new Date('2026-09-06')` is UTC midnight, and formatting that in a timezone
+ * west of UTC renders the previous day, so every chart label was off by one.
+ */
+export function fromDayKey(key: string): Date {
+  const [year, month, day] = key.split('-').map(Number);
+
+  return new Date(year, (month ?? 1) - 1, day ?? 1);
+}

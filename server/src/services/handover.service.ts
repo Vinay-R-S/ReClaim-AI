@@ -579,6 +579,13 @@ async function completeHandover(
       lostPersonId: lostItem?.reportedBy || null,
       foundPersonId: foundItem?.reportedBy || null,
 
+      // The pair again, as an array, so "the handovers this person took part
+      // in" is an indexed `array-contains` rather than a read of every
+      // completed handover followed by an in-memory filter (defect PERF-03).
+      participantIds: [lostItem?.reportedBy, foundItem?.reportedBy].filter(
+        (id): id is string => typeof id === 'string' && id.length > 0,
+      ),
+
       matchScore: matchData?.matchScore ?? lostItem?.matchScore ?? foundItem?.matchScore ?? 0,
       matchCreatedAt: matchData?.createdAt || null,
 

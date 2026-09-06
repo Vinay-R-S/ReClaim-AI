@@ -9,6 +9,7 @@ import {
   verifyHandoverCode,
 } from '../services/handover.service.js';
 import { HandoverRepository, handoverRepository } from '../repositories/handover.repository.js';
+import { settingsRepository } from '../repositories/settings.repository.js';
 import { AppError } from '../middleware/errorHandler.middleware.js';
 import type { AuthRequest } from '../middleware/auth.middleware.js';
 import type { HandoverInitiateBody, HandoverVerifyBody } from '../schemas/index.js';
@@ -71,7 +72,12 @@ export class HandoverController {
   };
 
   listForUser = async (req: Request, res: Response): Promise<Response> => {
-    const handovers = await this.handovers.listCompletedForUser(req.params.userId);
+    // Once the backfill has run the indexed query is the whole answer, so the
+    // legacy scan stops being paid for on every request (defect PERF-03).
+    const backfilled = await settingsRepository.handoverParticipantsBackfilled();
+    const handovers = await this.handovers.listCompletedForUser(req.params.userId, {
+      backfilled,
+    });
 
     return res.json({ handovers });
   };

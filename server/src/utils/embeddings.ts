@@ -3,6 +3,9 @@ import { env } from '../config/env.js';
 
 const log = createLogger('embeddings');
 
+/** Ceiling on one embedding call. */
+const EMBEDDING_TIMEOUT_MS = 15000;
+
 const GEMINI_API_URL =
   'https://generativelanguage.googleapis.com/v1/models/text-embedding-004:embedContent';
 
@@ -30,6 +33,10 @@ export async function generateEmbedding(text: string): Promise<number[]> {
           parts: [{ text }],
         },
       }),
+      // The last outbound call without a deadline. A provider that accepts the
+      // connection and then stalls would hold the request open with it
+      // (defect PERF-06).
+      signal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
     });
 
     if (!response.ok) {

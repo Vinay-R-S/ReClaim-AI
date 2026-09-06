@@ -11,7 +11,10 @@
 
 import { DocumentReference, FieldValue } from 'firebase-admin/firestore';
 import { collections, db } from '../utils/firebase-admin.js';
+import { createLogger } from '../utils/logger.js';
 import type { HandoverCode, Item } from '../types/index.js';
+
+const log = createLogger('handover.repository');
 
 export interface CompletionContext {
   lostItem: (Item & { id: string }) | null;
@@ -201,33 +204,82 @@ export class HandoverRepository {
   /**
    * Every completed handover a user took part in, on either side.
    *
-   * The participant filter is applied in memory because the record stores the
-   * two people in nested objects rather than as an array; PERF-03 turns that
-   * into an indexed `array-contains`.
+   * `participantIds` is written alongside the two person snapshots precisely so
+   * this can be one indexed query. Records written before that field existed do
+   * not match it, so a second filtered pass picks them up until
+   * `npm run migrate:handovers` has run and the settings flag says so; that
+   * pass is the full scan this method used to do on every request.
    */
   async listCompletedForUser(
     userId: string,
+    { backfilled = false }: { backfilled?: boolean } = {},
+  ): Promise<Array<Record<string, unknown> & { id: string }>> {
+    const indexed = await this.handovers
+      .where('participantIds', 'array-contains', userId)
+      .get()
+      .then((snapshot) => snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })))
+      .catch((error) => {
+        // The composite index ships in `firestore.indexes.json` but is only
+        // live once `firebase deploy` has run.
+        log.warn('Indexed handover lookup failed, falling back to a scan', { error });
+        return null;
+      });
+
+    // The migration has run, so every record carries the field and the indexed
+    // query is the whole answer. This is the state PERF-03 exists to reach.
+    if (indexed !== null && backfilled) return sortByCompleted(indexed);
+
+    // The index is missing, so the scan is the only source: it must return
+    // everything the user took part in, new records included.
+    if (indexed === null) {
+      return sortByCompleted(await this.listLegacyForUser(userId, { includeBackfilled: true }));
+    }
+
+    const legacy = await this.listLegacyForUser(userId, { includeBackfilled: false });
+    const seen = new Set(indexed.map((record) => record.id));
+
+    return sortByCompleted([...indexed, ...legacy.filter((record) => !seen.has(record.id))]);
+  }
+
+  /**
+   * The pre-`participantIds` path: read the completed handovers and filter on
+   * the nested person snapshots. Bounded by `status`, which is at least one
+   * equality filter rather than the whole collection.
+   *
+   * `includeBackfilled` is the difference between the two callers. Alongside a
+   * working indexed query this must skip records that query already returned;
+   * as a standalone fallback it is the only source and must return them.
+   */
+  private async listLegacyForUser(
+    userId: string,
+    { includeBackfilled }: { includeBackfilled: boolean },
   ): Promise<Array<Record<string, unknown> & { id: string }>> {
     const snapshot = await this.handovers.where('status', '==', 'completed').get();
 
-    const mine = snapshot.docs
+    return snapshot.docs
       .map((doc) => ({ ...doc.data(), id: doc.id }))
       .filter((handover) => {
         const record = handover as {
+          participantIds?: string[];
           lostPersonDetails?: { userId?: string };
           foundPersonDetails?: { userId?: string };
         };
+
+        if (record.participantIds) {
+          return includeBackfilled && record.participantIds.includes(userId);
+        }
 
         return (
           record.lostPersonDetails?.userId === userId ||
           record.foundPersonDetails?.userId === userId
         );
       });
-
-    // Newest first. `completedAt` is the older field name and some records
-    // still carry only that one.
-    return mine.sort((a, b) => completedMillis(b) - completedMillis(a));
   }
+}
+
+/** Newest first. `completedAt` is the older field name and some records carry only that one. */
+function sortByCompleted<T extends Record<string, unknown>>(records: T[]): T[] {
+  return records.sort((a, b) => completedMillis(b) - completedMillis(a));
 }
 
 function completedMillis(handover: Record<string, unknown>): number {

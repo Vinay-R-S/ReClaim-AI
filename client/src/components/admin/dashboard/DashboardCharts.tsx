@@ -5,7 +5,7 @@
  * about where the numbers came from.
  */
 
-import { format, startOfDay, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import {
   Bar,
   BarChart,
@@ -23,8 +23,8 @@ import {
 } from 'recharts';
 import { Activity, CheckCircle, Package, Search, TrendingUp, Zap } from '@/lib/icons';
 import { cn } from '@/lib/utils';
-import { toDate } from '@/lib/timestamps';
-import type { HandoverRecord, Item, Match } from '@/types/domain';
+import { fromDayKey } from '@/lib/timestamps';
+import type { DashboardStats } from '@/types/domain';
 import type { ScoreDistribution, TrendData } from './DashboardCards';
 
 interface MatchScoreChartProps {
@@ -204,11 +204,11 @@ export function EfficiencyDonut({ matched, unmatched }: EfficiencyDonutProps) {
 // RECENT MATCHES PANEL
 // ============================================================================
 interface RecentMatchesPanelProps {
-  matches: Match[];
-  itemsMap: Map<string, Item>;
+  /** Already joined to the item names by the stats endpoint. */
+  matches: DashboardStats['recentMatches'];
 }
 
-export function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProps) {
+export function RecentMatchesPanel({ matches }: RecentMatchesPanelProps) {
   const recentMatches = matches.slice(0, 3); // Show only 3 recent matches
 
   const getScoreColor = (score: number) => {
@@ -249,9 +249,6 @@ export function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProp
       ) : (
         <div className="space-y-3">
           {recentMatches.map((match) => {
-            const lostItem = itemsMap.get(match.lostItemId);
-            const foundItem = itemsMap.get(match.foundItemId);
-
             return (
               <div
                 key={match.id}
@@ -259,20 +256,12 @@ export function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProp
               >
                 {/* Lost Item */}
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {lostItem?.cloudinaryUrls?.[0] ? (
-                    <img
-                      src={lostItem.cloudinaryUrls[0]}
-                      alt={lostItem?.name || 'Lost Item'}
-                      className="w-10 h-10 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center text-lg">
-                      <Search className="w-5 h-5 text-red-500" />
-                    </div>
-                  )}
+                  <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center text-lg">
+                    <Search className="w-5 h-5 text-red-500" />
+                  </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-text-primary truncate">
-                      {lostItem?.name || 'Unknown'}
+                      {match.lostItemName}
                     </p>
                     <p className="text-xs text-red-500">Lost</p>
                   </div>
@@ -293,20 +282,12 @@ export function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProp
 
                 {/* Found Item */}
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {foundItem?.cloudinaryUrls?.[0] ? (
-                    <img
-                      src={foundItem.cloudinaryUrls[0]}
-                      alt={foundItem?.name || 'Found Item'}
-                      className="w-10 h-10 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-lg">
-                      <Package className="w-5 h-5 text-green-500" />
-                    </div>
-                  )}
+                  <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-lg">
+                    <Package className="w-5 h-5 text-green-500" />
+                  </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-text-primary truncate">
-                      {foundItem?.name || 'Unknown'}
+                      {match.foundItemName}
                     </p>
                     <p className="text-xs text-green-500">Found</p>
                   </div>
@@ -328,37 +309,23 @@ export function RecentMatchesPanel({ matches, itemsMap }: RecentMatchesPanelProp
 // CHART: HANDOVER TREND
 // ============================================================================
 interface HandoverTrendChartProps {
-  handovers: HandoverRecord[];
+  /** Ninety days of buckets from the stats endpoint, oldest first. */
+  trend: DashboardStats['handoverTrend'];
+  /** All-time, which is what the badge says and the trend is not. */
+  total: number;
   timeRange: '7d' | '30d' | 'all';
 }
 
-export function HandoverTrendChart({ handovers, timeRange }: HandoverTrendChartProps) {
-  // Calculate trend data based on time range
-  const getTrendData = () => {
-    const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
-    const result: { date: string; handovers: number }[] = [];
+export function HandoverTrendChart({ trend, total, timeRange }: HandoverTrendChartProps) {
+  const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
 
-    for (let i = days - 1; i >= 0; i--) {
-      const day = startOfDay(subDays(new Date(), i));
-      const dayEnd = new Date(day.getTime() + 24 * 60 * 60 * 1000);
+  // Switching range is a slice of what already arrived, not another request.
+  const data = trend.slice(-days).map((point) => ({
+    date: format(fromDayKey(point.date), timeRange === '7d' ? 'EEE' : 'MMM d'),
+    handovers: point.handovers,
+  }));
 
-      const count = handovers.filter((h) => {
-        const handoverDate = toDate(h.handoverTime);
-        if (!handoverDate) return false;
-        return handoverDate >= day && handoverDate < dayEnd;
-      }).length;
-
-      result.push({
-        date: format(day, timeRange === '7d' ? 'EEE' : 'MMM d'),
-        handovers: count,
-      });
-    }
-
-    return result;
-  };
-
-  const data = getTrendData();
-  const totalHandovers = handovers.length;
+  const totalHandovers = total;
 
   return (
     <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">

@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import {
   coordinatesSchema,
+  cursorString,
   emailString,
   imagePayload,
   isoDateString,
@@ -121,6 +122,14 @@ export const itemListQuerySchema = z.object({
     .min(1, 'Limit must be at least 1')
     .max(100, 'Limit must be at most 100')
     .default(50),
+  /**
+   * The id of the last item on the previous page.
+   *
+   * Cursor rather than offset: Firestore has no offset that does not read and
+   * discard the skipped documents, and a page boundary that moves as items are
+   * created would repeat or drop rows.
+   */
+  cursor: cursorString.optional(),
 });
 
 export type ItemModerateBody = z.infer<typeof itemModerateSchema>;
