@@ -28,8 +28,10 @@ import {
   Legend,
 } from 'recharts';
 import { cn } from '@/lib/utils';
-import { getItems, type Item } from '@/services/itemService';
-import { getAllMatchesWithHistory, type Match } from '@/services/matchService';
+import { toDate } from '@/lib/timestamps';
+import { getItems } from '@/services/itemService';
+import type { HandoverRecord, Item, Match } from '@/types/domain';
+import { getAllMatchesWithHistory } from '@/services/matchService';
 import { handoverService } from '@/services/handoverService';
 import { ItemHeatmap } from '@/components/admin/ItemHeatmap';
 
@@ -45,16 +47,6 @@ interface KPIData {
   claimed: number;
   matched: number;
   matchSuccessRate: number;
-}
-
-interface HandoverRecord {
-  id: string;
-  matchId: string;
-  lostItemId: string;
-  foundItemId: string;
-  itemName: string;
-  handoverTime: { seconds?: number; _seconds?: number };
-  status: string;
 }
 
 interface ScoreDistribution {
@@ -486,10 +478,8 @@ function HandoverTrendChart({ handovers, timeRange }: HandoverTrendChartProps) {
       const dayEnd = new Date(day.getTime() + 24 * 60 * 60 * 1000);
 
       const count = handovers.filter((h) => {
-        // Handle both Firestore timestamp formats (_seconds and seconds)
-        const secs = h.handoverTime?._seconds ?? h.handoverTime?.seconds;
-        if (!secs) return false;
-        const handoverDate = new Date(secs * 1000);
+        const handoverDate = toDate(h.handoverTime);
+        if (!handoverDate) return false;
         return handoverDate >= day && handoverDate < dayEnd;
       }).length;
 

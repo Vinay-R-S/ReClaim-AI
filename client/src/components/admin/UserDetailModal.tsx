@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { type User } from '../../services/userService';
-import { type Item, getItems } from '../../services/itemService';
+import type { Item, User } from '../../types/domain';
+import { getItems } from '../../services/itemService';
 import { Timestamp } from 'firebase/firestore';
 import { cn } from '../../lib/utils';
 

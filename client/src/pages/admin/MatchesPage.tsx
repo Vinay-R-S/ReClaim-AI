@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Search, RefreshCw, Package } from 'lucide-react';
-import { getAllMatches, type Match } from '@/services/matchService';
-import { getItems, type Item } from '@/services/itemService';
+import { getAllMatches } from '@/services/matchService';
+import type { Item, Match } from '@/types/domain';
+import { getItems } from '@/services/itemService';
 import { MatchReviewModal } from '@/components/admin/MatchReviewModal';
 
 // Extended match with item names

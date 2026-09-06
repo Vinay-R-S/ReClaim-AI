@@ -8,7 +8,7 @@ import { User, MapPin, Mail, Calendar, Save, Loader2, Search, X } from 'lucide-r
 import { useAuth } from '@/context/AuthContext';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { authFetch } from '../../lib/authApi';
+import { authGet, authPut } from '../../lib/api';
 
 // Default marker icon
 const defaultIcon = L.icon({
@@ -55,13 +55,10 @@ export function AdminProfile() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const response = await authFetch('/api/settings');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.mapCenter) {
-            setLocation(data.mapCenter);
-            setAddressQuery(data.mapCenter.address || '');
-          }
+        const data = await authGet<{ mapCenter?: AdminLocation }>('/api/settings');
+        if (data.mapCenter) {
+          setLocation(data.mapCenter);
+          setAddressQuery(data.mapCenter.address || '');
         }
       } catch (error) {
         console.error('Failed to load settings:', error);
@@ -214,21 +211,13 @@ export function AdminProfile() {
     setSaveStatus('idle');
 
     try {
-      const response = await authFetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          aiProvider: 'groq_only', // Keep existing
-          mapCenter: location,
-        }),
+      await authPut('/api/settings', {
+        aiProvider: 'groq_only', // Keep existing
+        mapCenter: location,
       });
 
-      if (response.ok) {
-        setSaveStatus('success');
-        setTimeout(() => setSaveStatus('idle'), 3000);
-      } else {
-        setSaveStatus('error');
-      }
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 3000);
     } catch {
       setSaveStatus('error');
     } finally {

@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import { UserLayout } from '../../components/layout/UserLayout';
 import { useAuth } from '../../context/AuthContext';
-import { type Item } from '../../services/itemService';
+import type { Item } from '../../types/domain';
 import { EditReportModal } from '../../components/user/EditReportModal';
 import { ImageCarousel } from '../../components/ui/ImageCarousel';
 import { Package, MapPin, Calendar, Edit2, Eye } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { authFetch } from '../../lib/authApi';
+import { authGet } from '../../lib/api';
 
 export function MyReportsPage() {
   const { user } = useAuth();
@@ -22,11 +22,8 @@ export function MyReportsPage() {
 
     try {
       setLoading(true);
-      const response = await authFetch(`/api/items/user/${user.uid}`);
-      if (response.ok) {
-        const data = await response.json();
-        setItems(data.items || []);
-      }
+      const data = await authGet<{ items?: Item[] }>(`/api/items/user/${user.uid}`);
+      setItems(data.items || []);
     } catch (error) {
       console.error('Error fetching my reports:', error);
     } finally {

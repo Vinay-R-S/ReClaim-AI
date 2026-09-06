@@ -5,7 +5,7 @@
 // site (defect SEC-16). Which provider actually runs is the admin `aiProvider`
 // setting, applied server side.
 
-import { authPost, authGet } from '../lib/authApi';
+import { authGet, authPost } from '../lib/api';
 
 export interface AnalysisResult {
   name: string;

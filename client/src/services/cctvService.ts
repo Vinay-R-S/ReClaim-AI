@@ -1,4 +1,4 @@
-import { authFetch } from '@/lib/authApi';
+import { authGet, authPost } from '@/lib/api';
 
 // Detection types
 export interface Detection {
@@ -21,25 +21,16 @@ export async function detectObjectsInFrame(
   targetClasses?: string[],
   targetClass?: string,
 ): Promise<DetectionResult> {
-  const response = await authFetch('/api/cctv/detect', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: imageBase64, targetClasses, targetClass }),
+  return authPost<DetectionResult>('/api/cctv/detect', {
+    image: imageBase64,
+    targetClasses,
+    targetClass,
   });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || err.details || 'Detection failed');
-  }
-  return response.json();
 }
 
 // Get all available YOLO class names for dropdown
 export async function getYoloClasses(): Promise<string[]> {
-  const response = await authFetch('/api/cctv/classes');
-  if (!response.ok) {
-    throw new Error('Failed to fetch YOLO classes');
-  }
-  const data = await response.json();
+  const data = await authGet<{ classes?: string[] }>('/api/cctv/classes');
   return data.classes || [];
 }
 
@@ -58,16 +49,10 @@ export async function describeItemImage(
   imageBase64: string,
   detectedClass: string,
 ): Promise<ItemDescription> {
-  const response = await authFetch('/api/cctv/describe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: imageBase64, detectedClass }),
+  return authPost<ItemDescription>('/api/cctv/describe', {
+    image: imageBase64,
+    detectedClass,
   });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || err.details || 'Description failed');
-  }
-  return response.json();
 }
 
 // Capture frame from video element as base64
@@ -244,16 +229,12 @@ async function analyzeBatch(
   itemName: string,
   itemDescription: string,
 ): Promise<VideoAnalysisResult> {
-  const response = await authFetch('/api/cctv/analyze', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ frames, targetClass, itemName, itemDescription }),
+  return authPost<VideoAnalysisResult>('/api/cctv/analyze', {
+    frames,
+    targetClass,
+    itemName,
+    itemDescription,
   });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || err.details || 'Video analysis failed');
-  }
-  return response.json();
 }
 
 /**

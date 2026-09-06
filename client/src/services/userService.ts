@@ -1,21 +1,7 @@
-import { collection, doc, getDocs, getDoc, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { authPut } from '../lib/authApi';
-
-export interface User {
-  uid: string;
-  email: string;
-  displayName?: string;
-  photoURL?: string;
-  role?: 'user' | 'admin';
-  status?: 'active' | 'blocked';
-  createdAt?: Timestamp;
-  lastLoginAt?: Timestamp;
-  // Item submission counts
-  lostItemsCount?: number;
-  foundItemsCount?: number;
-  totalItemsCount?: number;
-}
+import { authPut } from '../lib/api';
+import type { User } from '../types/domain';
 
 const USERS_COLLECTION = 'users';
 

@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Save, Bot, Loader2, MapPin, X, Search, Video, Users, RefreshCw } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { authFetch } from '../../lib/authApi';
+import { authGet, authPut } from '../../lib/api';
 
 type AIProvider =
   | 'groq_only'
@@ -124,26 +124,23 @@ export function AdminSettings() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await authFetch('/api/settings');
-        if (response.ok) {
-          const data = await response.json();
-          // Ensure booleans are properly set to avoid controlled/uncontrolled input issues
-          setSettings({
-            ...data,
-            cctvEnabled: data.cctvEnabled !== false,
-            testingMode: data.testingMode === true,
-          });
-          if (data.mapCenter?.address) {
-            setAddressQuery(data.mapCenter.address);
-          }
+        const data = await authGet<SystemSettings>('/api/settings');
+        // Ensure booleans are properly set to avoid controlled/uncontrolled input issues
+        setSettings({
+          ...data,
+          cctvEnabled: data.cctvEnabled !== false,
+          testingMode: data.testingMode === true,
+        });
+        if (data.mapCenter?.address) {
+          setAddressQuery(data.mapCenter.address);
         }
 
-        // Fetch analytics (visitor count)
-        const analyticsResponse = await authFetch('/api/settings/analytics');
-        if (analyticsResponse.ok) {
-          const analyticsData = await analyticsResponse.json();
-          setVisitorCount(analyticsData.visitorCount || 0);
-        }
+        // The visitor counter is its own read: a failure there must not take
+        // the settings form down with it.
+        const analytics = await authGet<{ visitorCount?: number }>('/api/settings/analytics').catch(
+          () => null,
+        );
+        setVisitorCount(analytics?.visitorCount || 0);
       } catch (error) {
         console.error('Failed to fetch settings:', error);
       } finally {
@@ -324,24 +321,14 @@ export function AdminSettings() {
     setSaveStatus('idle');
 
     try {
-      const response = await authFetch('/api/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settings),
-      });
+      await authPut('/api/settings', settings);
 
-      if (response.ok) {
-        setSaveStatus('success');
-        // Reload page after short delay to update global state (like sidebar)
-        setTimeout(() => {
-          setSaveStatus('idle');
-          window.location.reload();
-        }, 1000);
-      } else {
-        setSaveStatus('error');
-      }
+      setSaveStatus('success');
+      // Reload page after short delay to update global state (like sidebar)
+      setTimeout(() => {
+        setSaveStatus('idle');
+        window.location.reload();
+      }, 1000);
     } catch (error) {
       console.error('Failed to save settings:', error);
       setSaveStatus('error');
@@ -584,11 +571,8 @@ export function AdminSettings() {
             onClick={async () => {
               setIsLoadingAnalytics(true);
               try {
-                const response = await authFetch('/api/settings/analytics');
-                if (response.ok) {
-                  const data = await response.json();
-                  setVisitorCount(data.visitorCount || 0);
-                }
+                const data = await authGet<{ visitorCount?: number }>('/api/settings/analytics');
+                setVisitorCount(data.visitorCount || 0);
               } catch (error) {
                 console.error('Failed to refresh analytics:', error);
               } finally {

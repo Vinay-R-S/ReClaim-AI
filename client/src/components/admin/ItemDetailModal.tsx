@@ -13,13 +13,8 @@ import {
 import { cn } from '../../lib/utils';
 import { ImageCarousel } from '../ui/ImageCarousel';
 import { ItemReviewHistory } from './ItemReviewHistory';
-import {
-  type Item,
-  type ItemInput,
-  updateItemViaApi,
-  deleteItemViaApi,
-  getItemById,
-} from '../../services/itemService';
+import { updateItemViaApi, deleteItemViaApi, getItemById } from '../../services/itemService';
+import type { Item, ItemInput } from '../../types/domain';
 import { Timestamp } from 'firebase/firestore';
 
 interface ItemDetailModalProps {

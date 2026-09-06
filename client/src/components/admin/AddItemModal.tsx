@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Upload, Image as ImageIcon, Loader2, Sparkles, Camera } from 'lucide-react';
-import { uploadItemImage, type ItemInput } from '../../services/itemService';
+import { uploadItemImage } from '../../services/itemService';
+import type { ItemInput } from '../../types/domain';
 import { analyzeItemImages, isAiAvailable } from '../../services/aiService';
 import { LazyLocationPicker } from '../ui/LazyLocationPicker';
-import { authFetch } from '../../lib/authApi';
+import { authGet, authPost } from '../../lib/api';
 
 interface AddItemModalProps {
   onClose: () => void;
@@ -158,35 +159,22 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
           : [];
       const uploadedImages = [...seededImages, ...pickedImages];
 
-      // Call backend API to trigger automatic matching
-      // Note: authFetch automatically adds the Firebase auth token
-      console.log('[ADMIN-MODAL] Creating item via API with', uploadedImages.length, 'images');
-
-      const response = await authFetch('/api/items', {
-        method: 'POST',
-        body: JSON.stringify({
-          item: {
-            name: formData.name,
-            description: formData.description,
-            type: formData.type,
-            location: formData.location,
-            date: formData.date,
-            tags: formData.tags,
-            color: formData.color,
-            category: formData.category,
-            coordinates: formData.coordinates,
-          },
-          images: uploadedImages,
-        }),
+      // The API is what triggers matching, so creation goes through it.
+      const result = await authPost<{ id: string }>('/api/items', {
+        item: {
+          name: formData.name,
+          description: formData.description,
+          type: formData.type,
+          location: formData.location,
+          date: formData.date,
+          tags: formData.tags,
+          color: formData.color,
+          category: formData.category,
+          coordinates: formData.coordinates,
+        },
+        images: uploadedImages,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create item');
-      }
-
-      console.log('[ADMIN-MODAL] Item created successfully');
-      const result = await response.json();
       setStep('success');
 
       // `onSuccess` closes this modal on two of its three mount sites, which
@@ -220,11 +208,7 @@ export function AddItemModal({ onClose, onSuccess, initialData, initialType }: A
       if (!mountedRef.current) return;
 
       try {
-        const response = await authFetch(`/api/items/${itemId}`);
-
-        if (!response.ok) continue;
-
-        const { item } = await response.json();
+        const { item } = await authGet<{ item?: { matchScore?: number } }>(`/api/items/${itemId}`);
 
         if (typeof item?.matchScore === 'number' && item.matchScore > 0) {
           if (!mountedRef.current) return;
