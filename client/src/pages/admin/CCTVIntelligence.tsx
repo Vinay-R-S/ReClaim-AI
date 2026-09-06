@@ -29,6 +29,8 @@ import { AddItemModal } from '../../components/admin/AddItemModal';
 import { CameraContextPanel } from '../../components/admin/CameraContextPanel';
 import { Link } from 'react-router-dom';
 import { authGet } from '../../lib/api';
+import { useFeedback } from '../../hooks/useFeedback';
+import { Feedback } from '../../components/ui/Feedback';
 
 export function CCTVIntelligence() {
   // Feature toggle state
@@ -65,6 +67,8 @@ export function CCTVIntelligence() {
   >(undefined);
   const [recordedAt, setRecordedAt] = useState<Date>(() => new Date());
 
+  const { feedback, showError, clear } = useFeedback();
+
   // Register Found Workflow
   const [showAddModal, setShowAddModal] = useState(false);
   const [foundItemData, setFoundItemData] = useState<any>(null);
@@ -95,7 +99,9 @@ export function CCTVIntelligence() {
   const hasCameraContext = () => {
     if (cameraLocation.trim() && cameraCoordinates) return true;
 
-    alert('Set the camera location and pick a point on the map before registering a detection.');
+    showError(
+      'Set the camera location and pick a point on the map before registering a detection.',
+    );
     return false;
   };
 
@@ -379,7 +385,7 @@ export function CCTVIntelligence() {
   // 7. Video Analysis
   const handleAnalyzeVideo = async () => {
     if (!uploadVideoRef.current || !selectedCategory) {
-      alert('Please select a category to search for');
+      showError('Please select a category to search for');
       return;
     }
 
@@ -413,7 +419,9 @@ export function CCTVIntelligence() {
       }
     } catch (err) {
       console.error('Video analysis failed:', err);
-      alert(`Analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      showError(`Analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}`, {
+        sticky: true,
+      });
     } finally {
       setIsAnalyzing(false);
       setAnalysisProgress(0);
@@ -436,6 +444,8 @@ export function CCTVIntelligence() {
 
   return (
     <div className="space-y-6">
+      {feedback && <Feedback {...feedback} onDismiss={clear} />}
+
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">

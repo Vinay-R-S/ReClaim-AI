@@ -279,3 +279,50 @@ export interface AdminAuditEntry<TTime = unknown> {
   details?: Record<string, unknown>;
   createdAt?: TTime;
 }
+
+/* ============ System settings ============ */
+
+/** An LLM provider this deployment can be pointed at. */
+export type LlmProviderName = 'groq' | 'gemini' | 'grok';
+
+/**
+ * Which provider runs, and whether a failure falls through to another.
+ *
+ * The `_only` variants exist so an operator can pin a provider while
+ * diagnosing one, rather than having a fallback hide the problem.
+ */
+export type AIProvider =
+  | 'groq_only'
+  | 'gemini_only'
+  | 'grok_only'
+  | 'groq_with_fallback'
+  | 'gemini_with_fallback'
+  | 'grok_with_fallback';
+
+export interface MapCenter {
+  address: string;
+  lat: number;
+  lng: number;
+}
+
+export interface SystemSettings {
+  aiProvider: AIProvider;
+  mapCenter?: MapCenter;
+  cctvEnabled: boolean;
+  /** true = Testing (daily call budget), false = Dev (unlimited). */
+  testingMode: boolean;
+}
+
+/**
+ * `GET /api/settings`. Carries which providers actually have a key, so the
+ * admin screen can stop someone selecting one that would kill every AI
+ * feature.
+ */
+export interface SystemSettingsResponse extends SystemSettings {
+  availableProviders?: LlmProviderName[];
+}
+
+export interface AnalyticsResponse {
+  visitorCount: number;
+  lastVisit?: unknown;
+}

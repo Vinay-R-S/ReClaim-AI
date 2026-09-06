@@ -1,35 +1,36 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Search, RefreshCw, Clock, Check, X } from 'lucide-react';
-import { getItems, moderateItem } from '@/services/itemService';
+import { moderateItem } from '@/services/itemService';
+import { useItems } from '@/hooks/useItems';
 import type { Item } from '@/types/domain';
 import { RejectItemDialog } from '@/components/admin/RejectItemDialog';
 import { Timestamp } from 'firebase/firestore';
 
 export function PendingApprovalsPage() {
+  const { items: allItems, loading, error: loadError, reload } = useItems();
   const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<Item | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPendingItems = async () => {
-    try {
-      setLoading(true);
-      const allItems = await getItems();
-      // Awaiting review, which is not the same thing as awaiting a match: an
-      // approved item sits at status Pending for as long as it takes to find a
-      // counterpart. Items reported before review existed carry no moderation
-      // field and are already live, so they are not queued here.
-      setItems(allItems.filter((item) => item.moderation === 'pending'));
-    } catch (err) {
-      console.error('Failed to fetch pending items:', err);
-      setError('Could not load the review queue.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Awaiting review, which is not the same thing as awaiting a match: an
+  // approved item sits at status Pending for as long as it takes to find a
+  // counterpart. Items reported before review existed carry no moderation
+  // field and are already live, so they are not queued here.
+  //
+  // Held in local state rather than derived, because a decision removes the
+  // row before the server has confirmed it.
+  useEffect(() => {
+    setItems(allItems.filter((item) => item.moderation === 'pending'));
+  }, [allItems]);
+
+  // A failed read returns an empty list, which is indistinguishable from an
+  // empty queue unless the failure is said out loud.
+  useEffect(() => {
+    if (loadError) setError('Could not load the review queue.');
+  }, [loadError]);
 
   /**
    * Record a decision and drop the item from the queue.
@@ -53,10 +54,6 @@ export function PendingApprovalsPage() {
       setPendingId(null);
     }
   };
-
-  useEffect(() => {
-    fetchPendingItems();
-  }, []);
 
   const filteredItems = items.filter((item) => {
     const searchLower = searchTerm.toLowerCase();
@@ -116,7 +113,7 @@ export function PendingApprovalsPage() {
             />
           </div>
           <button
-            onClick={fetchPendingItems}
+            onClick={() => void reload()}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             title="Refresh"
           >

@@ -1,33 +1,20 @@
 /**
- * System settings, shared by the admin screen that writes them and the LLM
- * layer that reads them.
+ * System settings.
+ *
+ * The shape is shared with the client, which reads the same document through
+ * `GET /api/settings`; only the write-time timestamp is server-only.
  */
 
-export type AIProvider =
-  | 'groq_only'
-  | 'gemini_only'
-  | 'grok_only'
-  | 'groq_with_fallback'
-  | 'gemini_with_fallback'
-  | 'grok_with_fallback';
+import type { AIProvider, SystemSettings as SharedSettings } from '../../../shared/domain.js';
 
-export interface MapCenter {
-  address: string;
-  lat: number;
-  lng: number;
-}
+export type { AIProvider, MapCenter, SystemSettingsResponse } from '../../../shared/domain.js';
 
-export interface SystemSettings {
-  aiProvider: AIProvider;
-  mapCenter?: MapCenter;
-  cctvEnabled: boolean;
-  /** true = Testing (400 calls/day limit), false = Dev (unlimited) */
-  testingMode: boolean;
+export interface SystemSettings extends SharedSettings {
   updatedAt?: FirebaseFirestore.FieldValue;
 }
 
 export const DEFAULT_SETTINGS: SystemSettings = {
-  aiProvider: 'groq_only',
+  aiProvider: 'groq_only' as AIProvider,
   cctvEnabled: true,
   testingMode: false,
 };

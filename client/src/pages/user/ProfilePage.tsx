@@ -18,6 +18,8 @@ import { updateProfile } from 'firebase/auth';
 import { db } from '../../lib/firebase';
 import { authGet, authPost } from '../../lib/api';
 import { useCredits } from '../../hooks/useCredits';
+import { useFeedback } from '../../hooks/useFeedback';
+import { Feedback } from '../../components/ui/Feedback';
 
 interface UserStats {
   totalReports: number;
@@ -47,6 +49,7 @@ export function ProfilePage() {
   const { user } = useAuth();
   // Shared with the header badge, so both show the same balance.
   const { credits } = useCredits();
+  const { feedback, showError, showSuccess, clear } = useFeedback();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<UserStats>({
     totalReports: 0,
@@ -226,13 +229,13 @@ export function ProfilePage() {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      showError('Please select an image file');
       return;
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image size must be less than 5MB');
+      showError('Image size must be less than 5MB');
       return;
     }
 
@@ -267,13 +270,14 @@ export function ProfilePage() {
       // Clear preview after successful upload
       setPhotoPreview(null);
 
-      // Show success message
-      alert('Profile picture updated successfully!');
+      showSuccess('Profile picture updated successfully!');
     } catch (error: any) {
       console.error('Error uploading profile picture:', error);
       const errorMessage = error?.message || 'Unknown error occurred';
       console.error('Full error:', error);
-      alert(`Failed to upload profile picture: ${errorMessage}. Please try again.`);
+      showError(`Failed to upload profile picture: ${errorMessage}. Please try again.`, {
+        sticky: true,
+      });
       setPhotoPreview(null);
     } finally {
       setUploadingPhoto(false);
@@ -296,6 +300,8 @@ export function ProfilePage() {
   return (
     <UserLayout>
       <div className="space-y-6">
+        {feedback && <Feedback {...feedback} onDismiss={clear} />}
+
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Profile</h1>
