@@ -1,0 +1,30 @@
+# Local infrastructure. Nothing in here is a deployment target: the API, the
+# worker and the client all run from npm as before, and this exists so that
+# `REDIS_URL=redis://localhost:6379` points at something.
+#
+#   docker compose up -d redis
+#   docker compose down
+#
+# The data volume is deliberate. Losing it loses queued jobs, which is exactly
+# what losing a production Redis would do, and the outbox is what makes that
+# survivable: an event that was committed is drained again.
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: reclaim-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    # Append-only persistence, so a restart does not silently empty the queues.
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:

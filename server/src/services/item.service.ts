@@ -18,6 +18,8 @@ import { recordAdminAction } from './audit.service.js';
 import { triggerAutoMatching } from './autoMatch.service.js';
 import { updateUserItemCounts } from './userStats.service.js';
 import { stripUndefined } from '../utils/firestore.js';
+import { getJobQueue } from '../platform/jobs/queue.js';
+import { RETRY_POLICIES } from '../platform/jobs/job.types.js';
 import { createLogger } from '../utils/logger.js';
 import { AppError } from '../middleware/errorHandler.middleware.js';
 import type { AuthUser } from '../middleware/auth.middleware.js';
@@ -26,8 +28,16 @@ import type { Item, ItemInput, ItemStatus, ItemType, ModerationStatus } from '..
 
 const log = createLogger('item.service');
 
-/** How long a matching run holds its claim before another may take it over. */
-const MATCHING_RUN_TTL_MS = 5 * 60 * 1000;
+/**
+ * How long a matching run holds its claim before another may take it over.
+ *
+ * Tied to the job's own attempt timeout on purpose. An attempt that times out
+ * is abandoned, not cancelled, so its claim outlives it; if the claim outlived
+ * the retries as well, every retry would find the item claimed, skip, and
+ * report success, and a run that timed out once would never happen and never
+ * be dead-lettered. Expiring with the attempt is what lets the retry work.
+ */
+const MATCHING_RUN_TTL_MS = RETRY_POLICIES['match.item'].timeoutMs;
 
 /** What a create or a moderation decision reports about the matching run. */
 export type MatchingOutcome = 'pending' | 'awaiting_review' | 'not_started';
@@ -175,7 +185,12 @@ export class ItemService {
       coordinates: input.coordinates,
     });
 
-    const created = await this.items.create(document);
+    // The item and the event that starts its matching run commit together.
+    // Dispatching after the write is what used to lose the run whenever the
+    // process restarted in the seconds between the two.
+    const created = await this.items.createWithEvents(document, (itemId) => [
+      { name: 'item.created', payload: { itemId, moderation } },
+    ]);
 
     log.info(`[ITEM-CREATE] Item created: ${created.id}, type: ${input.type}`);
 
@@ -184,8 +199,6 @@ export class ItemService {
     if (moderation !== 'approved') {
       return { item: created, matching: 'awaiting_review' };
     }
-
-    void this.runMatchingInBackground(created.id, input, cloudinaryUrls);
 
     return { item: created, matching: 'pending' };
   }
@@ -216,7 +229,15 @@ export class ItemService {
       throw new AppError(`Item is already ${decision}`, 409);
     }
 
-    await this.items.update(
+    // Whether the approval starts a matching run is decided before the write,
+    // because the event that starts it has to be in the same commit. Only an
+    // item still looking for a counterpart is worth matching: an approval on an
+    // already Matched or Claimed item is a moderation decision, not a reason to
+    // re-run the pipeline over a settled pair.
+    const matchable =
+      decision === 'approved' && item.status === 'Pending' && toMatchingInput(item) !== null;
+
+    await this.items.updateWithEvents(
       id,
       stripUndefined({
         moderation: decision,
@@ -225,6 +246,7 @@ export class ItemService {
         // An approval clears the reason a previous rejection left behind.
         moderationReason: decision === 'rejected' ? reason : FieldValue.delete(),
       }),
+      matchable ? [{ name: 'item.approved', payload: { itemId: id } }] : [],
     );
 
     await recordAdminAction({
@@ -235,25 +257,13 @@ export class ItemService {
       details: { previousModeration: current ?? null, itemType: item.type },
     });
 
-    if (decision !== 'approved') {
+    if (!matchable) {
+      if (decision === 'approved' && item.status === 'Pending') {
+        log.info(`[MODERATE] ${id} approved but has no report date, matching skipped`);
+      }
+
       return { moderation: decision, matching: 'not_started' };
     }
-
-    // Only an item still looking for a counterpart is worth matching. An
-    // approval on an already Matched or Claimed item is a moderation decision,
-    // not a reason to re-run the pipeline over a settled pair.
-    if (item.status !== 'Pending') {
-      return { moderation: decision, matching: 'not_started' };
-    }
-
-    const input = toMatchingInput(item);
-
-    if (!input) {
-      log.info(`[MODERATE] ${id} approved but has no report date, matching skipped`);
-      return { moderation: decision, matching: 'not_started' };
-    }
-
-    void this.runMatchingInBackground(id, input, item.cloudinaryUrls || []);
 
     return { moderation: decision, matching: 'pending' };
   }
@@ -278,13 +288,21 @@ export class ItemService {
       throw new AppError('Approve the item before matching it', 400);
     }
 
-    const input = toMatchingInput(item);
-
-    if (!input) {
+    if (!toMatchingInput(item)) {
       throw new AppError('Item has no report date, so it cannot be matched', 400);
     }
 
-    void this.runMatchingInBackground(id, input, item.cloudinaryUrls || []);
+    // A manual rematch changes no state, so it has no event to ride with and
+    // goes straight to the queue. The key buckets by the minute, which makes a
+    // double-clicked button one run and a deliberate retry a minute later a
+    // second one.
+    const bucket = Math.floor(Date.now() / 60_000);
+
+    await getJobQueue().enqueue(
+      'match.item',
+      { itemId: id, reason: 'rematch' },
+      { idempotencyKey: `match.item:${id}:rematch:${bucket}` },
+    );
   }
 
   /**
@@ -429,16 +447,42 @@ export class ItemService {
   }
 
   /**
-   * Run auto-matching outside the request.
+   * Run auto-matching for one item.
    *
-   * Nothing awaits this, so it owns its errors: an unhandled rejection here
-   * would take the process down for an item that was already created.
+   * The entry point of the `match.item` job, and its only caller: creation and
+   * approval raise an event, the drainer turns it into a job, and the job lands
+   * here. It reads the item rather than being handed it, because the job may
+   * run in another process minutes after the write.
+   *
+   * Errors are raised, not swallowed. The queue decides what a failure means:
+   * it retries, and dead-letters what will not succeed.
    */
-  private async runMatchingInBackground(
-    itemId: string,
-    item: ItemInput,
-    cloudinaryUrls: string[],
-  ): Promise<void> {
+  async runMatching(itemId: string): Promise<void> {
+    const stored = await this.items.findById(itemId);
+
+    if (!stored) {
+      log.warn(`[MATCHING] Item ${itemId} no longer exists, skipping`);
+      return;
+    }
+
+    if (stored.status !== 'Pending') {
+      log.info(`[MATCHING] ${itemId} is ${stored.status}, skipping`);
+      return;
+    }
+
+    if (!isPubliclyVisible(stored)) {
+      log.info(`[MATCHING] ${itemId} is not approved, skipping`);
+      return;
+    }
+
+    const item = toMatchingInput(stored);
+
+    if (!item) {
+      log.warn(`[MATCHING] ${itemId} has no report date, skipping`);
+      return;
+    }
+
+    const cloudinaryUrls = stored.cloudinaryUrls || [];
     let claimed = false;
 
     try {
@@ -463,8 +507,6 @@ export class ItemService {
       });
 
       log.info(`[MATCHING] Finished for ${itemId}, best ${result?.highestScore ?? 0}%`);
-    } catch (error) {
-      log.error(`[MATCHING] Failed for ${itemId}:`, error);
     } finally {
       // Only the holder releases the claim, otherwise a rejected dispatch would
       // clear the marker belonging to the run that is actually working.

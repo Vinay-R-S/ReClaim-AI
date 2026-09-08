@@ -101,6 +101,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Platform collections. The catch-all below already denies these; they are
+    // named so that nobody reading the rules has to wonder whether a browser
+    // can see the event stream, take a job claim, or read a failed payload.
+    match /outbox/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /jobClaims/{key} {
+      allow read, write: if false;
+    }
+
+    match /deadLetters/{failureId} {
+      allow read, write: if false;
+    }
+
     // Anything not named above is server-only.
     match /{document=**} {
       allow read, write: if false;

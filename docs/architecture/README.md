@@ -12,6 +12,7 @@ reviewed in the same pull request as the change they describe.
 | [C4 level 3, component](c4-components.md)        | The insides of matching, handover and the ledger, plus the module boundaries            |
 | [Sequences](sequences.md)                        | Report to match, match to handover to completion, revert, chat with moderation          |
 | [State machines](state-machines.md)              | Handover, item lifecycle, custody                                                       |
+| [Jobs and the outbox](jobs-and-outbox.md)        | How background work is committed, dispatched, retried, traced and given up on           |
 | [Data model](data-model.md)                      | Every collection, its fields, its indexes, and the access pattern each index exists for |
 | [Deployment](deployment.md)                      | Environments, network boundaries, and how a secret reaches a process                    |
 | [Requirements and capacity](nfr-and-capacity.md) | The numbers the design is accountable to, and the arithmetic behind the sizing          |

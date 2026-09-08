@@ -79,6 +79,7 @@ ReClaim-AI/
 | Document                                                           | What it answers                                                 |
 | ------------------------------------------------------------------ | --------------------------------------------------------------- |
 | [docs/architecture](docs/architecture/README.md)                   | How the system is put together, and which parts are built       |
+| [docs/architecture/jobs-and-outbox.md](docs/architecture/jobs-and-outbox.md) | Background work: the outbox, the queue, retries and tracing |
 | [docs/adr](docs/adr/README.md)                                     | Why each significant choice was made, and what would reverse it |
 | [docs/api](docs/api/README.md)                                     | The HTTP contract and the versioning policy                     |
 | [docs/server-source-structure.md](docs/server-source-structure.md) | What lives where in `server/src`                                |
@@ -138,6 +139,17 @@ The Flask service needs `YOLO_SERVICE_TOKEN` set to the same value as
 
 ### 3. Run Development Servers
 
+**Redis (optional, one command):**
+
+```bash
+docker compose up -d redis
+# Background jobs then run in the worker instead of the API process
+```
+
+Without it, set no `REDIS_URL` and the API runs jobs itself: everything works,
+nothing survives a restart, and the boot log says so. See
+[jobs and the outbox](docs/architecture/jobs-and-outbox.md).
+
 **Terminal 1 - Python YOLO Service:**
 
 ```bash
@@ -159,6 +171,14 @@ npm run dev
 cd client
 npm run dev
 # Runs on http://localhost:5173
+```
+
+**Terminal 4 - Background Worker (only with Redis):**
+
+```bash
+cd server
+npm run dev:worker
+# Drains the outbox and runs matching jobs
 ```
 
 **Access Points:**

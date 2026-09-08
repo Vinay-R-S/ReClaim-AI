@@ -16,12 +16,12 @@ flowchart TB
 
     subgraph app["Application host"]
         api["API process<br/>node dist/index.js"]
-        worker["Worker process (planned)<br/>same image, worker entrypoint"]
+        worker["Worker process<br/>node dist/worker.js"]
     end
 
     subgraph managed["Managed services"]
         fb[("Firebase<br/>Auth, Firestore")]
-        redis[("Redis (planned)")]
+        redis[("Redis")]
         cdn["Cloudinary"]
     end
 
@@ -45,15 +45,15 @@ flowchart TB
     api --> mail
     api --> chain
     api -->|"shared token"| yolo
-    api -.-> redis
+    api -->|"enqueue"| redis
 
-    worker -.-> fb
-    worker -.-> redis
-    worker -.-> llm
+    worker --> fb
+    worker -->|"consume"| redis
+    worker --> llm
     worker -.-> mail
 
     classDef planned stroke-dasharray: 5 5
-    class worker,redis,private,yolo planned
+    class private planned
 ```
 
 The vision service is drawn inside a private network because that is where it
@@ -64,23 +64,30 @@ that should.
 
 ## Environments
 
-| Environment | Purpose          | Data                                                     | Notes                                                  |
-| ----------- | ---------------- | -------------------------------------------------------- | ------------------------------------------------------ |
-| local       | Development      | Firebase emulator suite, local Redis when phase 20 lands | No real keys, no real email, the LLM stubbed or local  |
-| preview     | Per pull request | Seeded emulator                                          | CI deploys, runs the eval harness, tears down. Planned |
-| staging     | Pre-release      | A separate Firebase project, synthetic data              | Full third-party integration, Sepolia testnet          |
-| production  | Live             | The production Firebase project                          | Feature flags gate anything new in matching            |
+| Environment | Purpose          | Data                                                 | Notes                                                  |
+| ----------- | ---------------- | ---------------------------------------------------- | ------------------------------------------------------ |
+| local       | Development      | Firebase emulator suite, Redis from `docker compose` | No real keys, no real email, the LLM stubbed or local  |
+| preview     | Per pull request | Seeded emulator                                      | CI deploys, runs the eval harness, tears down. Planned |
+| staging     | Pre-release      | A separate Firebase project, synthetic data          | Full third-party integration, Sepolia testnet          |
+| production  | Live             | The production Firebase project                      | Feature flags gate anything new in matching            |
 
 The API and the worker ship from the same image with different entrypoints, so
 a dependency cannot be present in one and missing in the other.
 
 ## Build and run
 
-| Package   | Build                                  | Run                                                                                      |
-| --------- | -------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `client/` | `npm run build`, Vite, output `dist/`  | Static hosting. Reads `VITE_*` at **build** time, so a rebuild is required to change one |
-| `server/` | `npm run build`, `tsc`, output `dist/` | `node dist/index.js`. Reads its environment at **start** time                            |
-| `models/` | none                                   | `python app.py`, Flask plus YOLOv11                                                      |
+| Package   | Build                                  | Run                                                                                                                   |
+| --------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `client/` | `npm run build`, Vite, output `dist/`  | Static hosting. Reads `VITE_*` at **build** time, so a rebuild is required to change one                              |
+| `server/` | `npm run build`, `tsc`, output `dist/` | `node dist/index.js` for the API, `node dist/worker.js` for the worker. Both read their environment at **start** time |
+| `models/` | none                                   | `python app.py`, Flask plus YOLOv11                                                                                   |
+
+The worker is the same build artifact and the same image with a different
+entrypoint, so a dependency cannot be present in one and missing in the other.
+It needs `REDIS_URL` and refuses to start without it. The API does not: with no
+`REDIS_URL` it drains its own outbox and runs jobs in its own process, which is
+a supported degraded mode and is what the system did before phase 20. See
+[jobs and the outbox](jobs-and-outbox.md).
 
 Two consequences of that difference that have bitten this project:
 
@@ -144,6 +151,10 @@ future version bump for the same reason.
 
 Two other orderings that matter:
 
+- **Redis before the worker, and the worker any time.** A worker with no Redis
+  exits at boot rather than idling. An API deployed while the worker is down
+  keeps accepting reports: the events commit and the outbox holds them until a
+  drainer runs, which is the point of writing them down.
 - **Migrations before the deploy that needs them.** Each one in PLAN.md 5.1
   says which phase it gates.
 - **`firebase deploy --only firestore` before the code that assumes a new
@@ -159,6 +170,7 @@ Two other orderings that matter:
 | Browser to Firestore      | The rules in `firestore.rules`, tested against the emulator in CI                                                                                                |
 | API to the vision service | A shared bearer token that the Flask service requires on every request                                                                                           |
 | API outbound              | Nothing yet. There is no host allowlist and no private-range block on outbound fetches, which is defect SEC-23, phase 32                                         |
+| API and worker to Redis   | Nothing but the network and the connection string. Redis holds job payloads, so it belongs on a private network with a password, or `rediss://` if it is remote  |
 
 `helmet` currently runs with `contentSecurityPolicy: false`, so the application
 ships no CSP at all (defect SEC-24, phase 32).

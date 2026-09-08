@@ -13,6 +13,7 @@ import helmet from 'helmet';
 
 import { routeTable } from './routes/index.js';
 import {
+  correlationMiddleware,
   authLimiter,
   loginNotificationLimiter,
   profileLimiter,
@@ -65,6 +66,9 @@ export function createApp(): express.Express {
   // Set to 1 to trust the first proxy hop
   app.set('trust proxy', 1);
 
+  // Before anything that can log, so every line of a request carries one id.
+  app.use(correlationMiddleware);
+
   // SECURITY MIDDLEWARE
 
   app.use(
@@ -91,7 +95,10 @@ export function createApp(): express.Express {
       origin: ['https://re-claim-ai.vercel.app', env.clientUrl, 'http://localhost:4173'],
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'traceparent'],
+      // Without this the browser cannot read the id back, which is the only
+      // reason it is sent.
+      exposedHeaders: ['traceparent'],
     }),
   );
 

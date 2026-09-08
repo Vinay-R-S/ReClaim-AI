@@ -22,6 +22,7 @@ export {
   handoverStatusLimiter,
   profileLimiter,
 } from './rateLimit.middleware.js';
+export { correlationMiddleware } from './correlation.middleware.js';
 export { validate, validateQuery, validateParams } from './validation.middleware.js';
 export {
   requireRole,
