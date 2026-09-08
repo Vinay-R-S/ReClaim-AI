@@ -20,7 +20,15 @@ vi.mock('./audit.service.js', () => ({
 }));
 vi.mock('./userStats.service.js', () => ({ updateUserItemCounts: vi.fn() }));
 
+const enqueue = vi.fn(async () => ({ jobId: 'job-1', accepted: true }));
+
+vi.mock('../platform/jobs/queue.js', () => ({
+  getJobQueue: () => ({ driver: 'inline', enqueue, close: vi.fn() }),
+}));
+
 const { ItemService, isPubliclyVisible } = await import('./item.service.js');
+const { triggerAutoMatching } = await import('./autoMatch.service.js');
+const { RETRY_POLICIES } = await import('../platform/jobs/job.types.js');
 const { AppError } = await import('../middleware/errorHandler.middleware.js');
 
 type AuthUser = import('../middleware/auth.middleware.js').AuthUser;
@@ -58,6 +66,7 @@ function fakeRepository(items: StoredItem[]) {
   return {
     items,
     updates: [] as Array<{ id: string; data: Record<string, unknown> }>,
+    events: [] as Array<Record<string, unknown>>,
     async findById(id: string) {
       return items.find((entry) => entry.id === id) ?? null;
     },
@@ -83,12 +92,32 @@ function fakeRepository(items: StoredItem[]) {
     async create(data: Record<string, unknown>) {
       return { ...data, id: 'created-1' } as StoredItem;
     },
+    async createWithEvents(
+      data: Record<string, unknown>,
+      buildEvents: (itemId: string) => Array<Record<string, unknown>>,
+    ) {
+      this.events.push(...buildEvents('created-1'));
+
+      return { ...data, id: 'created-1' } as StoredItem;
+    },
+    async updateWithEvents(
+      id: string,
+      data: Record<string, unknown>,
+      events: Array<Record<string, unknown>>,
+    ) {
+      this.updates.push({ id, data });
+      this.events.push(...events);
+    },
     async delete() {},
     async exists() {
       return true;
     },
-    async claimMatchingRun() {
-      return true;
+    claims: [] as Array<{ id: string; ttlMs: number }>,
+    claimGranted: true,
+    async claimMatchingRun(id: string, ttlMs: number) {
+      this.claims.push({ id, ttlMs });
+
+      return this.claimGranted;
     },
     async releaseMatchingRun() {},
     async listByReporter() {
@@ -275,6 +304,43 @@ describe('moderate', () => {
 
     expect(result.matching).toBe('not_started');
   });
+
+  /**
+   * The event and the approval it describes are one commit, which is what
+   * stops a restart between the two from losing the matching run.
+   */
+  it('raises item.approved in the same write as the approval', async () => {
+    const { service, repo } = serviceFor([item({ moderation: 'pending' })]);
+
+    await service.moderate('item-1', { decision: 'approved' } as never, ADMIN.uid);
+
+    expect(repo.events).toEqual([{ name: 'item.approved', payload: { itemId: 'item-1' } }]);
+  });
+
+  it.each([
+    ['a rejection', { decision: 'rejected', reason: 'Not a real report' }],
+    ['an approval of a settled item', { decision: 'approved' }],
+  ])('raises no event for %s', async (label, body) => {
+    const stored =
+      label === 'a rejection'
+        ? item({ moderation: 'pending' })
+        : item({ moderation: 'pending', status: 'Claimed' });
+    const { service, repo } = serviceFor([stored]);
+
+    await service.moderate('item-1', body as never, ADMIN.uid);
+
+    expect(repo.events).toEqual([]);
+    expect(repo.updates).toHaveLength(1);
+  });
+
+  it('raises no event when the item has no report date to score against', async () => {
+    const { service, repo } = serviceFor([item({ moderation: 'pending', date: undefined })]);
+
+    const result = await service.moderate('item-1', { decision: 'approved' } as never, ADMIN.uid);
+
+    expect(result.matching).toBe('not_started');
+    expect(repo.events).toEqual([]);
+  });
 });
 
 describe('update', () => {
@@ -387,6 +453,88 @@ describe('rematch', () => {
     const { service } = serviceFor([item({ date: undefined })]);
 
     await expect(service.rematch('item-1')).rejects.toThrow(/report date/);
+  });
+
+  /**
+   * A rematch changes no state, so there is nothing for an event to ride with
+   * and it goes straight to the queue.
+   */
+  it('queues the run rather than raising an event', async () => {
+    const { service, repo } = serviceFor([item()]);
+
+    await service.rematch('item-1');
+
+    expect(repo.events).toEqual([]);
+    expect(enqueue).toHaveBeenCalledWith(
+      'match.item',
+      { itemId: 'item-1', reason: 'rematch' },
+      expect.objectContaining({
+        idempotencyKey: expect.stringMatching(/^match\.item:item-1:rematch:\d+$/),
+      }),
+    );
+  });
+
+  it('collapses a double-clicked button into one run', async () => {
+    const { service } = serviceFor([item()]);
+
+    await service.rematch('item-1');
+    await service.rematch('item-1');
+
+    const [first, second] = enqueue.mock.calls;
+
+    expect(first[2].idempotencyKey).toBe(second[2].idempotencyKey);
+  });
+});
+
+describe('runMatching', () => {
+  /**
+   * The job entry point. It reads the item rather than being handed one,
+   * because the job may run in another process minutes after the write.
+   */
+  it('runs the pipeline for an approved Pending item', async () => {
+    const { service, repo } = serviceFor([item()]);
+
+    await service.runMatching('item-1');
+
+    expect(triggerAutoMatching).toHaveBeenCalledTimes(1);
+    expect(repo.claims).toHaveLength(1);
+  });
+
+  /**
+   * An attempt that times out is abandoned, not cancelled, so its claim
+   * outlives it. A claim that also outlived the retries would make every retry
+   * skip and report success, and a run that timed out once would never happen.
+   */
+  it('claims for exactly as long as one attempt may run', async () => {
+    const { service, repo } = serviceFor([item()]);
+
+    await service.runMatching('item-1');
+
+    expect(repo.claims[0].ttlMs).toBe(RETRY_POLICIES['match.item'].timeoutMs);
+  });
+
+  it('stands down when another run holds the claim', async () => {
+    const { service, repo } = serviceFor([item()]);
+
+    repo.claimGranted = false;
+
+    await service.runMatching('item-1');
+
+    expect(triggerAutoMatching).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an item that no longer exists', 'missing-1', {}],
+    ['a settled item', 'item-1', { status: 'Claimed' }],
+    ['an unapproved item', 'item-1', { moderation: 'pending' }],
+    ['an item with no report date', 'item-1', { date: undefined }],
+  ])('does not run for %s', async (_label, id, overrides) => {
+    const { service, repo } = serviceFor([item(overrides)]);
+
+    await service.runMatching(id);
+
+    expect(triggerAutoMatching).not.toHaveBeenCalled();
+    expect(repo.claims).toHaveLength(0);
   });
 });
 

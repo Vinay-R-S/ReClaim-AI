@@ -5,7 +5,8 @@ outside the request, or have to be undone.
 
 ## Report to match
 
-Today. Matching runs in the same process after the response has been sent.
+Today. The report and the intent to match it commit together; the run happens
+in the worker.
 
 ```mermaid
 sequenceDiagram
@@ -15,6 +16,8 @@ sequenceDiagram
     participant A as API
     participant CL as Cloudinary
     participant F as Firestore
+    participant W as Worker
+    participant Q as Redis queue
     participant L as LLM
     actor AD as Admin
 
@@ -24,28 +27,37 @@ sequenceDiagram
     A->>A: zod validation, sanitize, authorize
     A->>CL: upload images
     CL-->>A: secure URLs
-    A->>F: create item, status Pending, moderation pending
+    A->>F: batch: item (Pending, moderation pending) + outbox item.created
     A-->>C: 201 Created
     Note over A,C: the response does not wait for matching
+    Note over W,F: item.created on an unapproved report dispatches nothing
 
-    AD->>A: POST /api/v1/items/:id/moderate approve
-    A->>F: moderation approved
-    A->>A: triggerAutoMatching, after the response
-    A->>F: pending items of the opposite type
+    AD->>A: PUT /api/v1/items/:id/moderate approve
+    A->>F: batch: moderation approved + outbox item.approved
+    W->>F: drain the outbox, lease the row
+    W->>Q: enqueue match.item, key = job:item:event
+    Q->>W: deliver
+    W->>F: claim the key, claim the matching run
+    W->>F: pending items of the opposite type
     loop each candidate
-        A->>L: score this pair
-        L-->>A: verdict and score
+        W->>L: score this pair
+        L-->>W: verdict and score
     end
-    A->>F: write the best match, both items to Matched
-    Note over A: at most one handover per run
+    W->>F: write the best match, both items to Matched
+    Note over W: at most one handover per run
 ```
 
 Approval is what starts matching, not creation. An unapproved report is
-invisible and unmatchable, which is the moderation gate phase 10 introduced.
+invisible and unmatchable, which is the moderation gate phase 10 introduced,
+and its `item.created` event is published with nothing dispatched.
 
-Where this breaks: the loop. One LLM call per candidate means cost and latency
-grow with the corpus, and the work after the response is not durable. Phase 20
-moves it behind an outbox, phase 23 replaces the loop with retrieval.
+Two claims guard the run, because they guard different things. The idempotency
+key stops a redelivered job from running twice; the matching-run claim on the
+item stops two different events, such as an approval and a rematch a second
+later, from scoring the same item at once.
+
+Where this still breaks: the loop. One LLM call per candidate means cost and
+latency grow with the corpus. Phase 23 replaces it with retrieval.
 
 ## Match to handover to completion
 

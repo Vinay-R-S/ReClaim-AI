@@ -11,12 +11,12 @@ flowchart TB
 
     subgraph runtime["Application"]
         api["API<br/>Node 20, Express, modular monolith"]
-        worker["Worker (planned)<br/>same image, different entrypoint"]
+        worker["Worker<br/>same image, worker entrypoint"]
     end
 
     subgraph data["State"]
         firestore[("Firestore<br/>items, users, matches, handovers, ledger")]
-        redis[("Redis (planned)<br/>queues, cache, rate buckets")]
+        redis[("Redis<br/>BullMQ queues")]
         vectors[("Vector index (planned)<br/>Firestore native, behind VectorIndex")]
     end
 
@@ -38,11 +38,11 @@ flowchart TB
     api --> yolo
     api --> email
     api --> chain
-    api -.-> redis
+    api --> redis
 
-    worker -.-> firestore
-    worker -.-> redis
-    worker -.-> llm
+    worker --> firestore
+    worker --> redis
+    worker --> llm
     worker -.-> onnx
     worker -.-> email
     worker -.-> chain
@@ -50,60 +50,32 @@ flowchart TB
     api -.-> vectors
 
     classDef planned stroke-dasharray: 5 5
-    class worker,redis,vectors,onnx planned
+    class vectors,onnx planned
 ```
 
 ## What each container is for
 
-| Container       | Runtime                                                    | Responsibility                                                                                           | Status                                                                                 |
-| --------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Web client      | React 18, Vite, static hosting                             | UI and the PWA shell. Every write goes through the API; the browser holds no business rules              | Built                                                                                  |
-| API             | Node 20, Express, modular monolith                         | HTTP, authentication, validation, orchestration. Matching, email and chain writes currently run here too | Built                                                                                  |
-| Worker          | Node 20, same image, different entrypoint                  | Matching, embeddings, email, chain writes, outbox drain. Nothing that blocks a request                   | Planned, phase 20                                                                      |
-| Queue and cache | Redis, managed                                             | BullMQ queues, rate-limit buckets, LLM and embedding cache                                               | Planned, phase 20                                                                      |
-| Primary store   | Firestore                                                  | Every document. Also the transaction boundary                                                            | Built                                                                                  |
-| Vector index    | Firestore native vector search behind a `VectorIndex` port | Dense retrieval over item embeddings                                                                     | Planned, phase 23. See [ADR 003](../adr/0003-vector-index.md)                          |
-| Object store    | Cloudinary                                                 | Item images and derived thumbnails                                                                       | Built                                                                                  |
-| Inference       | ONNX Runtime in-process                                    | Text and image embeddings on CPU                                                                         | Planned, phase 22. See [ADR 004](../adr/0004-cpu-onnx-embeddings.md)                   |
-| Vision service  | Python Flask and YOLOv11                                   | CCTV object detection only. Token-authenticated, refuses every request without `YOLO_SERVICE_TOKEN`      | Built                                                                                  |
-| LLM gateway     | Internal module, multi-provider                            | Rerank, adjudication, enrichment. Today a switch statement with a fallback chain                         | Partly built. Phase 21 replaces it. See [ADR 010](../adr/0010-provider-agnostic-ai.md) |
-| Chain           | Ethers and Sepolia                                         | Handover attestation. Optional, best effort                                                              | Built, off by default                                                                  |
+| Container       | Runtime                                                    | Responsibility                                                                                                | Status                                                                                 |
+| --------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Web client      | React 18, Vite, static hosting                             | UI and the PWA shell. Every write goes through the API; the browser holds no business rules                   | Built                                                                                  |
+| API             | Node 20, Express, modular monolith                         | HTTP, authentication, validation, orchestration. Email and chain writes still run here; matching does not     | Built                                                                                  |
+| Worker          | Node 20, same image, worker entrypoint                     | Drains the outbox and runs jobs. Matching today; embeddings, email and chain writes as later phases move them | Built, phase 20                                                                        |
+| Queue and cache | Redis, managed                                             | BullMQ queues. Rate-limit buckets and the LLM cache still live in the API process                             | Built, phase 20. Queues only                                                           |
+| Primary store   | Firestore                                                  | Every document. Also the transaction boundary                                                                 | Built                                                                                  |
+| Vector index    | Firestore native vector search behind a `VectorIndex` port | Dense retrieval over item embeddings                                                                          | Planned, phase 23. See [ADR 003](../adr/0003-vector-index.md)                          |
+| Object store    | Cloudinary                                                 | Item images and derived thumbnails                                                                            | Built                                                                                  |
+| Inference       | ONNX Runtime in-process                                    | Text and image embeddings on CPU                                                                              | Planned, phase 22. See [ADR 004](../adr/0004-cpu-onnx-embeddings.md)                   |
+| Vision service  | Python Flask and YOLOv11                                   | CCTV object detection only. Token-authenticated, refuses every request without `YOLO_SERVICE_TOKEN`           | Built                                                                                  |
+| LLM gateway     | Internal module, multi-provider                            | Rerank, adjudication, enrichment. Today a switch statement with a fallback chain                              | Partly built. Phase 21 replaces it. See [ADR 010](../adr/0010-provider-agnostic-ai.md) |
+| Chain           | Ethers and Sepolia                                         | Handover attestation. Optional, best effort                                                                   | Built, off by default                                                                  |
 
 The API and the worker ship from the same image with different entrypoints, so
 their dependencies and their code cannot drift apart.
 
 ## The request path today
 
-A report is filed and everything else happens before the response returns:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as Client
-    participant A as API
-    participant F as Firestore
-    participant L as LLM
-    participant M as Email
-
-    C->>A: POST /api/v1/items
-    A->>A: validate, authorize, sanitize
-    A->>F: create item, status Pending, moderation pending
-    A-->>C: 201 Created
-    Note over A: matching runs after the response,<br/>in the same process
-    A->>F: load pending items of the opposite type
-    loop every surviving candidate
-        A->>L: score this pair
-    end
-    A->>F: write match, move both items to Matched
-    A->>M: handover code and link
-```
-
-Two properties of that path are the reason for most of Track B. The LLM is
-called once per candidate, so cost and latency grow with the corpus. And the
-work after the response has no durability: if the process restarts mid-way, the
-report exists and nothing else does, with no record that matching was owed.
-
-## The request path after phase 20
+A report is filed, the item and the intent to match it commit together, and
+nothing else happens inside the request:
 
 ```mermaid
 sequenceDiagram
@@ -113,30 +85,48 @@ sequenceDiagram
     participant F as Firestore
     participant Q as Redis queue
     participant W as Worker
+    participant L as LLM
 
     C->>A: POST /api/v1/items
-    A->>F: create item and outbox row in ONE transaction
+    A->>A: validate, authorize, sanitize
+    A->>F: batch: item + outbox row, one commit
     A-->>C: 201 Created
-    F-->>W: outbox drain
-    W->>Q: enqueue embed.item
-    W->>Q: enqueue match.candidates
-    Note over W: each job is durable, retried,<br/>and dead-lettered on give-up
-    W->>Q: enqueue handover.initiate for the one confirmed pair
-    W->>Q: enqueue notify.*
+    W->>F: drain the outbox, lease the row
+    W->>Q: enqueue match.item
+    Q->>W: deliver
+    W->>F: claim the idempotency key
+    W->>F: load pending items of the opposite type
+    loop every surviving candidate
+        W->>L: score this pair
+    end
+    W->>F: write match, move both items to Matched
 ```
 
-The transaction is what makes it reliable: the item and the intent to match it
-are committed together, so matching cannot be silently skipped, and a matching
-failure cannot fail a report that is already saved.
+The commit is what makes it reliable: the item and the intent to match it land
+together, so matching cannot be silently skipped, and a matching failure cannot
+fail a report that is already saved. Each job carries its own retry policy and
+dead-letters when it gives up. See
+[Jobs, the outbox, and tracing](jobs-and-outbox.md).
+
+What is still wrong is the loop. One LLM call per candidate means cost and
+latency grow with the corpus; phase 23 replaces it with retrieval, and phase 22
+puts the embeddings behind it.
+
+## Where the rest of the work still runs
+
+Moving the work is per phase, not all at once. Email, the chain write and the
+CCTV proxy still run in the API process; phases 26 to 29 move them onto the
+same outbox as they rewrite what they do.
 
 ## Cross-cutting concerns
 
-| Concern         | Where it lives today                                                                                                                                   |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Authentication  | `auth.middleware.ts`. Verifies the Firebase ID token, then resolves the role from Firestore, never from the token or the body                          |
-| Authorization   | `role.middleware.ts`. `requireAdmin`, `requireActiveUser`, `requireOwnership`                                                                          |
-| Validation      | `validation.middleware.ts` with zod schemas in `schemas/`. Every mutating route validates and the parsed value replaces the raw one                    |
-| Errors          | `errorHandler.middleware.ts`. `AppError` carries the status and optional details; a deliberate 4xx keeps its message, a 5xx is sanitized in production |
-| Rate limiting   | `rateLimit.middleware.ts`. Per-surface budgets: the API as a whole, AI routes, item creation, handover verify and status, credentials                  |
-| Logging         | `utils/logger.ts`. The only logging entry point. Redacts identifiers, drops stack traces in production                                                 |
-| Correlation ids | Not yet. Planned with the worker in phase 20                                                                                                           |
+| Concern         | Where it lives today                                                                                                                                                              |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authentication  | `auth.middleware.ts`. Verifies the Firebase ID token, then resolves the role from Firestore, never from the token or the body                                                     |
+| Authorization   | `role.middleware.ts`. `requireAdmin`, `requireActiveUser`, `requireOwnership`                                                                                                     |
+| Validation      | `validation.middleware.ts` with zod schemas in `schemas/`. Every mutating route validates and the parsed value replaces the raw one                                               |
+| Errors          | `errorHandler.middleware.ts`. `AppError` carries the status and optional details; a deliberate 4xx keeps its message, a 5xx is sanitized in production                            |
+| Rate limiting   | `rateLimit.middleware.ts`. Per-surface budgets: the API as a whole, AI routes, item creation, handover verify and status, credentials                                             |
+| Logging         | `utils/logger.ts`. The only logging entry point. Redacts identifiers, drops stack traces in production                                                                            |
+| Correlation ids | `platform/tracing/context.ts`. W3C `traceparent` joined from the caller, held in an `AsyncLocalStorage`, stamped on every log line and carried through the outbox into the worker |
+| Background work | `platform/jobs` and `platform/outbox`. Events commit with the write that raised them, a worker drains and runs them. See [jobs and the outbox](jobs-and-outbox.md)                |

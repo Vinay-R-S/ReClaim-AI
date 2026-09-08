@@ -44,6 +44,15 @@ const lowercased = <T extends z.ZodTypeAny>(schema: T) =>
     return trimmed === '' ? undefined : trimmed;
   }, schema);
 
+/**
+ * A malformed queue URL is treated as unset rather than as a boot failure, the
+ * same way every other degradable dependency in this file is, but it gets a
+ * warning of its own so the two states cannot be confused.
+ */
+function isRedisUrl(value: string): boolean {
+  return value.startsWith('redis://') || value.startsWith('rediss://');
+}
+
 /** Anything shorter is not worth calling a key, so it counts as unset. */
 const MIN_HANDOVER_SECRET_LENGTH = 32;
 
@@ -84,6 +93,11 @@ const rawSchema = z.object({
   SMTP_PORT: withDefault(z.coerce.number().int().positive().max(65535).default(587)),
   SMTP_USER: optionalString,
   SMTP_PASS: optionalString,
+
+  REDIS_URL: optionalString,
+  QUEUE_CONCURRENCY: withDefault(z.coerce.number().int().positive().max(64).default(4)),
+  OUTBOX_POLL_INTERVAL_MS: withDefault(z.coerce.number().int().min(200).max(60_000).default(2_000)),
+  OUTBOX_BATCH_SIZE: withDefault(z.coerce.number().int().positive().max(200).default(20)),
 
   YOLO_SERVICE_URL: withDefault(z.string().url().default('http://localhost:5000')),
   YOLO_SERVICE_TOKEN: optionalString,
@@ -151,6 +165,14 @@ export interface AppEnv {
     smtpPort: number;
     smtpUser?: string;
     smtpPass?: string;
+  };
+  queue: {
+    /** Unset means the in-process driver: jobs still run, nothing survives a restart. */
+    redisUrl?: string;
+    isConfigured: boolean;
+    concurrency: number;
+    outboxPollIntervalMs: number;
+    outboxBatchSize: number;
   };
   yolo: {
     serviceUrl: string;
@@ -238,6 +260,18 @@ function collectRequirementProblems(raw: RawEnv): string[] {
     );
   }
 
+  if (raw.REDIS_URL && !isRedisUrl(raw.REDIS_URL)) {
+    // Reporting this as "not set" would send somebody looking for a variable
+    // that is present and wrong.
+    problems.push(
+      'REDIS_URL is set but is not a redis:// or rediss:// URL, so it is ignored and the queue falls back to running jobs inside the API process.',
+    );
+  } else if (!raw.REDIS_URL) {
+    problems.push(
+      'REDIS_URL is not set. Background jobs run inside the API process instead of a worker, so anything in flight is lost on restart and the outbox is drained by the API.',
+    );
+  }
+
   if (!raw.YOLO_SERVICE_TOKEN) {
     problems.push(
       'YOLO_SERVICE_TOKEN is not set. The Flask vision service rejects every request without it, so CCTV detection is unavailable.',
@@ -265,7 +299,8 @@ function collectBlockchainProblems(raw: RawEnv): string[] {
   return problems;
 }
 
-function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
+/** Exported for the tests; the application uses the `env` built below. */
+export function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
   const parsed = rawSchema.safeParse(source);
 
   if (!parsed.success) {
@@ -278,6 +313,7 @@ function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
   const handoverSecretConfigured = Boolean(
     raw.HANDOVER_CODE_SECRET && raw.HANDOVER_CODE_SECRET.length >= MIN_HANDOVER_SECRET_LENGTH,
   );
+  const redisUrl = raw.REDIS_URL && isRedisUrl(raw.REDIS_URL) ? raw.REDIS_URL : undefined;
   const fatal = collectCriticalProblems(raw);
 
   if (fatal.length > 0) throw new EnvValidationError(fatal);
@@ -328,6 +364,13 @@ function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
       smtpPort: raw.SMTP_PORT,
       smtpUser: raw.SMTP_USER,
       smtpPass: raw.SMTP_PASS,
+    }),
+    queue: Object.freeze({
+      redisUrl: redisUrl,
+      isConfigured: Boolean(redisUrl),
+      concurrency: raw.QUEUE_CONCURRENCY,
+      outboxPollIntervalMs: raw.OUTBOX_POLL_INTERVAL_MS,
+      outboxBatchSize: raw.OUTBOX_BATCH_SIZE,
     }),
     yolo: Object.freeze({
       serviceUrl: raw.YOLO_SERVICE_URL,

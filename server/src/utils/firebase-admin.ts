@@ -58,6 +58,9 @@ export const collections = {
   handoverCodes: db.collection('handoverCodes'),
   handoverAudit: db.collection('handoverAudit'), // Admin overrides and code re-issues
   adminAudit: db.collection('adminAudit'), // Moderation and match verification decisions
+  outbox: db.collection('outbox'), // Domain events written with the state change that raised them
+  jobClaims: db.collection('jobClaims'), // Idempotency keys held by a running job
+  deadLetters: db.collection('deadLetters'), // Jobs that exhausted their retries
 } as const;
 
 export default app;

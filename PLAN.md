@@ -1016,6 +1016,8 @@ Run after every phase. Record pass or fail with the date, and note any regressio
 | 16    | `perf/reclaim-216-performance`                | 2026-09-06 | 2026-09-06 | PASS | PASS |  | pending manual run | PERF-01, PERF-03, PERF-04, PERF-07, PERF-08, PERF-09 fixed; PERF-06 and PERF-12 verified as already closed; PERF-10 blocked on the outstanding `firebase deploy`. New `GET /api/stats/dashboard` computes the whole dashboard server side from aggregation queries, so the page makes one request per refresh instead of reading three collections; `getItems` and `getUsers` page through the API with a cursor and the browser no longer reads `items` at all, which let the Firestore rules close that collection and stop allowing a user listing. Handover participants are denormalised to `participantIds` for an indexed `array-contains`, with `npm run migrate:handovers` to backfill. `GET /api/matches/user/:userId` reads persisted matches rather than re-running the pipeline per request. Token refresh is no longer forced on every call, `apiLimiter` went from 10,000 to 600, the AI routes got their own budget, and the login notice moved off the credential limiter. NEW `npm run migrate:handovers` MUST BE RUN BEFORE DEPLOY. Code review found fourteen issues, all fixed, including four where the phase undid its own point: the dashboard stopped counting every match that had actually succeeded, the handover scan PERF-03 exists to remove was still running on every request, its fallback returned only pre-migration records, and the AI limiter killed the live CCTV tab four minutes in. |
 | 17    | `test/reclaim-217-tests-and-ci`               | 2026-09-06 |  | PASS | PASS |  | pending manual run | ARCH-14 mostly fixed. 170 tests across nine files, all passing: 99 server unit tests (scoring tiers and the weight invariant, handover criteria, credits against an in-memory Firestore that runs the real transaction, item visibility and the update allowlist against the injected repositories), 49 client tests (auth guards, the verify page state machine, the image pipeline, timestamp parsing) and 22 Firestore rules tests against the real emulator. Twelve are named after the defect they close. `validateHandoverCriteria` was extracted to a Firestore-free module, which took its test file from 30s to under 1s. CI runs server, client, rules and formatting on every PR into `develop`. IN PROGRESS: the emulator integration tests for the four core workflows are not written; the rules suite proves the harness works, so what is left is the fixtures. Test-only dependencies added: vitest, jsdom and testing-library in the client, firebase-tools and @firebase/rules-unit-testing in the server. Code review found ten issues, all fixed, including two tests that could not fail (confirmed by mutation) and a build that compiled the test files into the production artifact. |
 | 18    | `chore/reclaim-218-deadcode-docs`             | 2026-09-06 |  | PASS | PASS |  | pending manual run | UI-14, LOG-23, ARCH-05, ARCH-17, ARCH-18 fixed. The verification subsystem, the notification routes, `matching.service.ts`, `utils/safety.ts`, `utils/embeddings.ts`, three dead match routes, `POST /api/matches/claim`, `POST /api/handover/initiate` and two unsent email templates are deleted, along with the chat, conversation, safety and verification type blocks; `types/index.ts` went from 189 lines to 84. Two of the dead endpoints were fixed rather than removed, as asked: handover re-issue now has an admin panel listing open, blocked and expired sessions behind a new `GET /api/handover/sessions`, and the false-claim penalty is an explicit checkbox on the rejection instead of a branch that could never fire. The two credit endpoints UI-14 names were wired instead of deleted: the profile page shows the ledger behind the balance, and the admin user modal can adjust one. Both `docs/*-source-structure.md` are rewritten against the real tree. LOG-23 needed no work: those types went with `safety.ts`. Code review found seven issues, all fixed, two of them real: the false-claim penalty would have charged whatever uid the body named, with nothing tying it to the pair, and the re-issue button was hidden on exactly the sessions that expired without ever being attempted. |
+| 19    | `docs/reclaim-219-hld-lld-adr`                | 2026-09-07 | 2026-09-07 | PASS | PASS |  | n/a (docs, plus the versioned mount) | ARCH-19 fixed. Sections 7, 16 and 17 exist as artifacts under `docs/`: C4 context, container and three component diagrams, four sequences, three state machines, the ER and index model, deployment with the secret flow, the requirements and capacity model, and 13 ADRs each with a "revisit when" section. Every diagram marks built against designed and names the phase that builds the rest. The API is versioned at `/api/v1` with the unversioned prefix kept as the same router, marked `Deprecation: true` and pointing at its successor; the client adds the version once in `resolveUrl`. `docs/api/openapi.json` describes 35 paths and 40 operations, and `routes/openapi.contract.test.ts` walks the route table mounted as data in `routes/index.ts` and compares it in both directions. Verified 2026-09-09: server build PASS, client build PASS, `server npm test` 106/106, `client npm test` 63/63. Code review found eight issues, all fixed, three of them real: the auth rate limiter had moved behind the general limiter and the body parser, four response schemas described fields the server does not send with eight more found on audit, and both the ADR and the API README claimed the contract test checks status codes when it compares methods and paths only. |
+| 20    | `feat/reclaim-220-platform-jobs-outbox`       | 2026-09-09 | 2026-09-09 | PASS | PASS |  | pending manual run | Track B platform layer. `server/src/platform/{jobs,outbox,idempotency,tracing}` with a `JobQueue` port and two drivers: BullMQ on Redis for production, in-process when `REDIS_URL` is unset. Item creation and approval now write their event in the same Firestore batch as the state change, a drainer leases and publishes it, and the worker (`npm run worker`, same artifact, second entrypoint) runs it. Three detached `runMatchingInBackground` calls are gone. `jobClaims` makes redelivery a no-op, `deadLetters` catches what gives up, and a W3C `traceparent` travels from the request through the outbox into the worker and onto every log line. New `docker-compose.yml` for local Redis, CI gains a Redis service, and `docs/architecture/jobs-and-outbox.md` documents the whole path. 165 server tests pass, 2 Redis integration tests skip without Docker. Code review found six issues, all fixed, three of them real: `enableOfflineQueue` was inverted so a Redis outage would hang a rematch request and a drain pass rather than failing them, the matching claim outlived the attempt that took it so every retry of a timed-out run skipped and reported success, and a stalled job exhausted its attempts without writing a dead letter. NEW OPERATIONAL ACTIONS: provision Redis, run the worker, add the `jobClaims` TTL policy, and deploy the new index and rules. |
 
 ### 5.1 Outstanding operational actions
 
@@ -1031,6 +1033,10 @@ commit, and each one gates the exit criteria of the phase that raised it.
 | `cd server && npm run migrate:credits` (dry run, then `-- --apply`) | Phase 6, LOG-01 | Pass 1 backfills the signup bonus ledger entry and flag for existing profiles; pass 2 reconciles balances stranded in the retired collection. Attempted 2026-09-03 and refused for want of credentials, before any read or write | [ ] |
 | Confirm both deploys can see `shared/` at build time | Phase 13, ARCH-08 | `shared/domain.d.ts` sits above `client/` and `server/`, and both `tsc` runs reach up to it. Nothing needs it at runtime, the emitted JS has no reference to it, but a deploy that ships only its own package subtree fails the type check with `TS2307`. On Vercel that is the "Include source files outside of the Root Directory" setting. The first deploy after this merge is the test | [ ] |
 | `cd server && npm run migrate:handovers` (dry run, then `-- --apply`) | Phase 16, PERF-03 | Backfills `participantIds` on existing handovers so the user's own list is one indexed query. The server writes the field on new handovers and falls back to a filtered scan for records without it, so nothing breaks before it runs; the fallback is what it removes | [ ] |
+| Provision Redis and set `REDIS_URL` on the API and the worker | Phase 20 | Without it the API runs jobs in its own process and drains its own outbox. Everything works and nothing survives a restart, which is the pre-phase-20 behaviour, so this is a downgrade rather than an outage. `npm run worker` refuses to start at all | [ ] |
+| Deploy the worker as a second process (`npm run worker`) | Phase 20 | Same build artifact, different entrypoint. With Redis set and no worker running, events commit and queue and nothing consumes them: matching stops until a worker exists | [ ] |
+| Add a Firestore TTL policy on `jobClaims.expiresAt` | Phase 20 | The field is written on every claim; the policy that acts on it is a console setting. Without it the collection grows by one small document per job forever | [ ] |
+| `firebase deploy --only firestore` again, for the outbox index and the platform rules | Phase 20 | The drainer queries `outbox` by `status` and `availableAt`, which needs the new composite index, and the three platform collections are denied to the browser explicitly. Both are inert until deployed | [ ] |
 | Run the regression matrix in section 4 | Phases 2 to 6 | Every phase since 2 is recorded as "pending manual run". Nothing in phases 3 to 6 has been exercised against a real Firestore | [ ] |
 
 ## 6. Track A open decisions
@@ -1666,7 +1672,7 @@ Each phase is one branch cut from `develop`, same protocol as Track A. Track B a
 | Phase | Branch                                        | Delivers                                                                                                                                                     | Depends on       | Status |
 | ----- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------ |
 | 19    | `docs/reclaim-219-hld-lld-adr`                | Sections 7, 16, and 17 as real artifacts in `docs/`: C4 diagrams, sequences, state machines, ER model, OpenAPI skeleton, ADRs 001 to 012                     | Track A phase 14 | [x]    |
-| 20    | `feat/reclaim-220-platform-jobs-outbox`       | Redis, job queue, worker entrypoint, outbox collection and drainer, idempotency keys, dead-letter queues, tracing across the boundary                        | 19               | [ ]    |
+| 20    | `feat/reclaim-220-platform-jobs-outbox`       | Redis, job queue, worker entrypoint, outbox collection and drainer, idempotency keys, dead-letter queues, tracing across the boundary                        | 19               | [x]    |
 | 21    | `refactor/reclaim-221-ai-provider-interface`  | Section 9 in full: ports, registry, capability routing, breaker, quotas, cache, cost meter, structured output, two additional providers plus a local runtime | 20               | [ ]    |
 | 22    | `feat/reclaim-222-embeddings-cpu`             | Section 8.3: ONNX text and image embedding on CPU, quantized, batched, cached, with a backfill job for existing items                                        | 21               | [ ]    |
 | 23    | `feat/reclaim-223-vector-retrieval`           | Section 8.4 plus the filter and retrieve stages, hybrid dense and lexical with rank fusion, behind a feature flag in shadow mode                             | 22               | [ ]    |
@@ -1696,7 +1702,7 @@ ARCH-19 was the half of the phase with code in it. The API is versioned: every r
 
 Two things that made the test worth having rather than ceremony. Mounting the route table as data (`routes/index.ts`) rather than as a sequence of `app.use` calls is what lets the test walk it without parsing regexes. And mocking `firebase-admin` in the test took it from 39 seconds to 2, because importing the route table pulls in every controller, service and repository behind it; that is the same lesson as the handover criteria extraction in phase 17.
 
-`client/src/lib/api.test.ts` is new: 12 tests pinning the version prefix, the bearer token, and the status-before-body parse from phase 13. Both new suites were mutation-tested by breaking what they claim to protect.
+`client/src/lib/api.test.ts` is new: 14 tests pinning the version prefix, the bearer token, and the status-before-body parse from phase 13. Both new suites were mutation-tested by breaking what they claim to protect.
 
 Code review found eight issues, all fixed. Three were real:
 
@@ -1707,6 +1713,96 @@ Code review found eight issues, all fixed. Three were real:
 Three were latent traps rather than live bugs: the contract test treated every key of a path item as an HTTP method, so hoisting a shared `parameters` block would have reported `PARAMETERS /items/{id}` as an imaginary route; the client's already-versioned check compared a `/api/v1/` prefix, which would mangle `/api/v1/x` into `/api/v10/v1/x` the day the version reached two digits, and is a segment regex now; and the release order the versioned client depends on, server before client, was nowhere written down and is now in the ADR, the API README and the deployment document.
 
 If the whole track is too much at once, the minimum sequence that delivers the scalability and quality story is 19, 20, 22, 23, 24. Then 26, 27, 28 for reliability. Then 29, 30, 31 for new capability. Phases 21, 32, and 33 can interleave.
+
+### Phase 20 - what was delivered
+
+Branch: `feat/reclaim-220-platform-jobs-outbox`.
+
+The platform layer from section 16.1 exists: `server/src/platform/` holds
+`jobs/`, `outbox/`, `idempotency/` and `tracing/`, and nothing in it names a
+domain concept.
+
+Background work is now committed rather than dispatched. Creating an item
+writes the item and an `item.created` event in one Firestore batch; approving
+one writes the moderation decision and `item.approved` the same way. A drainer
+leases each committed event, turns it into a job, and marks it published. That
+replaces three `void this.runMatchingInBackground(...)` calls, which is the
+shape that lost a matching run whenever the process restarted in the seconds
+after a report was saved, and logged one line when a provider was down.
+
+The queue is BullMQ on Redis, per decision 6 and ADR 0005, behind a `JobQueue`
+port so neither producers nor handlers name it. There are two drivers. The
+Redis one is production: one queue per job name, the idempotency key hashed
+into the BullMQ job id so a duplicate enqueue is refused at the queue, three
+attempts with exponential backoff, and a `deadLetters` document written on the
+last failure. The in-process one runs the same handler through the same runner
+with the same retry policy and no durability, and is selected when `REDIS_URL`
+is unset. That is a supported degraded mode, not a second design: it is exactly
+what the system did before this phase, so a machine without Docker and a
+single-process deployment both still work, and the boot log says which mode it
+is in.
+
+`npm run worker` is the second entrypoint, same build artifact as the API. It
+runs the drainer and the consumers, refuses to start without `REDIS_URL`, and
+shuts down in the right order on SIGTERM: the drainer first, so a job is never
+published into a queue whose consumers have already closed.
+
+At-least-once delivery is made safe by `jobClaims`: a transactional lease keyed
+by `(job, item, event)`, so a redelivery is a read and a second worker stands
+down. The existing per-item matching claim stays, because it guards a different
+thing: two different events for the same item, such as an approval and a
+rematch a second later. A manual rematch raises no event at all, because it
+changes no state; it enqueues directly with a key bucketed by the minute, which
+turns a double-clicked button into one run.
+
+Tracing crosses the boundary. `platform/tracing/context.ts` holds a W3C
+`traceparent` in an `AsyncLocalStorage`, `correlationMiddleware` joins the
+caller's trace or starts one and echoes it in the response header, the logger
+stamps `traceId` on every line, and the id travels on the outbox row and then
+on the job envelope. One id ties an API request to the worker run it caused
+minutes later in another process.
+
+Fifty-nine new tests: 41 in `src/platform`, 13 more in `item.service.test.ts`
+(26 to 39) and 5 in the new `env.test.ts`. They cover the drainer's failure
+behaviour (lease contention, backoff, the dead row, one poison event not
+blocking the batch), the runner's claim semantics, the in-process driver's
+retry and dead-letter path, trace propagation across awaits and between
+concurrent runs, the producers raising exactly the events they should and no
+others, and the queue-configuration states. Two BullMQ integration tests run
+against a real Redis, skipped when `REDIS_URL` is unset so the suite still
+passes without Docker; CI provides a Redis service so they cannot be skipped
+there. The server suite is 106 tests before this phase and 165 after.
+
+Code review found six issues, all fixed. Three were real:
+
+- `enableOfflineQueue` was set for the producer and cleared for the consumer,
+  which is backwards on both counts. With Redis down, an enqueue awaited inside
+  a request or a drain pass would have sat in the ioredis buffer instead of
+  failing, so a manual rematch would never answer and `drainer.stop()` would
+  never return during a shutdown; meanwhile a consumer's blocking read would
+  have rejected on a reconnect instead of waiting it out.
+- The matching claim outlived the job that held it. An attempt that times out
+  is abandoned rather than cancelled, so its five-minute claim was still there
+  when the retries ran ten and twenty seconds later; both found the item
+  claimed, skipped, and returned normally, which marked the idempotency key
+  completed. An item whose first attempt timed out would never have been
+  matched and nothing would have recorded that. The claim now expires with the
+  attempt that took it.
+- The dead letter was written by the processor, so a job that exhausted its
+  attempts without the processor running, which is what a stalled job is after
+  a worker is killed, produced no record at all. It is written from the
+  `failed` event now, which covers both paths and cannot double-record.
+
+The other three were honesty and shutdown: a mistyped `REDIS_URL` was reported
+as "not set", which sends somebody looking for a variable that is present and
+wrong; a shutdown could wait out three two-minute attempts before exiting; and
+a rejection inside either shutdown path would have aborted the process before
+its own `exit(0)`.
+
+Not moved in this phase: email, the chain write and the CCTV proxy still run
+inline in the API. Phases 26 to 29 move them onto the same outbox as they
+rewrite what those flows do, and moving them now would be a rewrite of handover
+with none of the state machine that phase 26 brings.
 
 ## 19. Additional defects found during the architecture pass
 
@@ -1729,7 +1825,7 @@ These change the shape of the build, so settle them before the phase that depend
 
 | #   | Decision              | Options                                                                       | Recommendation                                                                                                                                         | Blocks |
 | --- | --------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| 6   | Worker infrastructure | Redis plus a job library, a cloud task queue, or a Firestore-polled job table | Redis plus a job library. Retries, backoff, dead-letter queues, and scheduling come for free, and Redis also serves cache and rate-limit buckets       | 20     |
+| 6   | Worker infrastructure | Redis plus a job library, a cloud task queue, or a Firestore-polled job table | SETTLED in phase 20: Redis plus BullMQ, behind a `JobQueue` port, with an in-process driver for a machine or a deployment without Redis. Cache and rate-limit buckets have not moved to Redis and are still per-process | 20     |
 | 7   | Vector store          | Firestore native vector search, or self-hosted Qdrant                         | Firestore first, behind a port. No new infrastructure and the same security model. Migrate on measured need                                            | 23     |
 | 8   | Embedding runtime     | In-process ONNX in Node, or a Python sidecar beside the YOLO service          | In-process Node. No extra hop, no extra deploy unit, and the matching code is already Node                                                             | 22     |
 | 9   | Auto-confirm policy   | Fully automatic above a threshold, or admin approval on every match           | Automatic above a high band, admin review inside the uncertainty band, never automatic below it. Section 8.2                                           | 24     |

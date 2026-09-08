@@ -13,8 +13,11 @@
  *
  * This module reads `process.env` directly and lazily, on purpose: it must be
  * usable before `config/env.ts` has parsed, so that a configuration failure can
- * still be reported.
+ * still be reported. Its one import is the trace context, which depends on
+ * nothing for the same reason.
  */
+
+import { getTraceContext } from '../platform/tracing/context.js';
 
 const LEVELS = ['debug', 'info', 'warn', 'error', 'silent'] as const;
 
@@ -138,10 +141,15 @@ function write(
     meta[index === 0 ? 'detail' : `detail${index}`] = redact(entry);
   });
 
+  // The trace id is the only field on a log line that is not written by the
+  // caller. It is what ties an API request to the job the worker ran for it.
+  const trace = getTraceContext();
+
   const record = {
     timestamp: new Date().toISOString(),
     level,
     ...(scope ? { scope } : {}),
+    ...(trace ? { traceId: trace.traceId } : {}),
     message,
     ...(Object.keys(meta).length > 0 ? { meta } : {}),
   };
@@ -155,7 +163,8 @@ function write(
     return;
   }
 
-  const prefix = `${record.timestamp} ${level.toUpperCase()}${scope ? ` [${scope}]` : ''}`;
+  const shortTrace = trace ? ` <${trace.traceId.slice(0, 8)}>` : '';
+  const prefix = `${record.timestamp} ${level.toUpperCase()}${scope ? ` [${scope}]` : ''}${shortTrace}`;
   if (Object.keys(meta).length > 0) {
     sink(`${prefix} ${message}`, meta);
     return;

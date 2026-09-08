@@ -9,6 +9,8 @@
 
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { collections, db } from '../utils/firebase-admin.js';
+import { outboxRepository, OutboxRepository } from '../platform/outbox/outbox.repository.js';
+import type { OutboxEvent } from '../platform/outbox/event.catalog.js';
 import type { Item, ItemStatus, ItemType, ModerationStatus } from '../types/index.js';
 
 export interface ItemListFilters {
@@ -27,6 +29,7 @@ export class ItemRepository {
   constructor(
     private readonly items = collections.items,
     private readonly firestore = db,
+    private readonly outbox: OutboxRepository = outboxRepository,
   ) {}
 
   async findById(id: string): Promise<StoredItem | null> {
@@ -128,6 +131,50 @@ export class ItemRepository {
     const created = await ref.get();
 
     return { ...(created.data() as Item), id: created.id };
+  }
+
+  /**
+   * Create an item and the events it raises, atomically.
+   *
+   * The events are built from the new id, which is why the reference is
+   * allocated before the commit rather than by `add`. Either the item and its
+   * events are both there or neither is, so a matching run can no longer be
+   * lost in the gap between saving a report and dispatching the work.
+   */
+  async createWithEvents(
+    data: Record<string, unknown>,
+    buildEvents: (itemId: string) => OutboxEvent[],
+  ): Promise<StoredItem> {
+    const ref = this.items.doc();
+    const batch = this.firestore.batch();
+
+    batch.set(ref, {
+      ...data,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    buildEvents(ref.id).forEach((event) => this.outbox.append(batch, event));
+
+    await batch.commit();
+
+    const created = await ref.get();
+
+    return { ...(created.data() as Item), id: created.id };
+  }
+
+  /** An edit and the events it raises, atomically. See `createWithEvents`. */
+  async updateWithEvents(
+    id: string,
+    data: Record<string, unknown>,
+    events: OutboxEvent[],
+  ): Promise<void> {
+    const batch = this.firestore.batch();
+
+    batch.update(this.items.doc(id), { ...data, updatedAt: FieldValue.serverTimestamp() });
+    events.forEach((event) => this.outbox.append(batch, event));
+
+    await batch.commit();
   }
 
   /** Every write stamps `updatedAt`; no caller has to remember to. */
