@@ -65,10 +65,27 @@ ReClaim-AI/
 │   └── requirements.txt # Python dependencies
 ├── shared/
 │   └── domain.d.ts      # The one description of every document, imported by both packages
+├── docs/
+│   ├── architecture/    # C4 diagrams, sequences, state machines, data model, deployment
+│   ├── adr/             # Architecture decision records
+│   └── api/             # openapi.json, the HTTP contract, checked by a test
 ├── firestore.rules      # What the browser may read. Deploy with `firebase deploy`
 ├── firestore.indexes.json
 └── README.md
 ```
+
+## Design documents
+
+| Document                                                           | What it answers                                                 |
+| ------------------------------------------------------------------ | --------------------------------------------------------------- |
+| [docs/architecture](docs/architecture/README.md)                   | How the system is put together, and which parts are built       |
+| [docs/adr](docs/adr/README.md)                                     | Why each significant choice was made, and what would reverse it |
+| [docs/api](docs/api/README.md)                                     | The HTTP contract and the versioning policy                     |
+| [docs/server-source-structure.md](docs/server-source-structure.md) | What lives where in `server/src`                                |
+| [docs/client-source-structure.md](docs/client-source-structure.md) | What lives where in `client/src`                                |
+
+Every diagram marks what exists today against what is designed but not built,
+so nothing there can be read as a claim about the running system.
 
 ## Quick Start
 

@@ -1,0 +1,3744 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ReClaim AI API",
+    "version": "1.0.0",
+    "summary": "The HTTP surface of the ReClaim AI lost and found platform",
+    "description": "This document is the contract. Client and server disagreeing about a field name or an enum value is the direct cause of four defects in this project's register, which is why it exists (ARCH-19).\n\nEvery path below is served under `/api/v1`. The unversioned `/api` prefix is the same router, kept for callers written before the version existed; it answers identically and marks its responses `Deprecation: true`.\n\nAuthentication is a Firebase ID token in `Authorization: Bearer`. The caller's role is resolved from Firestore on every request, never read from the token or the body. Four endpoints are deliberately public: the item list and one item, and the two handover endpoints the finder uses, because the finder holds a link and a code rather than an account.",
+    "license": {
+      "name": "Unlicensed"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3001/api/v1",
+      "description": "Local"
+    },
+    {
+      "url": "https://{host}/api/v1",
+      "description": "Deployed",
+      "variables": {
+        "host": {
+          "default": "api.example.com"
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "name": "Items",
+      "description": "Reports, moderation and the browse list"
+    },
+    {
+      "name": "Matches",
+      "description": "Proposed pairs and the admin decision"
+    },
+    {
+      "name": "Handover",
+      "description": "Codes, verification and history"
+    },
+    {
+      "name": "Credits",
+      "description": "Balances and the ledger"
+    },
+    {
+      "name": "Auth",
+      "description": "Profile bootstrap and sign-in notices"
+    },
+    {
+      "name": "Users",
+      "description": "Account administration"
+    },
+    {
+      "name": "Settings",
+      "description": "Feature flags and system configuration"
+    },
+    {
+      "name": "Stats",
+      "description": "The admin dashboard"
+    },
+    {
+      "name": "AI",
+      "description": "Image analysis and description enhancement"
+    },
+    {
+      "name": "CCTV",
+      "description": "Object detection on footage"
+    }
+  ],
+  "security": [
+    {
+      "firebaseIdToken": []
+    }
+  ],
+  "paths": {
+    "/ai/analyze-image": {
+      "post": {
+        "operationId": "analyzeImage",
+        "summary": "Describe and tag item photos",
+        "tags": ["AI"],
+        "description": "Fills the report form from the photos. Rate limited on its own budget.",
+        "responses": {
+          "200": {
+            "description": "The suggested fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemAnalysis"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzeImage"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/ai/enhance-description": {
+      "post": {
+        "operationId": "enhanceDescription",
+        "summary": "Improve a description",
+        "tags": ["AI"],
+        "description": "Rewrites the reporter's text into something searchable.",
+        "responses": {
+          "200": {
+            "description": "The rewritten fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemAnalysis"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnhanceDescription"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/ai/status": {
+      "get": {
+        "operationId": "getAiStatus",
+        "summary": "Which providers are configured",
+        "tags": ["AI"],
+        "description": "Reports availability without revealing a key.",
+        "responses": {
+          "200": {
+            "description": "Whether any provider is configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/auth/login-notification": {
+      "post": {
+        "operationId": "sendLoginNotification",
+        "summary": "Email a sign-in notice",
+        "tags": ["Auth"],
+        "description": "Fires once per successful sign-in, which is why it has its own limiter rather than the credential one.",
+        "responses": {
+          "200": {
+            "description": "Sent or skipped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginNotificationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginNotification"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/auth/profile": {
+      "post": {
+        "operationId": "bootstrapProfile",
+        "summary": "Create or refresh the caller's profile",
+        "tags": ["Auth"],
+        "description": "The only route that creates `users/{uid}`. Runs on every app mount. Role, status and credits are server-set; the body may carry display fields only, and they are dropped rather than rejected when they do not fit. A 403 means the account is blocked.",
+        "responses": {
+          "200": {
+            "description": "The profile already existed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The profile was created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileBootstrap"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/cctv/analyze": {
+      "post": {
+        "operationId": "analyzeFootage",
+        "summary": "Detect across sampled video frames",
+        "tags": ["CCTV"],
+        "description": "Frames are sampled in the browser, not decoded here.",
+        "responses": {
+          "200": {
+            "description": "Detections per frame",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CctvAnalyzeResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CctvAnalyze"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/cctv/classes": {
+      "get": {
+        "operationId": "listDetectionClasses",
+        "summary": "Classes the detector knows",
+        "tags": ["CCTV"],
+        "description": "Returns 503 with a hint when the vision service is unreachable, because an empty list would read as a working detector that knows nothing.",
+        "responses": {
+          "200": {
+            "description": "The class list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CctvClasses"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/cctv/describe": {
+      "post": {
+        "operationId": "describeDetection",
+        "summary": "Describe a detected object",
+        "tags": ["CCTV"],
+        "description": "Turns a detection into the text a found-item report needs.",
+        "responses": {
+          "200": {
+            "description": "A description and tags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CctvDescribeResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CctvDescribe"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/cctv/detect": {
+      "post": {
+        "operationId": "detectObjects",
+        "summary": "Detect objects in one frame",
+        "tags": ["CCTV"],
+        "description": "Proxies the Flask service, which refuses every request without the shared token. Has its own scan limiter so the live tab does not exhaust the AI budget.",
+        "responses": {
+          "200": {
+            "description": "Detections for the frame",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CctvDetectResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CctvDetect"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/credits/history/{userId}": {
+      "get": {
+        "operationId": "listCreditHistory",
+        "summary": "The ledger behind a balance",
+        "tags": ["Credits"],
+        "description": "Own history, or any if the caller is an admin. Newest first, capped at 50.",
+        "responses": {
+          "200": {
+            "description": "Ledger entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditHistory"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Account uid"
+          }
+        ],
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/credits/{userId}": {
+      "get": {
+        "operationId": "getCreditBalance",
+        "summary": "Credit balance",
+        "tags": ["Credits"],
+        "description": "Own balance, or any if the caller is an admin.",
+        "responses": {
+          "200": {
+            "description": "The balance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditBalance"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Account uid"
+          }
+        ],
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "adjustCredits",
+        "summary": "Adjust a balance",
+        "tags": ["Credits"],
+        "description": "A delta, not a target. Writes a ledger entry with the reason and is deliberately not idempotent: the same adjustment twice is two events.",
+        "responses": {
+          "200": {
+            "description": "The new balance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditAdjustmentResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Account uid"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreditAdjustment"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/handover/history": {
+      "get": {
+        "operationId": "listHandovers",
+        "summary": "Every completed handover",
+        "tags": ["Handover"],
+        "description": "The admin history.",
+        "responses": {
+          "200": {
+            "description": "Completed handovers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverHistory"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/handover/reissue": {
+      "post": {
+        "operationId": "reissueHandover",
+        "summary": "Issue a fresh code",
+        "tags": ["Handover"],
+        "description": "The only way back from a session blocked by three wrong attempts: the code is hashed, so the old one cannot be looked up. Clears the attempt budget and is recorded in the handover audit trail.",
+        "responses": {
+          "200": {
+            "description": "A new code was issued and emailed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandoverReissue"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/handover/sessions": {
+      "get": {
+        "operationId": "listHandoverSessions",
+        "summary": "Sessions that have not completed",
+        "tags": ["Handover"],
+        "description": "Open, blocked and expired sessions. The code hash is deliberately absent from the response.",
+        "responses": {
+          "200": {
+            "description": "Open sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverSessionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/handover/status/{matchId}": {
+      "get": {
+        "operationId": "getHandoverStatus",
+        "summary": "State of a handover session",
+        "tags": ["Handover"],
+        "description": "Public. A 404 means the link is dead, which the page must tell apart from a failure. Mounted at both `/handover` and `/handovers`. The two paths answer identically.",
+        "responses": {
+          "200": {
+            "description": "The session state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverStatus"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "parameters": [
+          {
+            "name": "matchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Match id, which is the session id"
+          }
+        ],
+        "security": []
+      }
+    },
+    "/handover/user/{userId}": {
+      "get": {
+        "operationId": "listUserHandovers",
+        "summary": "One person's handovers",
+        "tags": ["Handover"],
+        "description": "Own handovers, or any if the caller is an admin. Served by an `array-contains` query on `participantIds` once the backfill has run.",
+        "responses": {
+          "200": {
+            "description": "The person's handovers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserHandovers"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Participant uid"
+          }
+        ],
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/handover/verify": {
+      "post": {
+        "operationId": "verifyHandoverCode",
+        "summary": "Verify a handover code",
+        "tags": ["Handover"],
+        "description": "Public by design: the finder holds a link and a code, not an account. A wrong code is a 200 with `success: false` and the attempts left, so a rate limit or an outage is never reported as a wrong code. Mounted at both `/handover` and `/handovers`. The two paths answer identically.",
+        "responses": {
+          "200": {
+            "description": "The attempt was processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyCodeResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandoverVerify"
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "summary": "List items",
+        "tags": ["Items"],
+        "description": "Cursor paginated. A non-admin caller sees approved items only, whatever `moderation` asks for. Public: the browse list is readable signed out.",
+        "responses": {
+          "200": {
+            "description": "A page of items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemPage"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["Lost", "Found"]
+            },
+            "description": "Filter by report type"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["Pending", "Matched", "Claimed"]
+            },
+            "description": "Filter by match state"
+          },
+          {
+            "name": "moderation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["pending", "approved", "rejected"]
+            },
+            "description": "Admin only"
+          },
+          {
+            "name": "reportedBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Owner uid. Own reports, or admin"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Id of the last item on the previous page"
+          }
+        ],
+        "security": []
+      },
+      "post": {
+        "operationId": "createItem",
+        "summary": "Report an item",
+        "tags": ["Items"],
+        "description": "Creates the report and returns before matching runs, so a provider failure cannot fail a saved item. A user report starts unmoderated and is invisible until an admin approves it.",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/items/user/{userId}": {
+      "get": {
+        "operationId": "listUserItems",
+        "summary": "List one person's reports",
+        "tags": ["Items"],
+        "description": "Own reports, or any if the caller is an admin.",
+        "responses": {
+          "200": {
+            "description": "The person's reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Owner uid"
+          }
+        ],
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/items/{id}": {
+      "get": {
+        "operationId": "getItem",
+        "summary": "Get one item",
+        "tags": ["Items"],
+        "description": "An unapproved or rejected item is visible only to its reporter and to admins.",
+        "responses": {
+          "200": {
+            "description": "The item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError",
+            "description": "`/items/user` matches this pattern first and is handed back to `/items/user/{userId}`"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Item id"
+          }
+        ],
+        "security": []
+      },
+      "put": {
+        "operationId": "updateItem",
+        "summary": "Edit an item",
+        "tags": ["Items"],
+        "description": "Owner or admin. `status`, `type` and `matchScore` are admin only and are dropped for anyone else. Every server-owned field is unreachable here.",
+        "responses": {
+          "200": {
+            "description": "The updated item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemUpdated"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Item id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemUpdate"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteItem",
+        "summary": "Delete an item",
+        "tags": ["Items"],
+        "description": "Owner or admin. Also removes the images from Cloudinary.",
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Item id"
+          }
+        ],
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/items/{id}/audit": {
+      "get": {
+        "operationId": "getItemAudit",
+        "summary": "Moderation history for an item",
+        "tags": ["Items"],
+        "description": "Every admin decision recorded against this item.",
+        "responses": {
+          "200": {
+            "description": "Audit entries, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Item id"
+          }
+        ],
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/items/{id}/moderate": {
+      "post": {
+        "operationId": "moderateItem",
+        "summary": "Approve or reject a report",
+        "tags": ["Items"],
+        "description": "The moderation gate. Approval is what starts matching; a rejection needs a reason, which is what the audit trail records.",
+        "responses": {
+          "200": {
+            "description": "The decision, and whether matching started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModerationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Item id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemModerate"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/items/{id}/rematch": {
+      "post": {
+        "operationId": "rematchItem",
+        "summary": "Run matching again",
+        "tags": ["Items"],
+        "description": "Re-runs the pipeline for one approved item.",
+        "responses": {
+          "200": {
+            "description": "Matching started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Item id"
+          }
+        ],
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/items/{id}/status": {
+      "put": {
+        "operationId": "setItemStatus",
+        "summary": "Set item status",
+        "tags": ["Items"],
+        "description": "Admin override of the match state.",
+        "responses": {
+          "200": {
+            "description": "The status was set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Item id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemStatusUpdate"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/matches": {
+      "get": {
+        "operationId": "listMatches",
+        "summary": "Live matches",
+        "tags": ["Matches"],
+        "description": "Open proposed and verified pairs.",
+        "responses": {
+          "200": {
+            "description": "Active matches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/matches/all": {
+      "get": {
+        "operationId": "listAllMatches",
+        "summary": "Live and archived matches",
+        "tags": ["Matches"],
+        "description": "Includes completed ones, so a dashboard keeps counting a handover after its match is archived. Each carries `isActive`.",
+        "responses": {
+          "200": {
+            "description": "Every match",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/matches/verify": {
+      "post": {
+        "operationId": "verifyMatch",
+        "summary": "Decide a proposed match",
+        "tags": ["Matches"],
+        "description": "Accepting opens the handover and emails both parties. Rejecting resets both halves of the pair to Pending, and charges the false-claim penalty only when the admin ticks it and the named user is part of the pair.",
+        "responses": {
+          "200": {
+            "description": "The decision was recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchVerifyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchVerify"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/settings": {
+      "get": {
+        "operationId": "getSystemSettings",
+        "summary": "System settings",
+        "tags": ["Settings"],
+        "description": "Feature flags, the AI provider and the map centre. Readable by any signed-in user because the client needs the flags.",
+        "responses": {
+          "200": {
+            "description": "The settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "updateSystemSettings",
+        "summary": "Change system settings",
+        "tags": ["Settings"],
+        "description": "Admin only.",
+        "responses": {
+          "200": {
+            "description": "The updated settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsUpdateResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/settings/analytics": {
+      "get": {
+        "operationId": "getAnalytics",
+        "summary": "Visitor counter",
+        "tags": ["Settings"],
+        "description": "Admin only.",
+        "responses": {
+          "200": {
+            "description": "The counter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/settings/mode": {
+      "get": {
+        "operationId": "getMode",
+        "summary": "Public runtime flags",
+        "tags": ["Settings"],
+        "description": "The handful of flags a signed-out page needs. Falls back to defaults rather than failing.",
+        "responses": {
+          "200": {
+            "description": "The flags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModeResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": []
+      }
+    },
+    "/settings/profile-picture": {
+      "post": {
+        "operationId": "uploadProfilePicture",
+        "summary": "Upload the caller's avatar",
+        "tags": ["Settings"],
+        "description": "The target account always comes from the token.",
+        "responses": {
+          "200": {
+            "description": "The uploaded URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfilePictureResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePicture"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/settings/visit": {
+      "post": {
+        "operationId": "recordVisit",
+        "summary": "Count a visit",
+        "tags": ["Settings"],
+        "description": "Fire and forget from the landing page.",
+        "responses": {
+          "200": {
+            "description": "Counted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": []
+      }
+    },
+    "/stats/dashboard": {
+      "get": {
+        "operationId": "getDashboard",
+        "summary": "Everything the admin dashboard shows",
+        "tags": ["Stats"],
+        "description": "One request per refresh. Counts come from aggregation queries and the lists from field-masked reads, so the browser never pulls a collection.",
+        "responses": {
+          "200": {
+            "description": "The dashboard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardStats"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/users": {
+      "get": {
+        "operationId": "listUsers",
+        "summary": "List accounts",
+        "tags": ["Users"],
+        "description": "Cursor paginated. The browser cannot enumerate the collection directly.",
+        "responses": {
+          "200": {
+            "description": "A page of accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Uid of the last row on the previous page"
+          }
+        ],
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    },
+    "/users/{userId}/status": {
+      "put": {
+        "operationId": "setUserStatus",
+        "summary": "Block or unblock an account",
+        "tags": ["Users"],
+        "description": "A blocked account is signed out with a visible reason on its next request.",
+        "responses": {
+          "200": {
+            "description": "The account was updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Account uid"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserStatusUpdate"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "firebaseIdToken": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "firebaseIdToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "A Firebase ID token. The role is resolved server side"
+      }
+    },
+    "schemas": {
+      "AiStatus": {
+        "type": "object",
+        "description": "Availability only. No key or provider name is returned",
+        "required": ["available"],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AnalyticsResponse": {
+        "type": "object",
+        "properties": {
+          "visitorCount": {
+            "type": "integer"
+          },
+          "lastVisit": {
+            "type": ["object", "null"]
+          }
+        }
+      },
+      "AnalyzeImage": {
+        "type": "object",
+        "required": ["images"],
+        "properties": {
+          "images": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "items": {
+              "type": "object",
+              "required": ["base64"],
+              "properties": {
+                "base64": {
+                  "type": "string",
+                  "maxLength": 2000000
+                },
+                "mimeType": {
+                  "type": "string",
+                  "pattern": "^image/[a-zA-Z0-9.+-]+$"
+                }
+              }
+            }
+          }
+        }
+      },
+      "AuditList": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "actorId": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "$ref": "#/components/schemas/Timestamp"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CctvAnalyze": {
+        "type": "object",
+        "required": ["frames"],
+        "properties": {
+          "frames": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 300,
+            "items": {
+              "type": "object",
+              "required": ["image", "timestamp"],
+              "properties": {
+                "image": {
+                  "type": "string"
+                },
+                "timestamp": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "targetClass": {
+            "type": "string"
+          },
+          "itemName": {
+            "type": "string"
+          },
+          "itemDescription": {
+            "type": "string"
+          }
+        }
+      },
+      "CctvAnalyzeResult": {
+        "type": "object",
+        "required": ["success", "keyframes", "stats", "aiAnalysis"],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "keyframes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "description": "Frames the detector kept, passed through from the vision service"
+          },
+          "stats": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "aiAnalysis": {
+            "type": "object",
+            "properties": {
+              "matchConfidence": {
+                "type": "number"
+              },
+              "explanation": {
+                "type": "string"
+              },
+              "recommendations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CctvClasses": {
+        "type": "object",
+        "description": "Passed through from the vision service unchanged",
+        "additionalProperties": true,
+        "properties": {
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CctvDescribe": {
+        "type": "object",
+        "required": ["image"],
+        "properties": {
+          "image": {
+            "type": "string"
+          },
+          "detectedClass": {
+            "type": "string"
+          }
+        }
+      },
+      "CctvDescribeResult": {
+        "type": "object",
+        "description": "The model's answer, or a placeholder built from the detected class when it gave nothing usable",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CctvDetect": {
+        "type": "object",
+        "required": ["image"],
+        "properties": {
+          "image": {
+            "type": "string",
+            "description": "Base64 frame"
+          },
+          "targetClass": {
+            "type": "string"
+          },
+          "targetClasses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50
+          }
+        }
+      },
+      "CctvDetectResult": {
+        "type": "object",
+        "description": "Passed through from the vision service unchanged, so its shape is the Flask contract rather than this one",
+        "additionalProperties": true,
+        "properties": {
+          "detections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Detection"
+            }
+          }
+        }
+      },
+      "Coordinates": {
+        "type": "object",
+        "required": ["lat", "lng"],
+        "properties": {
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lng": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          }
+        }
+      },
+      "CreditAdjustment": {
+        "type": "object",
+        "required": ["amount"],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "minimum": -1000,
+            "maximum": 1000
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "CreditAdjustmentResult": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CreditBalance"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "added": {
+                "type": "integer"
+              }
+            }
+          }
+        ]
+      },
+      "CreditBalance": {
+        "type": "object",
+        "required": ["userId", "credits"],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "credits": {
+            "type": "integer"
+          }
+        }
+      },
+      "CreditHistory": {
+        "type": "object",
+        "properties": {
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreditTransaction"
+            }
+          }
+        }
+      },
+      "CreditTransaction": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "signup_bonus",
+              "report_found",
+              "successful_match_finder",
+              "successful_match_owner",
+              "false_claim",
+              "manual_adjustment"
+            ]
+          },
+          "relatedItemId": {
+            "type": "string"
+          },
+          "balanceAfter": {
+            "type": "integer"
+          },
+          "note": {
+            "type": "string"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      },
+      "DashboardKpis": {
+        "type": "object",
+        "required": [
+          "totalItems",
+          "lostTotal",
+          "foundTotal",
+          "activeLost",
+          "activeFound",
+          "totalMatches",
+          "pendingReview",
+          "claimed",
+          "matched",
+          "matchSuccessRate"
+        ],
+        "properties": {
+          "totalItems": {
+            "type": "integer"
+          },
+          "lostTotal": {
+            "type": "integer"
+          },
+          "foundTotal": {
+            "type": "integer"
+          },
+          "activeLost": {
+            "type": "integer"
+          },
+          "activeFound": {
+            "type": "integer"
+          },
+          "totalMatches": {
+            "type": "integer"
+          },
+          "pendingReview": {
+            "type": "integer"
+          },
+          "claimed": {
+            "type": "integer"
+          },
+          "matched": {
+            "type": "integer"
+          },
+          "matchSuccessRate": {
+            "type": "number"
+          }
+        }
+      },
+      "DashboardStats": {
+        "type": "object",
+        "description": "Counts from aggregation queries, lists from field-masked reads. One request per refresh",
+        "required": [
+          "kpis",
+          "scoreDistribution",
+          "matchTrend",
+          "handoverTrend",
+          "totalHandovers",
+          "efficiency",
+          "recentMatches",
+          "heatmapPoints",
+          "generatedAt"
+        ],
+        "properties": {
+          "kpis": {
+            "$ref": "#/components/schemas/DashboardKpis"
+          },
+          "scoreDistribution": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "range": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "matchTrend": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string"
+                },
+                "matches": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "handoverTrend": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string"
+                },
+                "handovers": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "totalHandovers": {
+            "type": "integer",
+            "description": "All time, not the windowed trend above"
+          },
+          "efficiency": {
+            "type": "object",
+            "properties": {
+              "matched": {
+                "type": "integer"
+              },
+              "unmatched": {
+                "type": "integer"
+              }
+            }
+          },
+          "recentMatches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "matchScore": {
+                  "type": "number"
+                },
+                "lostItemName": {
+                  "type": "string"
+                },
+                "foundItemName": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": ["string", "null"],
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "heatmapPoints": {
+            "type": "array",
+            "description": "Just enough of an item to place and label a marker",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["Lost", "Found"]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["Pending", "Matched", "Claimed"]
+                },
+                "location": {
+                  "type": "string"
+                },
+                "lat": {
+                  "type": "number"
+                },
+                "lng": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "mapCenter": {
+            "type": "object",
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "lat": {
+                "type": "number"
+              },
+              "lng": {
+                "type": "number"
+              }
+            }
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Detection": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "box": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4
+          }
+        }
+      },
+      "EnhanceDescription": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "The message. A deliberate 4xx keeps its own text; a 5xx is sanitized in production"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Field errors on a validation failure"
+          }
+        }
+      },
+      "HandoverHistory": {
+        "type": "object",
+        "properties": {
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HandoverRecord"
+            }
+          }
+        }
+      },
+      "HandoverRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "matchId": {
+            "type": "string"
+          },
+          "lostItemId": {
+            "type": "string"
+          },
+          "foundItemId": {
+            "type": "string"
+          },
+          "matchScore": {
+            "type": "number"
+          },
+          "participantIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blockchainTxHash": {
+            "type": "string"
+          },
+          "handoverTime": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      },
+      "HandoverReissue": {
+        "type": "object",
+        "required": ["matchId", "lostItemId", "foundItemId"],
+        "properties": {
+          "matchId": {
+            "type": "string"
+          },
+          "lostItemId": {
+            "type": "string"
+          },
+          "foundItemId": {
+            "type": "string"
+          },
+          "overrideCriteria": {
+            "type": "boolean"
+          },
+          "overrideReason": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
+      "HandoverResult": {
+        "type": "object",
+        "required": ["success", "message"],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "criteriaFailure": {
+            "type": "string",
+            "description": "On a 400: which handover check refused"
+          }
+        }
+      },
+      "HandoverSession": {
+        "type": "object",
+        "description": "An open, blocked or expired session. The code hash is never included",
+        "properties": {
+          "matchId": {
+            "type": "string"
+          },
+          "lostItemId": {
+            "type": "string"
+          },
+          "foundItemId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "blocked", "expired"]
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "expiresAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "blockedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "criteriaOverrideBy": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "HandoverSessionList": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HandoverSession"
+            }
+          }
+        }
+      },
+      "HandoverStatus": {
+        "type": "object",
+        "required": ["status", "attempts", "maxAttempts"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["pending", "verified", "blocked", "expired"]
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "maxAttempts": {
+            "type": "integer"
+          },
+          "expiresAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
+        }
+      },
+      "HandoverVerify": {
+        "type": "object",
+        "required": ["matchId", "code"],
+        "properties": {
+          "matchId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$"
+          }
+        }
+      },
+      "Item": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "type",
+          "status",
+          "location",
+          "date",
+          "reportedBy"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "type": {
+            "type": "string",
+            "enum": ["Lost", "Found"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["Pending", "Matched", "Claimed"]
+          },
+          "moderation": {
+            "type": "string",
+            "enum": ["pending", "approved", "rejected"],
+            "description": "Absent on items that predate review, which read as approved"
+          },
+          "moderatedBy": {
+            "type": "string"
+          },
+          "moderationReason": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "coordinates": {
+            "type": "object",
+            "required": ["lat", "lng"],
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "lng": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              }
+            }
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10
+          },
+          "color": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "imageUrl": {
+            "type": "string"
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "collectionPoint": {
+            "type": "string"
+          },
+          "collectionCoordinates": {
+            "type": "object",
+            "required": ["lat", "lng"],
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "lng": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              }
+            }
+          },
+          "reportedBy": {
+            "type": "string"
+          },
+          "reportedByEmail": {
+            "type": "string"
+          },
+          "matchedItemId": {
+            "type": "string"
+          },
+          "matchScore": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      },
+      "ItemAnalysis": {
+        "type": "object",
+        "description": "What both AI endpoints answer. Placeholder values when the model gave nothing usable",
+        "required": ["name", "description", "tags", "color", "category"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ItemCreated": {
+        "type": "object",
+        "required": ["id", "item", "matching"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "matching": {
+            "$ref": "#/components/schemas/MatchingOutcome"
+          }
+        }
+      },
+      "ItemInput": {
+        "type": "object",
+        "required": ["item"],
+        "properties": {
+          "item": {
+            "type": "object",
+            "required": ["name", "description", "type", "location", "date"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 2000
+              },
+              "type": {
+                "type": "string",
+                "enum": ["Lost", "Found"]
+              },
+              "location": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "date": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "category": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "color": {
+                "type": "string",
+                "maxLength": 50
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 10
+              },
+              "coordinates": {
+                "type": "object",
+                "required": ["lat", "lng"],
+                "properties": {
+                  "lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "lng": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  }
+                }
+              },
+              "collectionPoint": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "collectionLocation": {
+                "type": "string",
+                "maxLength": 500,
+                "deprecated": true,
+                "description": "Alias for collectionPoint, mapped on write"
+              },
+              "collectionCoordinates": {
+                "type": "object",
+                "required": ["lat", "lng"],
+                "properties": {
+                  "lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "lng": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  }
+                }
+              },
+              "reporterEmail": {
+                "type": "string",
+                "format": "email"
+              }
+            }
+          },
+          "images": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string",
+              "description": "Base64 data URL or an existing URL"
+            }
+          }
+        }
+      },
+      "ItemList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
+          }
+        }
+      },
+      "ItemModerate": {
+        "type": "object",
+        "required": ["decision"],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": ["approved", "rejected"]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Required on a rejection"
+          }
+        }
+      },
+      "ItemPage": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
+          },
+          "nextCursor": {
+            "type": ["string", "null"],
+            "description": "Pass as `cursor` for the next page. Null on the last page"
+          }
+        }
+      },
+      "ItemResponse": {
+        "type": "object",
+        "required": ["item"],
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          }
+        }
+      },
+      "ItemStatusUpdate": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["Pending", "Matched", "Claimed"]
+          },
+          "matchedUserId": {
+            "type": "string"
+          }
+        }
+      },
+      "ItemUpdate": {
+        "type": "object",
+        "properties": {
+          "updates": {
+            "type": "object",
+            "description": "Only these fields may change. status, type and matchScore are admin only",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "location": {
+                "type": "string"
+              },
+              "date": {
+                "type": ["string", "null"],
+                "format": "date-time"
+              },
+              "category": {
+                "type": "string"
+              },
+              "color": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "collectionPoint": {
+                "type": "string"
+              },
+              "collectionCoordinates": {
+                "type": "object",
+                "required": ["lat", "lng"],
+                "properties": {
+                  "lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "lng": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  }
+                }
+              },
+              "coordinates": {
+                "type": "object",
+                "required": ["lat", "lng"],
+                "properties": {
+                  "lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "lng": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  }
+                }
+              },
+              "cloudinaryUrls": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "description": "Removal only. A URL not already on the item is rejected"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["Pending", "Matched", "Claimed"]
+              },
+              "type": {
+                "type": "string",
+                "enum": ["Lost", "Found"]
+              },
+              "matchScore": {
+                "type": "number"
+              }
+            }
+          },
+          "images": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ItemUpdated": {
+        "type": "object",
+        "required": ["success", "item"],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          }
+        }
+      },
+      "LoginNotification": {
+        "type": "object",
+        "properties": {
+          "loginTime": {
+            "type": "string",
+            "maxLength": 100
+          }
+        }
+      },
+      "LoginNotificationResult": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "userEmail": {
+            "type": "string",
+            "description": "Masked, never the full address"
+          }
+        }
+      },
+      "Match": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "lostItemId": {
+            "type": "string"
+          },
+          "foundItemId": {
+            "type": "string"
+          },
+          "matchScore": {
+            "type": "number"
+          },
+          "semanticScore": {
+            "type": "number"
+          },
+          "colorScore": {
+            "type": "number"
+          },
+          "locationScore": {
+            "type": "number"
+          },
+          "timeScore": {
+            "type": "number"
+          },
+          "imageScore": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["matched", "claimed", "rejected"]
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Present on /matches/all"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      },
+      "MatchList": {
+        "type": "object",
+        "properties": {
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Match"
+            }
+          }
+        }
+      },
+      "MatchVerify": {
+        "type": "object",
+        "required": ["itemId", "isValid"],
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "matchId": {
+            "type": "string",
+            "description": "The record being decided on"
+          },
+          "claimUserId": {
+            "type": "string",
+            "description": "Required only when penaliseClaimant is true"
+          },
+          "isValid": {
+            "type": "boolean"
+          },
+          "overrideCriteria": {
+            "type": "boolean",
+            "description": "Proceed despite the distance, day and time checks failing"
+          },
+          "overrideReason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "penaliseClaimant": {
+            "type": "boolean",
+            "description": "Charge the false-claim penalty on a rejection"
+          }
+        }
+      },
+      "MatchVerifyResult": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "penalised": {
+            "type": "boolean"
+          },
+          "criteriaFailure": {
+            "type": "string",
+            "description": "On a 400: which handover check refused, so the admin can override it"
+          }
+        }
+      },
+      "MatchingOutcome": {
+        "type": "string",
+        "enum": ["pending", "awaiting_review", "not_started"],
+        "description": "`pending` matching was started, `awaiting_review` the item needs approval first, `not_started` there was nothing to match on"
+      },
+      "ModeResponse": {
+        "type": "object",
+        "description": "Public. Falls back to defaults rather than failing",
+        "properties": {
+          "testingMode": {
+            "type": "boolean"
+          },
+          "dailyLimit": {
+            "type": ["integer", "null"],
+            "description": "The testing-mode call budget, null when off"
+          }
+        }
+      },
+      "ModerationResult": {
+        "type": "object",
+        "required": ["success", "moderation", "matching"],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "moderation": {
+            "type": "string",
+            "enum": ["approved", "rejected"]
+          },
+          "matching": {
+            "$ref": "#/components/schemas/MatchingOutcome"
+          }
+        }
+      },
+      "ProfileBootstrap": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "photoURL": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          }
+        }
+      },
+      "ProfilePicture": {
+        "type": "object",
+        "required": ["imageData"],
+        "properties": {
+          "imageData": {
+            "type": "string",
+            "description": "Base64 data URL"
+          }
+        }
+      },
+      "ProfilePictureResult": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "photoURL": {
+            "type": "string"
+          }
+        }
+      },
+      "ProfileResult": {
+        "type": "object",
+        "required": ["created", "profile"],
+        "properties": {
+          "created": {
+            "type": "boolean",
+            "description": "True on the 201. The route is called on every app mount"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/UserProfile"
+          }
+        }
+      },
+      "SettingsUpdate": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SystemSettings"
+          },
+          {
+            "type": "object",
+            "required": ["aiProvider"]
+          }
+        ]
+      },
+      "SettingsUpdateResult": {
+        "allOf": [
+          {
+            "type": "object",
+            "properties": {
+              "success": {
+                "type": "boolean"
+              }
+            }
+          },
+          {
+            "$ref": "#/components/schemas/SystemSettings"
+          }
+        ]
+      },
+      "Success": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "SystemSettings": {
+        "type": "object",
+        "properties": {
+          "aiProvider": {
+            "type": "string",
+            "enum": [
+              "groq_only",
+              "gemini_only",
+              "grok_only",
+              "groq_with_fallback",
+              "gemini_with_fallback",
+              "grok_with_fallback"
+            ]
+          },
+          "cctvEnabled": {
+            "type": "boolean"
+          },
+          "testingMode": {
+            "type": "boolean"
+          },
+          "mapCenter": {
+            "type": "object",
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "lat": {
+                "type": "number"
+              },
+              "lng": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      },
+      "SystemSettingsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SystemSettings"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "availableProviders": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Which providers have a key configured. Availability only"
+              }
+            }
+          }
+        ]
+      },
+      "Timestamp": {
+        "type": "object",
+        "description": "A Firestore timestamp as it survives JSON",
+        "properties": {
+          "_seconds": {
+            "type": "integer"
+          },
+          "_nanoseconds": {
+            "type": "integer"
+          }
+        }
+      },
+      "UserHandovers": {
+        "type": "object",
+        "description": "Note the key: this endpoint answers `handovers`, the admin history answers `history`",
+        "properties": {
+          "handovers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HandoverRecord"
+            }
+          }
+        }
+      },
+      "UserPage": {
+        "type": "object",
+        "description": "Admin accounts are filtered out of the list",
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/UserProfile"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "lostItemsCount": {
+                      "type": "integer"
+                    },
+                    "foundItemsCount": {
+                      "type": "integer"
+                    },
+                    "totalItemsCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "nextCursor": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "UserProfile": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string"
+          },
+          "email": {
+            "type": ["string", "null"]
+          },
+          "displayName": {
+            "type": ["string", "null"]
+          },
+          "photoURL": {
+            "type": ["string", "null"]
+          },
+          "role": {
+            "type": "string",
+            "enum": ["user", "admin"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "blocked"]
+          },
+          "credits": {
+            "type": "integer"
+          }
+        }
+      },
+      "UserStatusResult": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "blocked"]
+          }
+        }
+      },
+      "UserStatusUpdate": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["active", "blocked"]
+          }
+        }
+      },
+      "VerifyCodeResult": {
+        "type": "object",
+        "required": ["success", "message"],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "attemptsLeft": {
+            "type": "integer",
+            "description": "Present on a wrong code. Absent once the session is blocked, which the message says"
+          }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "The request failed validation. `details` names the fields",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthenticated": {
+        "description": "Missing or invalid token",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Authenticated but not permitted, or the account is blocked",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "No such resource",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded for this surface",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "A dependency is unreachable",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "BadGateway": {
+        "description": "The vision service refused or failed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Unexpected failure",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

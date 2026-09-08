@@ -6,21 +6,12 @@
  * tests import the app and drive it without opening a port.
  */
 
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response, NextFunction, Router } from 'express';
 import cors from 'cors';
 import compression from 'compression';
 import helmet from 'helmet';
 
-import itemsRoutes from './routes/items.js';
-import matchesRoutes from './routes/matches.js';
-import settingsRoutes from './routes/settings.js';
-import handoverRoutes from './routes/handover.js';
-import creditsRoutes from './routes/credits.js';
-import authRoutes from './routes/auth.js';
-import cctvRoutes from './routes/cctv.js';
-import aiRoutes from './routes/ai.js';
-import usersRoutes from './routes/users.js';
-import statsRoutes from './routes/stats.js';
+import { routeTable } from './routes/index.js';
 import {
   authLimiter,
   loginNotificationLimiter,
@@ -35,6 +26,15 @@ import { env } from './config/env.js';
 import { createLogger } from './utils/logger.js';
 
 const log = createLogger('app');
+
+/**
+ * The API version in the path.
+ *
+ * One number for the whole surface, bumped only for a breaking change, and
+ * only alongside a new mount that runs beside the old one. See
+ * `docs/adr/0013-api-versioning.md`.
+ */
+export const API_VERSION = 'v1';
 
 // Cache testing mode to avoid hitting Firebase on every request
 let testingModeCache: boolean | null = null;
@@ -100,11 +100,19 @@ export function createApp(): express.Express {
   // than per credential attempt, and the login notice fires once per
   // successful sign-in, so five per IP per fifteen minutes was tripped by
   // ordinary use from a shared address (defect PERF-09).
-  app.use('/api/auth', (req: Request, res: Response, next: NextFunction) => {
+  //
+  // Registered here rather than inside the router below, and mounted once per
+  // path, because it has to run BEFORE the general limiter and before the body
+  // parser: a credential-stuffing run must be refused without first parsing a
+  // 10 MB body and spending the general budget it exists to protect.
+  const authRateLimit = (req: Request, res: Response, next: NextFunction) => {
     if (req.path === '/profile') return profileLimiter(req, res, next);
     if (req.path === '/login-notification') return loginNotificationLimiter(req, res, next);
     return authLimiter(req, res, next);
-  });
+  };
+
+  app.use(`/api/${API_VERSION}/auth`, authRateLimit);
+  app.use('/api/auth', authRateLimit);
 
   // Conditional testing mode rate limiting (400 calls/day when enabled)
   app.use('/api', async (req: Request, res: Response, next: NextFunction) => {
@@ -124,6 +132,7 @@ export function createApp(): express.Express {
   app.get('/health', (req, res) => {
     res.json({
       status: 'ok',
+      apiVersion: API_VERSION,
       timestamp: new Date().toISOString(),
       environment: env.nodeEnv,
     });
@@ -131,20 +140,31 @@ export function createApp(): express.Express {
 
   // API ROUTES
 
-  app.use('/api/items', itemsRoutes);
-  app.use('/api/matches', matchesRoutes);
-  app.use('/api/settings', settingsRoutes);
-  // One router, two mount points. `/api/handovers/user/:userId` and
-  // `/api/handover/verify` were separate files with no rule about which
-  // endpoint lived where; both paths are kept so no client call changes.
-  app.use('/api/handover', handoverRoutes);
-  app.use('/api/handovers', handoverRoutes);
-  app.use('/api/credits', creditsRoutes);
-  app.use('/api/auth', authRoutes);
-  app.use('/api/cctv', cctvRoutes);
-  app.use('/api/ai', aiRoutes);
-  app.use('/api/users', usersRoutes);
-  app.use('/api/stats', statsRoutes);
+  const api = Router();
+
+  routeTable.forEach((mount) => api.use(mount.prefix, mount.router));
+
+  // The versioned path is the contract, and `docs/api/openapi.json` describes
+  // it (defect ARCH-19). The unversioned mount is the same router kept for
+  // every caller written before the version existed; it answers identically
+  // and says so in its headers.
+  app.use(`/api/${API_VERSION}`, api);
+  app.use(
+    '/api',
+    (req: Request, res: Response, next: NextFunction) => {
+      // A path that already names a version reaches here only because that
+      // version does not exist. Marking it deprecated and pointing at
+      // `/api/v1/v2/...` would be worse than saying nothing, so it falls
+      // through to the 404 unannotated.
+      if (!/^\/v\d+(\/|$)/.test(req.path)) {
+        res.setHeader('Deprecation', 'true');
+        res.setHeader('Link', `</api/${API_VERSION}${req.path}>; rel="successor-version"`);
+      }
+
+      next();
+    },
+    api,
+  );
 
   // ERROR HANDLING
 
