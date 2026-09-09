@@ -1018,6 +1018,7 @@ Run after every phase. Record pass or fail with the date, and note any regressio
 | 18    | `chore/reclaim-218-deadcode-docs`             | 2026-09-06 |  | PASS | PASS |  | pending manual run | UI-14, LOG-23, ARCH-05, ARCH-17, ARCH-18 fixed. The verification subsystem, the notification routes, `matching.service.ts`, `utils/safety.ts`, `utils/embeddings.ts`, three dead match routes, `POST /api/matches/claim`, `POST /api/handover/initiate` and two unsent email templates are deleted, along with the chat, conversation, safety and verification type blocks; `types/index.ts` went from 189 lines to 84. Two of the dead endpoints were fixed rather than removed, as asked: handover re-issue now has an admin panel listing open, blocked and expired sessions behind a new `GET /api/handover/sessions`, and the false-claim penalty is an explicit checkbox on the rejection instead of a branch that could never fire. The two credit endpoints UI-14 names were wired instead of deleted: the profile page shows the ledger behind the balance, and the admin user modal can adjust one. Both `docs/*-source-structure.md` are rewritten against the real tree. LOG-23 needed no work: those types went with `safety.ts`. Code review found seven issues, all fixed, two of them real: the false-claim penalty would have charged whatever uid the body named, with nothing tying it to the pair, and the re-issue button was hidden on exactly the sessions that expired without ever being attempted. |
 | 19    | `docs/reclaim-219-hld-lld-adr`                | 2026-09-07 | 2026-09-07 | PASS | PASS |  | n/a (docs, plus the versioned mount) | ARCH-19 fixed. Sections 7, 16 and 17 exist as artifacts under `docs/`: C4 context, container and three component diagrams, four sequences, three state machines, the ER and index model, deployment with the secret flow, the requirements and capacity model, and 13 ADRs each with a "revisit when" section. Every diagram marks built against designed and names the phase that builds the rest. The API is versioned at `/api/v1` with the unversioned prefix kept as the same router, marked `Deprecation: true` and pointing at its successor; the client adds the version once in `resolveUrl`. `docs/api/openapi.json` describes 35 paths and 40 operations, and `routes/openapi.contract.test.ts` walks the route table mounted as data in `routes/index.ts` and compares it in both directions. Verified 2026-09-09: server build PASS, client build PASS, `server npm test` 106/106, `client npm test` 63/63. Code review found eight issues, all fixed, three of them real: the auth rate limiter had moved behind the general limiter and the body parser, four response schemas described fields the server does not send with eight more found on audit, and both the ADR and the API README claimed the contract test checks status codes when it compares methods and paths only. |
 | 20    | `feat/reclaim-220-platform-jobs-outbox`       | 2026-09-09 | 2026-09-09 | PASS | PASS |  | pending manual run | Track B platform layer. `server/src/platform/{jobs,outbox,idempotency,tracing}` with a `JobQueue` port and two drivers: BullMQ on Redis for production, in-process when `REDIS_URL` is unset. Item creation and approval now write their event in the same Firestore batch as the state change, a drainer leases and publishes it, and the worker (`npm run worker`, same artifact, second entrypoint) runs it. Three detached `runMatchingInBackground` calls are gone. `jobClaims` makes redelivery a no-op, `deadLetters` catches what gives up, and a W3C `traceparent` travels from the request through the outbox into the worker and onto every log line. New `docker-compose.yml` for local Redis, CI gains a Redis service, and `docs/architecture/jobs-and-outbox.md` documents the whole path. 165 server tests pass, 2 Redis integration tests skip without Docker. Code review found six issues, all fixed, three of them real: `enableOfflineQueue` was inverted so a Redis outage would hang a rematch request and a drain pass rather than failing them, the matching claim outlived the attempt that took it so every retry of a timed-out run skipped and reported success, and a stalled job exhausted its attempts without writing a dead letter. NEW OPERATIONAL ACTIONS: provision Redis, run the worker, add the `jobClaims` TTL policy, and deploy the new index and rules. |
+| 21    | `refactor/reclaim-221-ai-provider-interface`   | 2026-09-09 | 2026-09-09 | PASS | PASS |  | pending manual run | Section 9 in full. `utils/llm.ts` deleted; `platform/ai/` holds the `ChatProvider` port, six providers (one OpenAI-compatible adapter for Groq, Grok, OpenAI and a local Ollama-style runtime, plus Gemini and Anthropic through the official SDK) and a router doing capability routing, per-task policy, circuit breaking, jittered retry on retryable statuses only, mandatory per-attempt abort, response caching keyed on the whole request, a per-provider rate budget, a cost meter with daily and monthly ceilings, and validated structured output with one repair attempt. All four call sites now name a task rather than a provider. Groq's default model moved to `qwen/qwen3.6-27b` because the previous one was deprecated on 2026-06-17 and it is the migration path that still takes images, and Gemini's to `gemini-3.8-flash`; every model is env-overridable. A four-way code review of the branch found fourteen further defects, all fixed here and listed in section 18. New dependency: `@anthropic-ai/sdk`. 242 server tests pass. NEW OPERATIONAL ACTIONS: optional provider keys, and the spend ceilings if they are wanted. |
 
 ### 5.1 Outstanding operational actions
 
@@ -1037,6 +1038,8 @@ commit, and each one gates the exit criteria of the phase that raised it.
 | Deploy the worker as a second process (`npm run worker`) | Phase 20 | Same build artifact, different entrypoint. With Redis set and no worker running, events commit and queue and nothing consumes them: matching stops until a worker exists | [ ] |
 | Add a Firestore TTL policy on `jobClaims.expiresAt` | Phase 20 | The field is written on every claim; the policy that acts on it is a console setting. Without it the collection grows by one small document per job forever | [ ] |
 | `firebase deploy --only firestore` again, for the outbox index and the platform rules | Phase 20 | The drainer queries `outbox` by `status` and `availableAt`, which needs the new composite index, and the three platform collections are denied to the browser explicitly. Both are inert until deployed | [ ] |
+| Decide the AI spend ceilings, or leave them off | Phase 21 | `AI_DAILY_BUDGET_USD` and `AI_MONTHLY_BUDGET_USD` default to zero, which means no ceiling and is the behaviour before phase 21. The meter records spend either way, in `aiUsage` | [ ] |
+| Add any provider keys worth having | Phase 21 | `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are new and optional; a provider with no key is simply not registered. `LOCAL_LLM_URL` costs nothing and makes a local model the last fallback | [ ] |
 | Run the regression matrix in section 4 | Phases 2 to 6 | Every phase since 2 is recorded as "pending manual run". Nothing in phases 3 to 6 has been exercised against a real Firestore | [ ] |
 
 ## 6. Track A open decisions
@@ -1673,7 +1676,7 @@ Each phase is one branch cut from `develop`, same protocol as Track A. Track B a
 | ----- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------ |
 | 19    | `docs/reclaim-219-hld-lld-adr`                | Sections 7, 16, and 17 as real artifacts in `docs/`: C4 diagrams, sequences, state machines, ER model, OpenAPI skeleton, ADRs 001 to 012                     | Track A phase 14 | [x]    |
 | 20    | `feat/reclaim-220-platform-jobs-outbox`       | Redis, job queue, worker entrypoint, outbox collection and drainer, idempotency keys, dead-letter queues, tracing across the boundary                        | 19               | [x]    |
-| 21    | `refactor/reclaim-221-ai-provider-interface`  | Section 9 in full: ports, registry, capability routing, breaker, quotas, cache, cost meter, structured output, two additional providers plus a local runtime | 20               | [ ]    |
+| 21    | `refactor/reclaim-221-ai-provider-interface`  | Section 9 in full: ports, registry, capability routing, breaker, quotas, cache, cost meter, structured output, two additional providers plus a local runtime | 20               | [x]    |
 | 22    | `feat/reclaim-222-embeddings-cpu`             | Section 8.3: ONNX text and image embedding on CPU, quantized, batched, cached, with a backfill job for existing items                                        | 21               | [ ]    |
 | 23    | `feat/reclaim-223-vector-retrieval`           | Section 8.4 plus the filter and retrieve stages, hybrid dense and lexical with rank fusion, behind a feature flag in shadow mode                             | 22               | [ ]    |
 | 24    | `feat/reclaim-224-rerank-and-eval`            | Section 8.2 stage 2 and section 8.7: batched reranking, the labelled dataset, offline metrics in CI, shadow comparison against the current matcher           | 23               | [ ]    |
@@ -1803,6 +1806,153 @@ Not moved in this phase: email, the chain write and the CCTV proxy still run
 inline in the API. Phases 26 to 29 move them onto the same outbox as they
 rewrite what those flows do, and moving them now would be a rewrite of handover
 with none of the state machine that phase 26 brings.
+
+### Phase 21 - what was delivered
+
+Branch: `refactor/reclaim-221-ai-provider-interface`.
+
+`server/src/utils/llm.ts` is gone. In its place `server/src/platform/ai/` holds
+the ports, the providers and the router, and no caller names a provider any
+more: a caller names a task.
+
+Six providers behind one `ChatProvider` port. One OpenAI-compatible adapter
+serves Groq, Grok, OpenAI and a local runtime; Gemini keeps its own adapter
+because its request shape genuinely differs; Anthropic uses the official
+`@anthropic-ai/sdk`, which is the one dependency this phase adds and the only
+way its schema-constrained output is a real constraint. Everything else that
+differs between providers is data in `providers/registry.ts`: endpoint, model,
+capabilities, price. Adding a provider is an entry there, which is the test ADR
+010 set.
+
+The router does the ten things section 9 lists and the switch statement did
+none of. Capability routing, so a request with images never reaches a text-only
+model and a schema request prefers a provider that can constrain output.
+Per-task policy, because scoring a pair and analysing a photo had no business
+sharing one setting. A circuit breaker per provider, so an outage costs one
+timeout rather than one per request. Retry with jittered backoff on retryable
+statuses only, because a 400 is the prompt and retrying it buys the same
+refusal twice. A mandatory per-attempt abort. A response cache keyed on
+provider, model, messages, parameters and a hash of every image, which matters
+because matching re-scores the same pairs on every run. A per-provider request
+budget, in Redis when it is configured so the API and the workers share it. A
+cost meter that prices every call from the provider's own token counts into
+`aiUsage`, with daily and monthly ceilings that default to off. Structured
+output as one interface, translated per provider and validated here with one
+repair attempt. And one log line per call carrying task, provider, model,
+attempt, latency, tokens and cost, on top of the trace id phase 20 added.
+
+Two model identifiers changed, both deliberately. Groq deprecated
+`meta-llama/llama-4-scout-17b-16e-instruct` on 2026-06-17 for free and
+developer tiers, so the default is now `openai/gpt-oss-120b`, the migration
+Groq names; and Gemini moved to `gemini-3.8-flash`. Every model is overridable
+by environment variable, because identifiers move faster than deployments do.
+Prices were checked at implementation time and each carries the date; Grok's is
+the one marked unverified.
+
+The admin setting keeps its meaning, which is what the user chose over a bigger
+change: `groq_only` is still only Groq, and `groq_with_fallback` now means every
+other configured provider cheapest first rather than the single hardcoded
+partner it meant before. The per-task policy an admin edits is phase 32.
+
+78 new tests across seven files: the router's routing, fallback, retry, breaker,
+cache, cost and structured behaviour against fake providers; the breaker's
+transitions; the setting-to-order mapping; reading JSON out of a fenced or
+chatty reply; the shared adapter's request building and status mapping; the
+Anthropic adapter's error mapping; and the registry's key-to-availability and
+model-to-capability rules.
+`docs/architecture/ai-providers.md` documents the call path, the tasks, the
+providers and how to run a model locally with Ollama.
+
+### Phase 21 - what the review found and the phase then fixed
+
+A four-way review of the branch (router internals, provider adapters,
+integration seams, security) found fourteen defects worth fixing. They are
+listed here because most of them are the kind a passing build and a green test
+suite do not catch, which is the premise of this whole document.
+
+Routing and models:
+
+- Groq's default model moved to `openai/gpt-oss-120b`, which is text only,
+  while the registry still declared `vision: true` for the provider id. Under
+  default settings that silently broke image analysis and CCTV description:
+  both would have collected a non-retryable 400 and returned their fallback
+  text, with a 200 and no error anywhere. Groq names two migration paths and
+  only `qwen/qwen3.6-27b` takes images, so that is now the default, and the
+  vision capability is read off the configured model rather than the id.
+- A schema request was filtered to providers that can constrain output, which
+  is only OpenAI and Anthropic. With any `*_with_fallback` setting that
+  silently demoted the primary the admin chose and sent every structured call
+  to a provider costing roughly fifteen times as much, while the settings
+  screen still said "Primary: Groq". Vision stays a hard filter; a schema is
+  now a preference applied to the fallbacks.
+- The OpenAI entry always sent `max_tokens` and a temperature, both of which
+  the GPT-5 family rejects, so the one provider the structured-output story
+  rests on was unusable configuration.
+- Gemini's adapter read `parts[0]`, which on a reasoning model is the thinking
+  rather than the answer, and counted no reasoning tokens.
+
+Resilience:
+
+- A half-open circuit breaker probe could be taken and never returned, because
+  the spend ceiling and the rate budget both refuse before the call that would
+  have recorded a result. One such refusal left the provider probing for the
+  life of the process, and `available()` still reported it as available.
+- The breaker was consulted once per provider rather than once per attempt, so
+  a provider it had just given up on still got its remaining attempts.
+- A timeout arrives as a `TimeoutError` with no status, so it was never
+  retryable and the attempt budget was dead for the failure it was most
+  obviously written for. The semantic scorer had a timeout retry before this
+  phase and had quietly lost it.
+- A local rate-budget refusal was raised as retryable, so the router slept and
+  asked the same provider again inside a fixed minute window it could not have
+  left, and the refused attempt still incremented the counter.
+- Cache and rate-limit calls constructed the Redis client outside their own
+  try, so a construction failure could fail a call both files document as best
+  effort. Cost and cache writes sat inside the failure path, so a bookkeeping
+  throw would have discarded an answer already paid for, opened the breaker,
+  and bought the same answer again.
+- A reply that failed schema validation stayed cached for its whole TTL while
+  the repair wrote under a different key, so every later call paid for the same
+  repair.
+- Per-attempt timeouts bound nothing once the fallback list is the whole
+  registry, so a task a user waits on could spend six of them. Each task now
+  carries a deadline for the whole call.
+
+Cost, secrets and contracts:
+
+- `byProvider` and `byTask` were written as dotted keys through `set` with
+  merge, which Firestore treats as one field name containing dots rather than
+  as a path, so neither map was ever written as intended.
+- The ceiling read returned zero when Firestore failed, which turns a blip into
+  a ceiling that switches itself off and stays off; the spend read had no
+  single-flight, so a fan-out stampeded it and every caller read the same
+  pre-burst total. It now falls back to the last known total and reads once.
+- Gemini's key rode in the URL query string, where every proxy, gateway and
+  HTTP instrumentation that records a request line logs it. It moved to the
+  documented header. Separately, the logger's key scrubber never matched a
+  Google key at all, because its pattern required a separator after the prefix
+  and `AIza` keys have none.
+- Anthropic's SDK keeps its own `maxRetries: 2` and honours `Retry-After` with
+  no cap, so its retries happened inside one router attempt where the
+  per-attempt timeout fired first and the adapter's 429 mapping never reached
+  the breaker. Retry policy belongs to the router.
+- `APIConnectionError` is a subclass of `APIError`, so the branch handling it
+  was unreachable and a network blip was priced as status 0 and marked
+  unretryable.
+- Image analysis caught every failure and returned placeholder text with a 200,
+  which the client cannot tell from a result: a rotated key would have produced
+  items literally named "Unknown Item" whose description was the failure
+  string. Only an unusable model reply is answered that way now; an outage is a
+  503.
+- `closeSharedRedis` was exported and never called, so the connection the cache
+  and the rate budget open outlived a graceful shutdown in both processes, and
+  it reset its own guard before closing, letting a late caller open a
+  connection nothing would close.
+- `availableProviders` widened from three ids to six without the shared type,
+  the admin screen or the settings copy following it, and `GET /api/settings`
+  is readable by any signed-in user, so which paid vendors this deployment
+  holds keys for was public to the whole user base. The shared type is now the
+  single declaration, and that field is admin only.
 
 ## 19. Additional defects found during the architecture pass
 

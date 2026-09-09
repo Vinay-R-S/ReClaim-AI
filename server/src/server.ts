@@ -9,6 +9,7 @@ import { env } from './config/env.js';
 import { createApp } from './app.js';
 import { createLogger } from './utils/logger.js';
 import { closeJobQueue, getJobQueue } from './platform/jobs/queue.js';
+import { closeSharedRedis } from './platform/redis/shared.js';
 import { DEFAULT_DRAINER_OPTIONS, OutboxDrainer } from './platform/outbox/outbox.drainer.js';
 
 const log = createLogger('server');
@@ -65,6 +66,8 @@ async function shutdown(signal: string): Promise<void> {
     // The in-process driver finishes what it is running, so a job that started
     // is not abandoned halfway through a deploy.
     await closeJobQueue();
+    // The AI cache and rate budget hold this one when Redis is configured.
+    await closeSharedRedis();
   })();
 
   await Promise.race([

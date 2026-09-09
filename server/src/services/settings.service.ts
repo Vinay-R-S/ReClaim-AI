@@ -7,7 +7,7 @@ import { SettingsRepository, settingsRepository } from '../repositories/settings
 import { UserRepository, userRepository } from '../repositories/user.repository.js';
 import { isCloudinaryConfigured, uploadImage } from './cloudinary.service.js';
 import { auth } from '../utils/firebase-admin.js';
-import { getAvailableProviders, type LLMProvider } from '../utils/llm.js';
+import { providerRegistry, type ProviderId } from '../platform/ai/index.js';
 import { AppError } from '../middleware/errorHandler.middleware.js';
 import { createLogger } from '../utils/logger.js';
 import {
@@ -21,7 +21,7 @@ import type { SettingsUpdateBody } from '../schemas/index.js';
 const log = createLogger('settings.service');
 
 /** The provider a setting makes primary. A missing key here breaks every LLM call. */
-const PRIMARY_PROVIDER: Record<AIProvider, LLMProvider> = {
+const PRIMARY_PROVIDER: Record<AIProvider, ProviderId> = {
   groq_only: 'groq',
   groq_with_fallback: 'groq',
   gemini_only: 'gemini',
@@ -41,18 +41,24 @@ export class SettingsService {
    *
    * The admin screen needs the second part so it can stop someone selecting a
    * provider with no key and silently killing matching and CCTV description.
+   * Every signed-in user reads this endpoint for the map centre and the CCTV
+   * flag, and which paid vendors this deployment holds keys for is not their
+   * business, so that part is admin only.
    */
-  async getSystem(): Promise<Record<string, unknown>> {
+  async getSystem(isAdmin = false): Promise<Record<string, unknown>> {
     const stored = await this.settings.getSystem();
+    const settings = { ...(stored ?? DEFAULT_SETTINGS) };
 
-    return { ...(stored ?? DEFAULT_SETTINGS), availableProviders: getAvailableProviders() };
+    if (!isAdmin) return settings;
+
+    return { ...settings, availableProviders: providerRegistry.available() };
   }
 
   async updateSystem(body: SettingsUpdateBody): Promise<SystemSettings> {
     const { aiProvider, mapCenter, cctvEnabled, testingMode } = body;
     const required = PRIMARY_PROVIDER[aiProvider as AIProvider];
 
-    if (required && !getAvailableProviders().includes(required)) {
+    if (required && !providerRegistry.isAvailable(required)) {
       throw new AppError(
         `${required} has no API key configured on this server, so selecting it would stop every AI feature`,
         400,

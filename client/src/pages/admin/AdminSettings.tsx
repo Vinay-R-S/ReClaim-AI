@@ -7,6 +7,7 @@ import { Save, Bot, Loader2, MapPin, X, Search, Video, Users, RefreshCw } from '
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { authGet, authPut } from '../../lib/api';
+import type { LlmProviderName } from '../../types/domain';
 
 type AIProvider =
   | 'groq_only'
@@ -25,7 +26,7 @@ interface MapCenter {
 interface SystemSettings {
   aiProvider: AIProvider;
   /** Providers this deployment has an API key for. */
-  availableProviders?: ('groq' | 'gemini' | 'grok')[];
+  availableProviders?: LlmProviderName[];
   mapCenter?: MapCenter;
   cctvEnabled: boolean;
   testingMode: boolean;
@@ -53,23 +54,26 @@ const AI_PROVIDER_OPTIONS: {
   },
   {
     value: 'groq_with_fallback',
-    label: 'Groq (with Gemini fallback)',
-    description: 'Primary: Groq. Fallback to Gemini if Groq fails.',
+    label: 'Groq (with fallback)',
+    description:
+      'Primary: Groq. Falls back to every other provider configured on this server, cheapest first.',
   },
   {
     value: 'gemini_with_fallback',
-    label: 'Gemini (with Grok fallback)',
-    description: 'Primary: Gemini. Fallback to Grok if Gemini fails.',
+    label: 'Gemini (with fallback)',
+    description:
+      'Primary: Gemini. Falls back to every other provider configured on this server, cheapest first.',
   },
   {
     value: 'grok_with_fallback',
-    label: 'Grok (with Groq fallback)',
-    description: 'Primary: Grok. Fallback to Groq if Grok fails.',
+    label: 'Grok (with fallback)',
+    description:
+      'Primary: Grok. Falls back to every other provider configured on this server, cheapest first.',
   },
 ];
 
 /** Which provider each option makes primary. A missing key breaks every AI call. */
-const PRIMARY_PROVIDER: Record<AIProvider, 'groq' | 'gemini' | 'grok'> = {
+const PRIMARY_PROVIDER: Record<AIProvider, LlmProviderName> = {
   groq_only: 'groq',
   groq_with_fallback: 'groq',
   gemini_only: 'gemini',

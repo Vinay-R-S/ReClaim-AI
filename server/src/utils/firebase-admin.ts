@@ -61,6 +61,7 @@ export const collections = {
   outbox: db.collection('outbox'), // Domain events written with the state change that raised them
   jobClaims: db.collection('jobClaims'), // Idempotency keys held by a running job
   deadLetters: db.collection('deadLetters'), // Jobs that exhausted their retries
+  aiUsage: db.collection('aiUsage'), // Per-day and per-month model spend
 } as const;
 
 export default app;

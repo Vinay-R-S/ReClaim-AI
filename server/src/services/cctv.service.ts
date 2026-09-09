@@ -3,7 +3,7 @@
  * on top of what it finds.
  */
 
-import { callLLM } from '../utils/llm.js';
+import { aiRouter } from '../platform/ai/index.js';
 import { createLogger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import type { CctvAnalyzeBody, CctvDescribeBody, CctvDetectBody } from '../schemas/index.js';
@@ -123,16 +123,16 @@ export class CctvService {
     let content = '';
 
     try {
-      // Through `callLLM` so the admin provider setting decides the model.
-      // Going direct to Groq meant selecting Gemini or Grok changed matching
-      // but left CCTV where it was.
-      const result = await callLLM(
-        [
+      // Through the router so the admin provider setting and the task policy
+      // decide the model. Going direct to Groq meant selecting another
+      // provider changed matching but left CCTV where it was.
+      const result = await aiRouter.chat('cctv.describe', {
+        messages: [
           { role: 'system', content: 'Analyze found item images. Respond with valid JSON.' },
           { role: 'user', content: prompt },
         ],
-        { temperature: 0.3, maxTokens: 512, imageBase64: imageData, imageMimeType: 'image/jpeg' },
-      );
+        images: [{ base64: imageData, mimeType: 'image/jpeg' }],
+      });
       content = result.content;
     } catch (error) {
       log.error('CCTV describe LLM error:', error);
@@ -192,8 +192,8 @@ Respond in JSON format:
 }`;
 
     try {
-      const { content } = await callLLM(
-        [
+      const { content } = await aiRouter.chat('cctv.verify', {
+        messages: [
           {
             role: 'system',
             content:
@@ -201,8 +201,7 @@ Respond in JSON format:
           },
           { role: 'user', content: prompt },
         ],
-        { temperature: 0.3, maxTokens: 512 },
-      );
+      });
 
       const parsed = parseJsonBlock(content);
 

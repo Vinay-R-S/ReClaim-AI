@@ -10,8 +10,8 @@ import type { SettingsUpdateBody } from '../schemas/index.js';
 export class SettingsController {
   constructor(private readonly settings: SettingsService = settingsService) {}
 
-  getSystem = async (_req: Request, res: Response): Promise<Response> => {
-    return res.json(await this.settings.getSystem());
+  getSystem = async (req: AuthRequest, res: Response): Promise<Response> => {
+    return res.json(await this.settings.getSystem(req.user?.role === 'admin'));
   };
 
   updateSystem = async (req: Request, res: Response): Promise<Response> => {

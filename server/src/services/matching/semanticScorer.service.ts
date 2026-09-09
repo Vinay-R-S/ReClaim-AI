@@ -7,20 +7,11 @@
  */
 
 import { Item } from '../../types/index.js';
-import { callLLM } from '../../utils/llm.js';
+import { aiRouter } from '../../platform/ai/index.js';
 import { createLogger } from '../../utils/logger.js';
-import { withRetry, withTimeout } from '../../utils/async.js';
 import { MatchSubject, SemanticScorer } from './matching.types.js';
 
 const log = createLogger('matching:semantic');
-
-/**
- * Backstop only. Each provider call inside `callLLM` carries its own 15s
- * abort, and `callLLM` may try a primary and then a fallback, so this has to
- * leave room for both or the fallback never gets to run.
- */
-const LLM_TIMEOUT_MS = 40000;
-const LLM_ATTEMPTS = 2;
 
 interface Comparable {
   name: string;
@@ -99,27 +90,22 @@ function clamp(value: number): number {
 }
 
 export class LlmSemanticScorer implements SemanticScorer {
+  /**
+   * The timeout, the retries and the fallback provider are the router's, from
+   * the `match.semantic` policy. This stage owns the prompt and the parse.
+   */
   async score(a: MatchSubject, b: Item): Promise<number | null> {
     try {
-      const response = await withRetry(
-        () =>
-          withTimeout(
-            callLLM(
-              [
-                {
-                  role: 'system',
-                  content:
-                    'You are a precise semantic matching engine. Be confident when items clearly match. Output only a number 0-100.',
-                },
-                { role: 'user', content: buildPrompt(a, b) },
-              ],
-              { temperature: 0.2 },
-            ),
-            LLM_TIMEOUT_MS,
-            'semantic score',
-          ),
-        { attempts: LLM_ATTEMPTS, label: 'semantic score' },
-      );
+      const response = await aiRouter.chat('match.semantic', {
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a precise semantic matching engine. Be confident when items clearly match. Output only a number 0-100.',
+          },
+          { role: 'user', content: buildPrompt(a, b) },
+        ],
+      });
 
       return parseScore(response.content);
     } catch (error) {

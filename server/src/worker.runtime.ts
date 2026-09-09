@@ -18,6 +18,7 @@ import { JobRunner } from './platform/jobs/job.runner.js';
 import { jobHandlers } from './platform/jobs/handlers/index.js';
 import { createRedisConnection } from './platform/jobs/redis.connection.js';
 import { setJobQueue } from './platform/jobs/queue.js';
+import { closeSharedRedis } from './platform/redis/shared.js';
 import { DEFAULT_DRAINER_OPTIONS, OutboxDrainer } from './platform/outbox/outbox.drainer.js';
 
 const log = createLogger('worker');
@@ -67,6 +68,8 @@ async function shutdown(signal: string): Promise<void> {
   await drainer.stop();
   await worker.stop();
   await queue.close();
+  // Separate from the queue's connections: the AI cache and rate budget use it.
+  await closeSharedRedis();
 
   process.exit(0);
 }
