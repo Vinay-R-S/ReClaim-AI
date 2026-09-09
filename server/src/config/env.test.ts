@@ -48,6 +48,27 @@ describe('queue configuration', () => {
     expect(env.warnings.join(' ')).toContain('REDIS_URL is set but is not a redis://');
   });
 
+  it('defaults retrieval to shadow, so an upgrade changes no behaviour on its own', () => {
+    expect(buildEnv(environment()).matching).toMatchObject({
+      retrievalMode: 'shadow',
+      retrievalLimit: 50,
+    });
+  });
+
+  it('takes the retrieval mode and limit from the environment', () => {
+    expect(
+      buildEnv(environment({ RETRIEVAL_MODE: 'on', RETRIEVAL_LIMIT: '120' })).matching,
+    ).toMatchObject({ retrievalMode: 'on', retrievalLimit: 120 });
+  });
+
+  it('refuses a retrieval mode that is not one of the three', () => {
+    expect(() => buildEnv(environment({ RETRIEVAL_MODE: 'enabled' }))).toThrow();
+  });
+
+  it('refuses a retrieval limit past the ceiling', () => {
+    expect(() => buildEnv(environment({ RETRIEVAL_LIMIT: '5000' }))).toThrow();
+  });
+
   it('defaults the embedding knobs, and takes them from the environment when set', () => {
     expect(buildEnv(environment()).embeddings).toMatchObject({
       enabled: true,

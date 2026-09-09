@@ -15,6 +15,7 @@ reviewed in the same pull request as the change they describe.
 | [Jobs and the outbox](jobs-and-outbox.md)        | How background work is committed, dispatched, retried, traced and given up on           |
 | [AI providers and the router](ai-providers.md)   | How a model call is routed, retried, cached, priced and constrained to a schema         |
 | [Embeddings on CPU](embeddings.md)               | How an item becomes a vector, where it is stored, and what it costs                     |
+| [Hybrid retrieval](retrieval.md)                 | How a matching run picks which candidates are worth scoring                             |
 | [Data model](data-model.md)                      | Every collection, its fields, its indexes, and the access pattern each index exists for |
 | [Deployment](deployment.md)                      | Environments, network boundaries, and how a secret reaches a process                    |
 | [Requirements and capacity](nfr-and-capacity.md) | The numbers the design is accountable to, and the arithmetic behind the sizing          |

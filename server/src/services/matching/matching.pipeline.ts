@@ -10,6 +10,13 @@
  * Everything above the threshold is returned ranked. Deciding what to *do* with
  * a ranked list (match records, item status, handover) belongs to the caller,
  * not here.
+ *
+ * The first two stages have a replacement, behind `RETRIEVAL_MODE`: hybrid
+ * dense and lexical retrieval fused by rank (section 8.2, ADR 0003). It is
+ * `shadow` by default, which runs it, logs how far it agrees with the
+ * retrieval below, and changes nothing about which candidates are scored.
+ * Turning it on is a decision to be made from those numbers, not from the fact
+ * that the code exists.
  */
 
 import { itemRepository } from '../../repositories/item.repository.js';
@@ -38,6 +45,14 @@ import {
 } from './matching.types.js';
 import { LlmSemanticScorer } from './semanticScorer.service.js';
 import { ClarifaiVisualScorer } from './visualScorer.service.js';
+import {
+  compareRetrieval,
+  reportRetrieval,
+  retrievalMode,
+  retrievalService,
+  RetrievalService,
+} from './retrieval/retrieval.service.js';
+import { env } from '../../config/env.js';
 
 const log = createLogger('matching');
 
@@ -174,6 +189,7 @@ function lexicalPreScore(a: MatchSubject, b: Item): number {
 export interface MatchingDependencies {
   semantic?: SemanticScorer;
   visual?: VisualScorer;
+  retrieval?: RetrievalService;
 }
 
 export class MatchingService {
@@ -181,9 +197,12 @@ export class MatchingService {
 
   private readonly visual: VisualScorer;
 
+  private readonly retrieval: RetrievalService;
+
   constructor(dependencies: MatchingDependencies = {}) {
     this.semantic = dependencies.semantic ?? new LlmSemanticScorer();
     this.visual = dependencies.visual ?? new ClarifaiVisualScorer();
+    this.retrieval = dependencies.retrieval ?? retrievalService;
   }
 
   /**
@@ -319,6 +338,65 @@ export class MatchingService {
   }
 
   /**
+   * Hybrid retrieval, in whichever mode the deployment asked for.
+   *
+   * Returns the candidates to score when the mode is `on`, and null in every
+   * other case, including a failure: a retrieval stage that cannot run must
+   * fall back to the one it replaces rather than fail a matching run.
+   */
+  private async runHybridRetrieval(
+    subject: MatchSubject,
+    subjectType: ItemType,
+    ordered: Array<{ candidate: Item; date: Date; preScore: number; hoursApart: number }>,
+    maxScored: number,
+  ): Promise<Array<{ candidate: Item; preScore: number }> | null> {
+    const mode = retrievalMode();
+
+    if (mode === 'off') return null;
+
+    try {
+      // The candidates this run already read and filtered, dates and all.
+      // Retrieval used to query the collection again, which doubled the reads
+      // on every matching run to rebuild a subset of this exact list.
+      const result = await this.retrieval.retrieve(
+        subject,
+        subjectType,
+        env.matching.retrievalLimit,
+        ordered.map(({ candidate, date }) => ({ item: candidate, date })),
+      );
+
+      if (mode === 'shadow') {
+        compareRetrieval(
+          ordered.map((entry) => entry.candidate.id as string),
+          result,
+          maxScored,
+        );
+
+        return null;
+      }
+
+      if (result.candidates.length === 0) {
+        log.warn('Hybrid retrieval found nothing, falling back to the lexical ordering');
+
+        return null;
+      }
+
+      const chosen = result.candidates.slice(0, maxScored);
+
+      reportRetrieval(result, chosen.length);
+
+      return chosen.map(({ item }) => ({
+        candidate: item,
+        preScore: lexicalPreScore(subject, item),
+      }));
+    } catch (error) {
+      log.warn('Hybrid retrieval failed, falling back to the lexical ordering', { error });
+
+      return null;
+    }
+  }
+
+  /**
    * Run the whole pipeline and return every candidate that crossed the
    * threshold, best first.
    */
@@ -344,16 +422,27 @@ export class MatchingService {
     // Lexical overlap ties on zero for genuine matches with disjoint wording,
     // so time proximity breaks the tie rather than Firestore's arbitrary order.
     const ordered = eligible
-      .map((candidate) => ({
-        candidate,
-        preScore: lexicalPreScore(subject, candidate),
-        hoursApart: calculateTimeDifference(subject.date, toDate(candidate.date) as Date),
-      }))
+      .map((candidate) => {
+        // The pre-filter already guaranteed and parsed this; carrying it means
+        // neither the sort nor the retrieval stage converts it again.
+        const date = toDate(candidate.date) as Date;
+
+        return {
+          candidate,
+          date,
+          preScore: lexicalPreScore(subject, candidate),
+          hoursApart: calculateTimeDifference(subject.date, date),
+        };
+      })
       .sort((a, b) => b.preScore - a.preScore || a.hoursApart - b.hoursApart);
 
-    const ranked = ordered.slice(0, maxScored);
+    const hybrid = await this.runHybridRetrieval(subject, subjectType, ordered, maxScored);
+    const ranked = hybrid ?? ordered.slice(0, maxScored);
 
-    if (ordered.length > ranked.length) {
+    // Only meaningful for the lexical ordering. Under hybrid retrieval the
+    // field was narrowed by rank fusion, so counting candidates with no
+    // lexical overlap would describe a decision nothing made.
+    if (!hybrid && ordered.length > ranked.length) {
       const droppedWithoutOverlap = ordered
         .slice(maxScored)
         .filter((entry) => entry.preScore === 0).length;
