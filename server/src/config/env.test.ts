@@ -48,6 +48,50 @@ describe('queue configuration', () => {
     expect(env.warnings.join(' ')).toContain('REDIS_URL is set but is not a redis://');
   });
 
+  it('defaults the embedding knobs, and takes them from the environment when set', () => {
+    expect(buildEnv(environment()).embeddings).toMatchObject({
+      enabled: true,
+      textModel: 'Xenova/bge-small-en-v1.5',
+      textDimensions: 384,
+      imageDimensions: 512,
+      threads: 1,
+      batchSize: 16,
+      offline: false,
+    });
+
+    expect(
+      buildEnv(
+        environment({
+          EMBEDDING_MODEL: 'Xenova/all-MiniLM-L6-v2',
+          EMBEDDING_THREADS: '4',
+          EMBEDDING_BATCH_SIZE: '32',
+        }),
+      ).embeddings,
+    ).toMatchObject({ textModel: 'Xenova/all-MiniLM-L6-v2', threads: 4, batchSize: 32 });
+  });
+
+  /**
+   * `value !== 'false'` and `value === 'true'` are opposite halves of the same
+   * mistake. An operator who wrote EMBEDDINGS_OFFLINE=1 into an air-gapped
+   * deployment would otherwise get a process that reaches out on first use and
+   * says nothing about it.
+   */
+  it.each([
+    ['1', true],
+    ['yes', true],
+    ['ON', true],
+    ['0', false],
+    ['no', false],
+    ['Off', false],
+  ])('reads %s as %s for a flag', (value, expected) => {
+    expect(buildEnv(environment({ EMBEDDINGS_OFFLINE: value })).embeddings.offline).toBe(expected);
+    expect(buildEnv(environment({ EMBEDDINGS_ENABLED: value })).embeddings.enabled).toBe(expected);
+  });
+
+  it('refuses a flag value it cannot read, rather than guessing', () => {
+    expect(() => buildEnv(environment({ EMBEDDINGS_OFFLINE: 'maybe' }))).toThrow();
+  });
+
   it('defaults the worker knobs, and takes them from the environment when set', () => {
     expect(buildEnv(environment()).queue).toMatchObject({
       concurrency: 4,

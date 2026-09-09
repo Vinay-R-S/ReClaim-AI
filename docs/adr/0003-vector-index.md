@@ -2,8 +2,12 @@
 
 ## Status
 
-Proposed. Blocked on verifying that the pinned `firebase-admin` exposes vector
-fields and nearest-neighbour queries.
+Accepted. The blocker is resolved: the pinned `firebase-admin@12.7.0`, through
+`@google-cloud/firestore@7.11.6`, exposes both `FieldValue.vector()` and
+`findNearest()` on a query and a collection reference. Checked in phase 22,
+which is why item vectors are stored as native vector values from the start
+rather than as arrays that would have needed a full backfill before retrieval
+could index them. The retrieval half is phase 23.
 
 ## Context
 
@@ -40,10 +44,10 @@ interface VectorIndex {
 Nothing above the port knows which store is behind it, so a migration is one
 new adapter plus a backfill rather than a change to the matching pipeline.
 
-Before implementing, confirm the pinned `firebase-admin` version actually
-supports vector fields and nearest-neighbour queries. If it does not, the same
-port takes a Qdrant adapter and this record is superseded rather than the
-pipeline being redesigned.
+The pinned `firebase-admin` was confirmed to support both before anything was
+written to depend on it. Had it not, the same port would have taken a Qdrant
+adapter and this record would be superseded rather than the pipeline
+redesigned.
 
 ## Consequences
 

@@ -39,11 +39,17 @@ export interface JobDispatch {
 }
 
 /**
- * What each event dispatches, or null when nothing consumes it yet.
+ * What each event dispatches, or nothing when no consumer wants it yet.
+ *
+ * A list rather than one job, because an event is a fact and a fact can
+ * interest more than one consumer. An item becoming visible both starts a
+ * matching run and needs a vector; neither knows about the other, and adding
+ * the second did not change the first.
  *
  * `item.created` on an unapproved report is the case that dispatches nothing:
  * the report is not matchable until an admin approves it, and the approval
- * raises its own event.
+ * raises its own event. Embedding follows the same gate rather than a looser
+ * one, so nothing is spent on a report that is about to be rejected.
  *
  * The idempotency key carries the event id, so redelivery of one event is one
  * run while a later event for the same item is a new one.
@@ -52,24 +58,25 @@ export function routeEvent(
   eventId: string,
   name: OutboxEventName,
   payload: Record<string, unknown>,
-): JobDispatch | null {
+): JobDispatch[] {
   const itemId = typeof payload.itemId === 'string' ? payload.itemId : null;
 
-  if (!itemId) return null;
+  if (!itemId) return [];
 
-  if (name === 'item.created') {
-    if (payload.moderation !== 'approved') return null;
+  if (name === 'item.created' && payload.moderation !== 'approved') return [];
 
-    return {
+  const reason = name === 'item.created' ? 'created' : 'approved';
+
+  return [
+    {
+      name: 'embed.item',
+      payload: { itemId, reason },
+      idempotencyKey: `embed.item:${itemId}:${eventId}`,
+    },
+    {
       name: 'match.item',
-      payload: { itemId, reason: 'created' },
+      payload: { itemId, reason },
       idempotencyKey: `match.item:${itemId}:${eventId}`,
-    };
-  }
-
-  return {
-    name: 'match.item',
-    payload: { itemId, reason: 'approved' },
-    idempotencyKey: `match.item:${itemId}:${eventId}`,
-  };
+    },
+  ];
 }

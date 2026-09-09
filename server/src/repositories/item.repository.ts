@@ -8,6 +8,7 @@
  */
 
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import type { DocumentSnapshot, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { collections, db } from '../utils/firebase-admin.js';
 import { outboxRepository, OutboxRepository } from '../platform/outbox/outbox.repository.js';
 import type { OutboxEvent } from '../platform/outbox/event.catalog.js';
@@ -25,6 +26,57 @@ export interface ItemListFilters {
 
 export type StoredItem = Item & { id: string };
 
+/**
+ * Vector fields, which are stored on the item and never read with it.
+ *
+ * They live on the document rather than beside it so that a nearest-neighbour
+ * query can filter by type, status and time in the same query it ranks by
+ * distance (ADR 0003). The cost of that is this list: every read path in this
+ * file spreads the whole document to a caller that ends up serialising it to a
+ * browser, and a 384-float vector per item on a list endpoint is kilobytes of
+ * nothing anybody asked for. So they come off on the way out, and the one
+ * caller that wants them asks for them by name.
+ */
+const VECTOR_FIELDS = [
+  'embedding',
+  'imageEmbedding',
+  'embeddingKey',
+  'embeddingModel',
+  'imageEmbeddingModel',
+  'embeddedAt',
+] as const;
+
+export interface ItemVectors {
+  embedding?: Float32Array;
+  imageEmbedding?: Float32Array;
+  embeddingKey?: string;
+  embeddingModel?: string;
+  imageEmbeddingModel?: string;
+}
+
+export type StoredItemWithVectors = StoredItem & ItemVectors;
+
+/** A Firestore vector value, which reads back as an object, not an array. */
+/** An item as callers see it: everything except the vectors. */
+function toStoredItem(doc: DocumentSnapshot | QueryDocumentSnapshot): StoredItem {
+  const data = { ...doc.data() } as Record<string, unknown>;
+
+  VECTOR_FIELDS.forEach((field) => delete data[field]);
+
+  return { ...(data as unknown as Item), id: doc.id };
+}
+
+function toFloat32(value: unknown): Float32Array | undefined {
+  if (!value) return undefined;
+
+  const raw =
+    typeof (value as { toArray?: () => number[] }).toArray === 'function'
+      ? (value as { toArray: () => number[] }).toArray()
+      : value;
+
+  return Array.isArray(raw) ? Float32Array.from(raw) : undefined;
+}
+
 export class ItemRepository {
   constructor(
     private readonly items = collections.items,
@@ -37,7 +89,7 @@ export class ItemRepository {
 
     if (!doc.exists) return null;
 
-    return { ...(doc.data() as Item), id: doc.id };
+    return toStoredItem(doc);
   }
 
   /**
@@ -79,7 +131,7 @@ export class ItemRepository {
     }
 
     const snapshot = await (filterModeration ? query.get() : query.limit(filters.limit).get());
-    const items = snapshot.docs.map((doc) => ({ ...(doc.data() as Item), id: doc.id }));
+    const items = snapshot.docs.map((doc) => toStoredItem(doc));
 
     // A full page means there may be another; a short one is the end.
     const nextCursor =
@@ -101,7 +153,7 @@ export class ItemRepository {
   async listAllByReporter(userId: string): Promise<StoredItem[]> {
     const snapshot = await this.items.where('reportedBy', '==', userId).get();
 
-    return snapshot.docs.map((doc) => ({ ...(doc.data() as Item), id: doc.id }));
+    return snapshot.docs.map((doc) => toStoredItem(doc));
   }
 
   /** A user's reports, newest first, as the screens list them. */
@@ -111,7 +163,7 @@ export class ItemRepository {
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map((doc) => ({ ...(doc.data() as Item), id: doc.id }));
+    return snapshot.docs.map((doc) => toStoredItem(doc));
   }
 
   /**
@@ -130,7 +182,7 @@ export class ItemRepository {
 
     const created = await ref.get();
 
-    return { ...(created.data() as Item), id: created.id };
+    return toStoredItem(created);
   }
 
   /**
@@ -160,7 +212,7 @@ export class ItemRepository {
 
     const created = await ref.get();
 
-    return { ...(created.data() as Item), id: created.id };
+    return toStoredItem(created);
   }
 
   /** An edit and the events it raises, atomically. See `createWithEvents`. */
@@ -210,7 +262,7 @@ export class ItemRepository {
       .where('type', '==', type)
       .get();
 
-    return snapshot.docs.map((doc) => ({ ...(doc.data() as Item), id: doc.id }));
+    return snapshot.docs.map((doc) => toStoredItem(doc));
   }
 
   /**
@@ -227,7 +279,110 @@ export class ItemRepository {
       .where('status', '==', 'Pending')
       .get();
 
-    return snapshot.docs.map((doc) => ({ ...(doc.data() as Item), id: doc.id }));
+    return snapshot.docs.map((doc) => toStoredItem(doc));
+  }
+
+  /**
+   * An item including its vectors, for the code that actually needs them.
+   *
+   * Separate from `findById` so that wanting a vector is a deliberate act. The
+   * embedding job and the backfill are the only callers today; retrieval joins
+   * them in the next phase.
+   */
+  async findByIdWithVectors(id: string): Promise<StoredItemWithVectors | null> {
+    const doc = await this.items.doc(id).get();
+
+    if (!doc.exists) return null;
+
+    const data = doc.data() as Record<string, unknown>;
+
+    return {
+      ...toStoredItem(doc),
+      embedding: toFloat32(data.embedding),
+      imageEmbedding: toFloat32(data.imageEmbedding),
+      embeddingKey: typeof data.embeddingKey === 'string' ? data.embeddingKey : undefined,
+      embeddingModel: typeof data.embeddingModel === 'string' ? data.embeddingModel : undefined,
+      imageEmbeddingModel:
+        typeof data.imageEmbeddingModel === 'string' ? data.imageEmbeddingModel : undefined,
+    };
+  }
+
+  /**
+   * Store an item's vectors.
+   *
+   * As Firestore vector values, not arrays of numbers, because that is the
+   * type `findNearest` indexes: storing plain arrays now would mean a full
+   * backfill before retrieval could use them (ADR 0003).
+   *
+   * A `patch`, not an `update`: embedding an item is not an edit its owner
+   * made, and stamping `updatedAt` would move every backfilled item to the top
+   * of anything sorted by when it was last touched.
+   */
+  async setEmbeddings(
+    id: string,
+    vectors: {
+      embedding: Float32Array;
+      embeddingKey: string;
+      embeddingModel: string;
+      imageEmbedding?: Float32Array;
+      imageEmbeddingModel?: string;
+    },
+  ): Promise<boolean> {
+    const data: Record<string, unknown> = {
+      embedding: FieldValue.vector(Array.from(vectors.embedding)),
+      embeddingKey: vectors.embeddingKey,
+      embeddingModel: vectors.embeddingModel,
+      embeddedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (vectors.imageEmbedding && vectors.imageEmbeddingModel) {
+      data.imageEmbedding = FieldValue.vector(Array.from(vectors.imageEmbedding));
+      data.imageEmbeddingModel = vectors.imageEmbeddingModel;
+    } else {
+      // Cleared, not left. An item whose photo was swapped for one that cannot
+      // be read would otherwise keep ranking on the vector of a picture it no
+      // longer has.
+      data.imageEmbedding = FieldValue.delete();
+      data.imageEmbeddingModel = FieldValue.delete();
+    }
+
+    try {
+      await this.patch(id, data);
+    } catch (error) {
+      // The job reads the item, then spends up to ten seconds fetching a photo
+      // and running inference. An owner deleting their report inside that
+      // window is a race, not a failure worth three attempts and a dead letter.
+      if ((error as { code?: number }).code === 5) return false;
+
+      throw error;
+    }
+
+    return true;
+  }
+
+  /**
+   * A page of items for the backfill.
+   *
+   * Ordered by document id and continued by cursor rather than filtered on the
+   * absence of a field, because Firestore cannot query for a field that is not
+   * there. The caller decides which of these still need work by comparing the
+   * stored content hash, which is the same test the job itself applies.
+   */
+  async pageForEmbedding(
+    limit: number,
+    after?: string,
+  ): Promise<Array<{ id: string; embeddingKey?: string }>> {
+    let query = this.items.orderBy('__name__').limit(limit);
+
+    if (after) query = query.startAfter(after);
+
+    const snapshot = await query.get();
+
+    return snapshot.docs.map((doc) => {
+      const key = (doc.data() as Record<string, unknown>).embeddingKey;
+
+      return { id: doc.id, embeddingKey: typeof key === 'string' ? key : undefined };
+    });
   }
 
   async exists(id: string): Promise<boolean> {

@@ -40,6 +40,11 @@ coverage
 .eslintcache
 .vite
 
+# Downloaded model weights. Fetched on first use, or by `npm run warm-models`.
+# Roughly 115MB, and a model swap would add more, so they stay out of history.
+.models/
+server/.models/
+
 # Editor and OS
 .vscode/*
 !.vscode/extensions.json

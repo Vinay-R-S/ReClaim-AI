@@ -20,10 +20,13 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "warm-models": "tsx scripts/warm-models.ts",
+    "backfill:embeddings": "tsx scripts/backfill-embeddings.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
+    "@huggingface/transformers": "^4.2.0",
     "@opentelemetry/api": "^1.9.0",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",

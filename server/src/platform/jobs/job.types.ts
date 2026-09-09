@@ -6,7 +6,7 @@
  * to run and a consumer cannot read a field the producer never sends.
  */
 
-export const JOB_NAMES = ['match.item'] as const;
+export const JOB_NAMES = ['match.item', 'embed.item'] as const;
 
 export type JobName = (typeof JOB_NAMES)[number];
 
@@ -18,8 +18,24 @@ export interface MatchItemPayload {
   reason: MatchItemReason;
 }
 
+/**
+ * Why an item is being embedded. Carried for the log, not for behaviour.
+ *
+ * Only what the catalogue can actually raise. An edit does not raise an event
+ * today, so an approved item whose owner rewrites its description keeps its
+ * old vector until the backfill runs; adding `item.updated` is the fix and it
+ * belongs with the retrieval phase that makes a stale vector matter.
+ */
+export type EmbedItemReason = 'created' | 'approved';
+
+export interface EmbedItemPayload {
+  itemId: string;
+  reason: EmbedItemReason;
+}
+
 export interface JobPayloads {
   'match.item': MatchItemPayload;
+  'embed.item': EmbedItemPayload;
 }
 
 /**
@@ -52,9 +68,15 @@ export interface RetryPolicy {
  * Matching calls an LLM and a vision provider, both of which fail in bursts,
  * so it retries three times over roughly a minute and then dead-letters rather
  * than holding a queue slot forever.
+ *
+ * Embedding is local inference, so the only things that fail are a first model
+ * download and an image fetch. Both are worth another go, and neither is worth
+ * a long one: the timeout is generous only because a cold start pays for the
+ * model load once.
  */
 export const RETRY_POLICIES: Record<JobName, RetryPolicy> = {
   'match.item': { attempts: 3, backoffMs: 10_000, timeoutMs: 120_000 },
+  'embed.item': { attempts: 3, backoffMs: 5_000, timeoutMs: 180_000 },
 };
 
 export function isJobName(value: string): value is JobName {

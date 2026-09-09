@@ -2,7 +2,25 @@
 
 ## Status
 
-Proposed. Phase 22.
+Accepted and implemented in phase 22. See
+[the embeddings note](../architecture/embeddings.md) for what was built.
+
+Two things were decided at implementation time that this record left open. The
+text encoder is `bge-small-en-v1.5` rather than a MiniLM: both are in the
+384-dimension class this record asks for, so they are interchangeable with a
+backfill and no schema change, and the former is stronger on retrieval for
+about ten megabytes more. And the runtime is reached through
+`@huggingface/transformers`, which bundles ONNX Runtime and, more importantly,
+the tokenizer and the CLIP preprocessing: resize, centre crop, rescale and a
+per-channel normalise whose constants come from the model repository. Every one
+of those is a place where a hand-written pipeline produces vectors that look
+reasonable and rank nothing correctly.
+
+Measured on this repository, single-threaded, warm: 8 to 12 ms per text and
+about 38 ms per image, with two descriptions of the same wallet scoring 0.865
+against each other and 0.619 against a bicycle. That is a sanity check, not the
+evaluation this record asks for. The labelled eval set is phase 24, and the
+guardrail below still stands: no model is adopted on reputation.
 
 ## Context
 
