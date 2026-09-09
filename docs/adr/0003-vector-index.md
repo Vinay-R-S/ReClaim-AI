@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted. The blocker is resolved: the pinned `firebase-admin@12.7.0`, through
+Accepted and implemented in phase 23. See
+[the retrieval note](../architecture/retrieval.md) for what was built. The
+blocker is resolved: the pinned `firebase-admin@12.7.0`, through
 `@google-cloud/firestore@7.11.6`, exposes both `FieldValue.vector()` and
 `findNearest()` on a query and a collection reference. Checked in phase 22,
 which is why item vectors are stored as native vector values from the start
@@ -57,9 +59,18 @@ redesigned.
   recall is what it is.
 - The port is a real cost: an indirection nobody needs on day one. It is worth
   it precisely because the store behind it is the piece most likely to change.
-- The lexical half of hybrid retrieval is not solved by this decision. It needs
-  either a separate lexical index or an in-process BM25 over the filtered
-  candidate set.
+- The lexical half of hybrid retrieval is not solved by this decision. Phase 23
+  took the second option: an in-process BM25 built per run over the filtered
+  candidate set. At a few hundred short documents that is about a millisecond,
+  and it avoids a second store to keep in step with the items collection.
+- One consequence found at implementation time. Firestore serves a vector query
+  from a composite index whose non-vector fields are equality-filtered, so only
+  `type` and `status` reach the query; the time window, the distance limit and
+  the moderation rule are applied to the result, and the query over-fetches so
+  that removing them does not empty the list. The claim in the context above,
+  that pre-filtering happens "in the same query", holds for equality filters
+  and not for ranges. It is still one round trip, which is the part that
+  mattered.
 
 ## Revisit when
 

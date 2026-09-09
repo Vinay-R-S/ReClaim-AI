@@ -82,6 +82,7 @@ ReClaim-AI/
 | [docs/architecture/jobs-and-outbox.md](docs/architecture/jobs-and-outbox.md) | Background work: the outbox, the queue, retries and tracing     |
 | [docs/architecture/ai-providers.md](docs/architecture/ai-providers.md)       | Model calls: providers, routing, caching, cost and schemas      |
 | [docs/architecture/embeddings.md](docs/architecture/embeddings.md)           | Item vectors: CPU encoders, storage, caching and backfill       |
+| [docs/architecture/retrieval.md](docs/architecture/retrieval.md)             | Candidate retrieval: filter, dense plus lexical, rank fusion    |
 | [docs/adr](docs/adr/README.md)                                               | Why each significant choice was made, and what would reverse it |
 | [docs/api](docs/api/README.md)                                               | The HTTP contract and the versioning policy                     |
 | [docs/server-source-structure.md](docs/server-source-structure.md)           | What lives where in `server/src`                                |

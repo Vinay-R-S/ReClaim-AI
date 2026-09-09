@@ -1021,6 +1021,7 @@ Run after every phase. Record pass or fail with the date, and note any regressio
 | 21    | `refactor/reclaim-221-ai-provider-interface`   | 2026-09-09 | 2026-09-09 | PASS | PASS |  | pending manual run | Section 9 in full. `utils/llm.ts` deleted; `platform/ai/` holds the `ChatProvider` port, six providers (one OpenAI-compatible adapter for Groq, Grok, OpenAI and a local Ollama-style runtime, plus Gemini and Anthropic through the official SDK) and a router doing capability routing, per-task policy, circuit breaking, jittered retry on retryable statuses only, mandatory per-attempt abort, response caching keyed on the whole request, a per-provider rate budget, a cost meter with daily and monthly ceilings, and validated structured output with one repair attempt. All four call sites now name a task rather than a provider. Groq's default model moved to `qwen/qwen3.6-27b` because the previous one was deprecated on 2026-06-17 and it is the migration path that still takes images, and Gemini's to `gemini-3.8-flash`; every model is env-overridable. A four-way code review of the branch found fourteen further defects, all fixed here and listed in section 18. New dependency: `@anthropic-ai/sdk`. 242 server tests pass. NEW OPERATIONAL ACTIONS: optional provider keys, and the spend ceilings if they are wanted. |
 
 | 22    | `feat/reclaim-222-embeddings-cpu`             | 2026-09-09 | 2026-09-09 | PASS | PASS |  | pending manual run | Section 8.3 in full. `platform/embeddings/` holds the two encoders behind the ports phase 21 declared: `bge-small-en-v1.5` for text at 384 dimensions and the CLIP ViT-B/32 vision tower for images at 512, both int8, both in-process on CPU through ONNX Runtime, with pinned threads, a content-hash cache shared through Redis, and lazy shared model loading. Vectors are stored as native Firestore vector values on the item document and stripped from every read path, so nothing ships them to a browser. `item.created` and `item.approved` now dispatch two jobs rather than one, which made `routeEvent` return a list. New dependency: `@huggingface/transformers` (and `onnxruntime-node` under it). New scripts: `warm-models` and `backfill:embeddings`. Verified against real weights: 384 and 512 dimensions, unit length, 8 to 12 ms per text single-threaded, and two descriptions of the same wallet scoring 0.865 against each other and 0.619 against a bicycle. A code review of the branch found twelve further defects, all fixed here and listed below. 284 server tests pass. NEW OPERATIONAL ACTIONS: run `npm run warm-models` in the image build, run the backfill once, and pin the model revisions before production. |
+| 23    | `feat/reclaim-223-vector-retrieval`           | 2026-09-09 | 2026-09-09 | PASS | PASS |  | pending manual run | Sections 8.4 and the filter and retrieve stages of 8.2. `platform/vector/` holds the `VectorIndex` port from ADR 0003 and its Firestore `findNearest` adapter; `services/matching/retrieval/` holds the filter stage, an in-process BM25 built per run, reciprocal rank fusion, and the service that combines them. The linear scan over every pending item of the opposite type is replaced by a filtered set narrowed by dense nearest neighbours fused with lexical hits. Behind `RETRIEVAL_MODE`, which defaults to `shadow`: the whole path runs and logs how far it agrees with the previous ordering, and changes nothing about which candidates are scored. Every failure falls back to that ordering. Vector indexes added to `firestore.indexes.json`. 67 new tests; 351 server tests pass. NEW OPERATIONAL ACTIONS: deploy `firestore.indexes.json` for the vector indexes, run the embedding backfill so the corpus has vectors, then read the shadow overlap numbers before setting `RETRIEVAL_MODE=on`. |
 ### 5.1 Outstanding operational actions
 
 Code-complete is not the same as done. These are carried by the user, not by a
@@ -1679,7 +1680,7 @@ Each phase is one branch cut from `develop`, same protocol as Track A. Track B a
 | 20    | `feat/reclaim-220-platform-jobs-outbox`       | Redis, job queue, worker entrypoint, outbox collection and drainer, idempotency keys, dead-letter queues, tracing across the boundary                        | 19               | [x]    |
 | 21    | `refactor/reclaim-221-ai-provider-interface`  | Section 9 in full: ports, registry, capability routing, breaker, quotas, cache, cost meter, structured output, two additional providers plus a local runtime | 20               | [x]    |
 | 22    | `feat/reclaim-222-embeddings-cpu`             | Section 8.3: ONNX text and image embedding on CPU, quantized, batched, cached, with a backfill job for existing items                                        | 21               | [x]    |
-| 23    | `feat/reclaim-223-vector-retrieval`           | Section 8.4 plus the filter and retrieve stages, hybrid dense and lexical with rank fusion, behind a feature flag in shadow mode                             | 22               | [ ]    |
+| 23    | `feat/reclaim-223-vector-retrieval`           | Section 8.4 plus the filter and retrieve stages, hybrid dense and lexical with rank fusion, behind a feature flag in shadow mode                             | 22               | [x]    |
 | 24    | `feat/reclaim-224-rerank-and-eval`            | Section 8.2 stage 2 and section 8.7: batched reranking, the labelled dataset, offline metrics in CI, shadow comparison against the current matcher           | 23               | [ ]    |
 | 25    | `feat/reclaim-225-adjudication-agent`         | Section 8.6: bounded tool-using agent, structured verdict, full trace persisted, admin-visible reasoning. Retires the LLM-per-candidate path                 | 24               | [ ]    |
 | 26    | `refactor/reclaim-226-handover-state-machine` | Section 10: event-sourced state machine, saga over the outbox, compensations, QR verification, two-party confirmation                                        | 20               | [ ]    |
@@ -2076,6 +2077,164 @@ twice and counted an item it could not embed as unchanged rather than skipped.
 And two comments claimed guarantees the code does not make: that the in-process
 queue driver honours an idempotency key, which it ignores, and that enqueue
 order is run order, which it is not once two queues are consumed concurrently.
+
+### Phase 23 - what was delivered
+
+Branch: `feat/reclaim-223-vector-retrieval`.
+
+Matching now chooses its candidates instead of taking whichever ones happened
+to share a word. Stages 0 and 1 of section 8.2 are real: the filter stage
+narrows to the items a pair could plausibly be drawn from, and a new retrieval
+stage ranks them with dense nearest neighbours and BM25 fused by rank.
+
+What it does not do, despite an earlier draft of this section saying so, is
+stop reading the corpus. The pipeline still loads the pending items of the
+opposite type once per run, because the lexical half needs a corpus to score
+against and giving it one without a full read means a separate lexical index,
+which ADR 0003 lists as unsolved. The cost is unchanged; the candidate
+selection is better. Cutting the read is a later decision and it is the one
+that needs the second store.
+
+`platform/vector/` holds the `VectorIndex` port ADR 0003 specified and the
+Firestore adapter behind it, using the `findNearest` support phase 22 verified.
+Nothing above the port knows which store is there, which is the point: at ten
+thousand items the whole index is fifteen megabytes and does not justify a
+second datastore, and at a hundred thousand it might, at which point the
+migration is one adapter plus a backfill.
+
+Both retrievers run because they fail in opposite directions. A dense vector
+handles "Apple phone" against "iPhone 13" and blurs a serial number into every
+other serial number; BM25 finds the serial number, the model string, or the
+name written inside a bag, and has nothing to say about a synonym.
+Lost-and-found text is short and full of proper nouns, which is exactly the
+shape where the lexical half still earns its place. The BM25 index is built per
+run over the filtered set rather than maintained: a few hundred short documents
+is about a millisecond, and it avoids a second store to keep in step with the
+items collection.
+
+They are fused by reciprocal rank rather than by adding scores. A cosine
+distance is bounded and roughly calibrated; a BM25 score is unbounded,
+corpus-relative and changes scale with the query, so normalising them onto a
+shared range means inventing a mapping and then defending it. Rank fusion uses
+only the order each retriever produced, so a candidate both of them rank highly
+beats one that either ranks first alone.
+
+Three things worth recording about the Firestore half.
+
+Only equality filters reach the query. Firestore serves a vector query from a
+composite index whose non-vector fields are equality-filtered, so `type` and
+`status` go in the query and the time window, the distance limit and the
+moderation rule are applied to the result; the query over-fetches four times
+the limit so that removing them does not empty the list. ADR 0003's claim that
+pre-filtering happens "in the same query" holds for equality and not for
+ranges, and the ADR now says so. It is still one round trip, which was the part
+that mattered.
+
+A vector hit is intersected with the filter stage, never trusted on its own.
+The query could enforce two of the five predicates, so a hit six months old or
+two hundred kilometres away is dropped before it can become a candidate. There
+is a test for exactly that, because it is the mistake this design invites.
+
+And the dense query carries a distance ceiling. A nearest-neighbour query
+returns the k nearest however far away they are, so a corpus containing nothing
+related would otherwise yield k confident-looking candidates.
+
+The subject's own vector is computed on demand when the item does not have one
+stored yet. A report and its matching run leave the same outbox event onto two
+queues consumed concurrently, so a new item usually reaches matching before it
+has been embedded. That is the ordering dependency phase 22 flagged. Chaining
+the jobs would fix the order and couple them, so an embedding that dead-lettered
+would take matching with it; embedding the subject's text here costs about ten
+milliseconds and is cached, which is cheaper than the coupling.
+
+Nothing is switched on. `RETRIEVAL_MODE` defaults to `shadow`, which runs the
+whole new path, logs how far its top candidates agree with the ones the
+previous ordering would have scored, and changes nothing about what is scored.
+There is a test asserting exactly that, because a retrieval stage that quietly
+altered the scored set while claiming to measure itself would make both the
+measurement and the rollout worthless. Every failure falls back to the previous
+ordering: a missing index, a failed query, an empty result. Retrieval is an
+optimisation over a linear scan that already works and must never be the reason
+a run produces nothing.
+
+The dense similarity is carried on each candidate but is not yet a scoring
+signal. Folding it into the score, and replacing the Clarifai concept-overlap
+heuristic with the image vector, is section 8.5 and a later phase.
+
+67 new tests across six files: the lexical index, rank fusion, the retrieval
+stage against a fake index, the Firestore adapter, the pipeline in each of the
+three modes, and the retrieval knobs in the config.
+
+### Phase 23 - what the review found and the phase then fixed
+
+Three reviews of the branch, and the two most serious findings were ones all
+three agreed on.
+
+Retrieval was reading the pending collection a second time. The pipeline
+already loads and filters it, and the retrieval stage then queried for it again
+and rebuilt a subset of the list it had just been handed. Every matching run
+paid double the Firestore reads, and in shadow mode the second read fed a
+result that was thrown away. The stage now takes the caller's candidates, dates
+already parsed, and owns no query of its own. That also made the "no longer
+reads the whole corpus" claim in this document false, which is corrected above.
+
+The distance bound was reasoned about in the wrong unit. Firestore's COSINE
+distance is `1 - cosine similarity`, and the bound of 0.8 was justified in the
+comment as "a cosine similarity of about 0.6" — which is what the old
+`similarityFromDistance` returned for it, on a different scale. The real cosine
+at distance 0.8 is 0.2, so the ceiling that existed to stop an unrelated corpus
+producing confident-looking neighbours admitted essentially everything. It is
+now 0.35, derived from the phase 22 measurements, and `similarityFromDistance`
+returns a real cosine similarity rather than a rescale of the [0,2] range.
+
+The rest, in the order they would have bitten.
+
+Retrieval could shrink the field instead of ordering it. The fallback to the
+unranked candidates fired only when *both* retrievers came up empty, so a BM25
+that matched two of forty candidates reduced the field to two and the other
+thirty-eight were never scored — reinstating the exact token-overlap gate this
+phase exists to remove. Whatever the retrievers do not rank now keeps the
+caller's order behind what they did.
+
+The query vector was built from different text than the corpus vectors. The
+subject was embedded from the lexical composition, space-joined with unsorted
+tags; every stored vector came from `composeItemText`, `. `-joined with sorted
+tags. So the query sat slightly off the manifold of the documents it was
+compared against, and its content-hash cache key could never match the one the
+embedding job wrote.
+
+The dense over-fetch was sized against the output limit rather than the
+candidate set. The query ranks the whole collection and the range limits are
+applied afterwards, so over a national corpus the nearest 200 vectors are
+dominated by items outside the time and distance window, the intersection comes
+back empty, and the dense half stops contributing exactly as the corpus grows.
+
+A hit with no distance read as a perfect match. `Number(undefined ?? 0)` is
+zero, which is the nearest possible neighbour; such a hit is now dropped.
+`upsert` and `deleteById` used `update`, which is not an upsert and throws on a
+document that is not there, so de-indexing an item you had just deleted failed;
+`upsert` also left `embeddingKey` describing text the vector no longer came
+from, which would have told the backfill the item was up to date forever. The
+missing-index error logged once per matching run rather than once per process,
+which on an undeployed index is an alert storm on a release that changed no
+behaviour. A hit carried the stored document including its vectors, bypassing
+the stripping the item repository does on every other read path. `VectorFilters`
+made both equality fields optional, so a caller could build a query no deployed
+index covers and get a silent empty result. The embedding dimension env vars
+allowed 4096 where Firestore's indexed ceiling is 2048. A zero weight in rank
+fusion added the list's ids at score zero instead of excluding them. And the
+"dropped candidates" log described the lexical path even when rank fusion had
+chosen the field.
+
+Two things about the tests. The shadow test injected a fake retrieval, so it
+could only prove the pipeline ignored the result — it would have passed with
+the double read, the inference, or the mode flag unwired. There is now one that
+runs the real retrieval stage and asserts `off` and `shadow` produce the same
+scored candidates, the same matches and the same best, and that the collection
+is read exactly once. And the Firestore adapter, the only file in the phase
+that touches Firestore, had no tests at all; it now has eighteen, covering the
+distance strip, both error paths, the missing-index latch and the upsert
+semantics.
 
 ## 19. Additional defects found during the architecture pass
 

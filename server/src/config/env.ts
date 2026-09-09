@@ -157,11 +157,13 @@ const rawSchema = z.object({
   EMBEDDINGS_ENABLED: booleanWithDefault(true),
   EMBEDDING_MODEL: withDefault(z.string().min(1).default('Xenova/bge-small-en-v1.5')),
   EMBEDDING_MODEL_REVISION: withDefault(z.string().min(1).default('main')),
-  EMBEDDING_DIMENSIONS: withDefault(z.coerce.number().int().positive().max(4096).default(384)),
+  // 2048 is Firestore's ceiling for an indexed vector field, and an index is
+  // what makes the vector searchable rather than merely stored.
+  EMBEDDING_DIMENSIONS: withDefault(z.coerce.number().int().positive().max(2048).default(384)),
   EMBEDDING_IMAGE_MODEL: withDefault(z.string().min(1).default('Xenova/clip-vit-base-patch32')),
   EMBEDDING_IMAGE_MODEL_REVISION: withDefault(z.string().min(1).default('main')),
   EMBEDDING_IMAGE_DIMENSIONS: withDefault(
-    z.coerce.number().int().positive().max(4096).default(512),
+    z.coerce.number().int().positive().max(2048).default(512),
   ),
   /** Where model files are cached. Outside node_modules, which a reinstall wipes. */
   MODEL_CACHE_DIR: withDefault(z.string().min(1).default('./.models')),
@@ -170,6 +172,15 @@ const rawSchema = z.object({
   EMBEDDING_THREADS: withDefault(z.coerce.number().int().positive().max(64).default(1)),
   /** True refuses the network, so a cold cache fails loudly instead of downloading. */
   EMBEDDINGS_OFFLINE: booleanWithDefault(false),
+
+  /**
+   * Hybrid retrieval (ADR 0003): off, measured against the current retrieval,
+   * or actually used. `shadow` is the default, so the phase ships measuring
+   * itself and changes no behaviour until somebody has read the numbers.
+   */
+  RETRIEVAL_MODE: withDefault(z.enum(['off', 'shadow', 'on']).default('shadow')),
+  /** How many candidates retrieval hands the scorers when the mode is `on`. */
+  RETRIEVAL_LIMIT: withDefault(z.coerce.number().int().positive().max(500).default(50)),
 
   YOLO_SERVICE_URL: withDefault(z.string().url().default('http://localhost:5000')),
   YOLO_SERVICE_TOKEN: optionalString,
@@ -262,6 +273,11 @@ export interface AppEnv {
     concurrency: number;
     outboxPollIntervalMs: number;
     outboxBatchSize: number;
+  };
+  matching: {
+    /** See RETRIEVAL_MODE. `shadow` measures without changing what is scored. */
+    retrievalMode: 'off' | 'shadow' | 'on';
+    retrievalLimit: number;
   };
   embeddings: {
     /** False turns the feature off entirely; nothing is computed and nothing is stored. */
@@ -496,6 +512,10 @@ export function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
       concurrency: raw.QUEUE_CONCURRENCY,
       outboxPollIntervalMs: raw.OUTBOX_POLL_INTERVAL_MS,
       outboxBatchSize: raw.OUTBOX_BATCH_SIZE,
+    }),
+    matching: Object.freeze({
+      retrievalMode: raw.RETRIEVAL_MODE,
+      retrievalLimit: raw.RETRIEVAL_LIMIT,
     }),
     embeddings: Object.freeze({
       enabled: raw.EMBEDDINGS_ENABLED,
