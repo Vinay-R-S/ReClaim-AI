@@ -122,7 +122,7 @@ export class OutboxDrainer {
     const trace = continueTrace(record.traceparent);
 
     return runWithTraceContext(trace, async () => {
-      const dispatch = routeEvent(
+      const dispatches = routeEvent(
         id,
         record.name as Parameters<typeof routeEvent>[1],
         record.payload,
@@ -130,20 +130,36 @@ export class OutboxDrainer {
 
       // Nothing consumes this event yet, which is a fact about the catalogue
       // rather than a failure. It is published so it stops being retried.
-      if (!dispatch) {
+      if (dispatches.length === 0) {
         await this.outbox.markPublished(id);
         log.debug('Outbox event has no consumer', { event: record.name, id });
         return true;
       }
 
       try {
-        await this.queue.enqueue(dispatch.name, dispatch.payload, {
-          idempotencyKey: dispatch.idempotencyKey,
-          traceparent: record.traceparent,
-        });
+        // Sequential, so the catalogue's order is the order they are queued.
+        // That is enqueue order and not run order: the queues are consumed
+        // concurrently, so a consumer that needs another job's output has to
+        // depend on it rather than assume this ordering.
+        //
+        // A partial failure leaves the row unpublished and the whole list is
+        // re-enqueued on the retry. Under Redis the idempotency key makes the
+        // ones that already landed a no-op; the in-process driver ignores the
+        // key and runs them again, which is safe only because both handlers
+        // are idempotent in themselves.
+        for (const dispatch of dispatches) {
+          await this.queue.enqueue(dispatch.name, dispatch.payload, {
+            idempotencyKey: dispatch.idempotencyKey,
+            traceparent: record.traceparent,
+          });
+        }
 
         await this.outbox.markPublished(id);
-        log.info('Outbox event published', { event: record.name, job: dispatch.name, id });
+        log.info('Outbox event published', {
+          event: record.name,
+          jobs: dispatches.map((dispatch) => dispatch.name),
+          id,
+        });
 
         return true;
       } catch (error) {

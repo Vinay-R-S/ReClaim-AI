@@ -62,6 +62,39 @@ const MIN_HANDOVER_SECRET_LENGTH = 32;
  */
 const DEVELOPMENT_HANDOVER_SECRET = 'reclaim-development-handover-code-secret';
 
+/**
+ * A flag, parsed the same way everywhere.
+ *
+ * `value !== 'false'` and `value === 'true'` are opposite halves of the same
+ * mistake: one turns `0`, `no` and `off` into true, the other turns `1`, `yes`
+ * and `on` into false. An operator who wrote either into an air-gapped
+ * deployment would get the setting they did not ask for and no complaint, so
+ * anything outside the accepted set is a startup error rather than a guess.
+ */
+const TRUE_VALUES = new Set(['true', '1', 'yes', 'on']);
+const FALSE_VALUES = new Set(['false', '0', 'no', 'off']);
+
+function booleanWithDefault(fallback: boolean) {
+  return z
+    .string()
+    .optional()
+    .transform((value, ctx) => {
+      if (value === undefined || value.trim() === '') return fallback;
+
+      const normalised = value.trim().toLowerCase();
+
+      if (TRUE_VALUES.has(normalised)) return true;
+      if (FALSE_VALUES.has(normalised)) return false;
+
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `expected one of true/false/1/0/yes/no/on/off, got "${value}"`,
+      });
+
+      return z.NEVER;
+    });
+}
+
 const rawSchema = z.object({
   NODE_ENV: lowercased(z.enum(['development', 'test', 'production']).default('development')),
   PORT: withDefault(z.coerce.number().int().positive().max(65535).default(3001)),
@@ -117,6 +150,26 @@ const rawSchema = z.object({
   QUEUE_CONCURRENCY: withDefault(z.coerce.number().int().positive().max(64).default(4)),
   OUTBOX_POLL_INTERVAL_MS: withDefault(z.coerce.number().int().min(200).max(60_000).default(2_000)),
   OUTBOX_BATCH_SIZE: withDefault(z.coerce.number().int().positive().max(200).default(20)),
+
+  // Embeddings run in this process on CPU (ADR 0004). Every value has a
+  // working default, so the feature needs no configuration to work and every
+  // knob exists for a deployment that has measured something.
+  EMBEDDINGS_ENABLED: booleanWithDefault(true),
+  EMBEDDING_MODEL: withDefault(z.string().min(1).default('Xenova/bge-small-en-v1.5')),
+  EMBEDDING_MODEL_REVISION: withDefault(z.string().min(1).default('main')),
+  EMBEDDING_DIMENSIONS: withDefault(z.coerce.number().int().positive().max(4096).default(384)),
+  EMBEDDING_IMAGE_MODEL: withDefault(z.string().min(1).default('Xenova/clip-vit-base-patch32')),
+  EMBEDDING_IMAGE_MODEL_REVISION: withDefault(z.string().min(1).default('main')),
+  EMBEDDING_IMAGE_DIMENSIONS: withDefault(
+    z.coerce.number().int().positive().max(4096).default(512),
+  ),
+  /** Where model files are cached. Outside node_modules, which a reinstall wipes. */
+  MODEL_CACHE_DIR: withDefault(z.string().min(1).default('./.models')),
+  EMBEDDING_BATCH_SIZE: withDefault(z.coerce.number().int().positive().max(256).default(16)),
+  /** Pinned rather than left at the core count. See platform/embeddings/runtime.ts. */
+  EMBEDDING_THREADS: withDefault(z.coerce.number().int().positive().max(64).default(1)),
+  /** True refuses the network, so a cold cache fails loudly instead of downloading. */
+  EMBEDDINGS_OFFLINE: booleanWithDefault(false),
 
   YOLO_SERVICE_URL: withDefault(z.string().url().default('http://localhost:5000')),
   YOLO_SERVICE_TOKEN: optionalString,
@@ -209,6 +262,21 @@ export interface AppEnv {
     concurrency: number;
     outboxPollIntervalMs: number;
     outboxBatchSize: number;
+  };
+  embeddings: {
+    /** False turns the feature off entirely; nothing is computed and nothing is stored. */
+    enabled: boolean;
+    textModel: string;
+    textModelRevision: string;
+    textDimensions: number;
+    imageModel: string;
+    imageModelRevision: string;
+    imageDimensions: number;
+    cacheDir: string;
+    batchSize: number;
+    /** Both the ONNX intra-op count and OpenMP's, pinned together. */
+    threads: number;
+    offline: boolean;
   };
   yolo: {
     serviceUrl: string;
@@ -428,6 +496,19 @@ export function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
       concurrency: raw.QUEUE_CONCURRENCY,
       outboxPollIntervalMs: raw.OUTBOX_POLL_INTERVAL_MS,
       outboxBatchSize: raw.OUTBOX_BATCH_SIZE,
+    }),
+    embeddings: Object.freeze({
+      enabled: raw.EMBEDDINGS_ENABLED,
+      textModel: raw.EMBEDDING_MODEL,
+      textModelRevision: raw.EMBEDDING_MODEL_REVISION,
+      textDimensions: raw.EMBEDDING_DIMENSIONS,
+      imageModel: raw.EMBEDDING_IMAGE_MODEL,
+      imageModelRevision: raw.EMBEDDING_IMAGE_MODEL_REVISION,
+      imageDimensions: raw.EMBEDDING_IMAGE_DIMENSIONS,
+      cacheDir: raw.MODEL_CACHE_DIR,
+      batchSize: raw.EMBEDDING_BATCH_SIZE,
+      threads: raw.EMBEDDING_THREADS,
+      offline: raw.EMBEDDINGS_OFFLINE,
     }),
     yolo: Object.freeze({
       serviceUrl: raw.YOLO_SERVICE_URL,

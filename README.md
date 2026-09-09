@@ -76,15 +76,16 @@ ReClaim-AI/
 
 ## Design documents
 
-| Document                                                           | What it answers                                                 |
-| ------------------------------------------------------------------ | --------------------------------------------------------------- |
-| [docs/architecture](docs/architecture/README.md)                   | How the system is put together, and which parts are built       |
-| [docs/architecture/jobs-and-outbox.md](docs/architecture/jobs-and-outbox.md) | Background work: the outbox, the queue, retries and tracing |
-| [docs/architecture/ai-providers.md](docs/architecture/ai-providers.md) | Model calls: providers, routing, caching, cost and schemas |
-| [docs/adr](docs/adr/README.md)                                     | Why each significant choice was made, and what would reverse it |
-| [docs/api](docs/api/README.md)                                     | The HTTP contract and the versioning policy                     |
-| [docs/server-source-structure.md](docs/server-source-structure.md) | What lives where in `server/src`                                |
-| [docs/client-source-structure.md](docs/client-source-structure.md) | What lives where in `client/src`                                |
+| Document                                                                     | What it answers                                                 |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| [docs/architecture](docs/architecture/README.md)                             | How the system is put together, and which parts are built       |
+| [docs/architecture/jobs-and-outbox.md](docs/architecture/jobs-and-outbox.md) | Background work: the outbox, the queue, retries and tracing     |
+| [docs/architecture/ai-providers.md](docs/architecture/ai-providers.md)       | Model calls: providers, routing, caching, cost and schemas      |
+| [docs/architecture/embeddings.md](docs/architecture/embeddings.md)           | Item vectors: CPU encoders, storage, caching and backfill       |
+| [docs/adr](docs/adr/README.md)                                               | Why each significant choice was made, and what would reverse it |
+| [docs/api](docs/api/README.md)                                               | The HTTP contract and the versioning policy                     |
+| [docs/server-source-structure.md](docs/server-source-structure.md)           | What lives where in `server/src`                                |
+| [docs/client-source-structure.md](docs/client-source-structure.md)           | What lives where in `client/src`                                |
 
 Every diagram marks what exists today against what is designed but not built,
 so nothing there can be read as a claim about the running system.

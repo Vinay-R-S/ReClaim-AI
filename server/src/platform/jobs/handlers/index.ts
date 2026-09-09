@@ -6,9 +6,11 @@
  * producer: a service that enqueues must not pull in every consumer.
  */
 
+import { embedItemHandler } from './embed-item.handler.js';
 import { matchItemHandler } from './match-item.handler.js';
 import type { JobHandlerMap } from '../queue.port.js';
 
 export const jobHandlers: JobHandlerMap = {
   'match.item': matchItemHandler,
+  'embed.item': embedItemHandler,
 };

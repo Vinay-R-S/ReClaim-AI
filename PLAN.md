@@ -1020,6 +1020,7 @@ Run after every phase. Record pass or fail with the date, and note any regressio
 | 20    | `feat/reclaim-220-platform-jobs-outbox`       | 2026-09-09 | 2026-09-09 | PASS | PASS |  | pending manual run | Track B platform layer. `server/src/platform/{jobs,outbox,idempotency,tracing}` with a `JobQueue` port and two drivers: BullMQ on Redis for production, in-process when `REDIS_URL` is unset. Item creation and approval now write their event in the same Firestore batch as the state change, a drainer leases and publishes it, and the worker (`npm run worker`, same artifact, second entrypoint) runs it. Three detached `runMatchingInBackground` calls are gone. `jobClaims` makes redelivery a no-op, `deadLetters` catches what gives up, and a W3C `traceparent` travels from the request through the outbox into the worker and onto every log line. New `docker-compose.yml` for local Redis, CI gains a Redis service, and `docs/architecture/jobs-and-outbox.md` documents the whole path. 165 server tests pass, 2 Redis integration tests skip without Docker. Code review found six issues, all fixed, three of them real: `enableOfflineQueue` was inverted so a Redis outage would hang a rematch request and a drain pass rather than failing them, the matching claim outlived the attempt that took it so every retry of a timed-out run skipped and reported success, and a stalled job exhausted its attempts without writing a dead letter. NEW OPERATIONAL ACTIONS: provision Redis, run the worker, add the `jobClaims` TTL policy, and deploy the new index and rules. |
 | 21    | `refactor/reclaim-221-ai-provider-interface`   | 2026-09-09 | 2026-09-09 | PASS | PASS |  | pending manual run | Section 9 in full. `utils/llm.ts` deleted; `platform/ai/` holds the `ChatProvider` port, six providers (one OpenAI-compatible adapter for Groq, Grok, OpenAI and a local Ollama-style runtime, plus Gemini and Anthropic through the official SDK) and a router doing capability routing, per-task policy, circuit breaking, jittered retry on retryable statuses only, mandatory per-attempt abort, response caching keyed on the whole request, a per-provider rate budget, a cost meter with daily and monthly ceilings, and validated structured output with one repair attempt. All four call sites now name a task rather than a provider. Groq's default model moved to `qwen/qwen3.6-27b` because the previous one was deprecated on 2026-06-17 and it is the migration path that still takes images, and Gemini's to `gemini-3.8-flash`; every model is env-overridable. A four-way code review of the branch found fourteen further defects, all fixed here and listed in section 18. New dependency: `@anthropic-ai/sdk`. 242 server tests pass. NEW OPERATIONAL ACTIONS: optional provider keys, and the spend ceilings if they are wanted. |
 
+| 22    | `feat/reclaim-222-embeddings-cpu`             | 2026-09-09 | 2026-09-09 | PASS | PASS |  | pending manual run | Section 8.3 in full. `platform/embeddings/` holds the two encoders behind the ports phase 21 declared: `bge-small-en-v1.5` for text at 384 dimensions and the CLIP ViT-B/32 vision tower for images at 512, both int8, both in-process on CPU through ONNX Runtime, with pinned threads, a content-hash cache shared through Redis, and lazy shared model loading. Vectors are stored as native Firestore vector values on the item document and stripped from every read path, so nothing ships them to a browser. `item.created` and `item.approved` now dispatch two jobs rather than one, which made `routeEvent` return a list. New dependency: `@huggingface/transformers` (and `onnxruntime-node` under it). New scripts: `warm-models` and `backfill:embeddings`. Verified against real weights: 384 and 512 dimensions, unit length, 8 to 12 ms per text single-threaded, and two descriptions of the same wallet scoring 0.865 against each other and 0.619 against a bicycle. A code review of the branch found twelve further defects, all fixed here and listed below. 284 server tests pass. NEW OPERATIONAL ACTIONS: run `npm run warm-models` in the image build, run the backfill once, and pin the model revisions before production. |
 ### 5.1 Outstanding operational actions
 
 Code-complete is not the same as done. These are carried by the user, not by a
@@ -1677,7 +1678,7 @@ Each phase is one branch cut from `develop`, same protocol as Track A. Track B a
 | 19    | `docs/reclaim-219-hld-lld-adr`                | Sections 7, 16, and 17 as real artifacts in `docs/`: C4 diagrams, sequences, state machines, ER model, OpenAPI skeleton, ADRs 001 to 012                     | Track A phase 14 | [x]    |
 | 20    | `feat/reclaim-220-platform-jobs-outbox`       | Redis, job queue, worker entrypoint, outbox collection and drainer, idempotency keys, dead-letter queues, tracing across the boundary                        | 19               | [x]    |
 | 21    | `refactor/reclaim-221-ai-provider-interface`  | Section 9 in full: ports, registry, capability routing, breaker, quotas, cache, cost meter, structured output, two additional providers plus a local runtime | 20               | [x]    |
-| 22    | `feat/reclaim-222-embeddings-cpu`             | Section 8.3: ONNX text and image embedding on CPU, quantized, batched, cached, with a backfill job for existing items                                        | 21               | [ ]    |
+| 22    | `feat/reclaim-222-embeddings-cpu`             | Section 8.3: ONNX text and image embedding on CPU, quantized, batched, cached, with a backfill job for existing items                                        | 21               | [x]    |
 | 23    | `feat/reclaim-223-vector-retrieval`           | Section 8.4 plus the filter and retrieve stages, hybrid dense and lexical with rank fusion, behind a feature flag in shadow mode                             | 22               | [ ]    |
 | 24    | `feat/reclaim-224-rerank-and-eval`            | Section 8.2 stage 2 and section 8.7: batched reranking, the labelled dataset, offline metrics in CI, shadow comparison against the current matcher           | 23               | [ ]    |
 | 25    | `feat/reclaim-225-adjudication-agent`         | Section 8.6: bounded tool-using agent, structured verdict, full trace persisted, admin-visible reasoning. Retires the LLM-per-candidate path                 | 24               | [ ]    |
@@ -1953,6 +1954,128 @@ Cost, secrets and contracts:
   is readable by any signed-in user, so which paid vendors this deployment
   holds keys for was public to the whole user base. The shared type is now the
   single declaration, and that field is admin only.
+
+### Phase 22 - what was delivered
+
+Branch: `feat/reclaim-222-embeddings-cpu`.
+
+The system now has vectors. `platform/embeddings/` implements the
+`EmbeddingProvider` and `ImageEmbedder` ports that phase 21 declared and left
+empty: a text encoder at 384 dimensions and the CLIP vision tower at 512, both
+int8, both running in this process on CPU. No key, no vendor, no per-item cost,
+and no item text or photo leaves the deployment, which is the right default for
+text describing someone's lost property.
+
+The text encoder is `bge-small-en-v1.5` rather than a MiniLM. Both are in the
+384-dimension class section 8.3 asks for, so they swap with a backfill and no
+schema change, and the stronger one costs about ten megabytes and a few
+milliseconds on text this short. The runtime is reached through
+`@huggingface/transformers`, the one dependency this phase adds, because what
+it supplies is not the ONNX session but the tokenizer and the CLIP
+preprocessing: resize, centre crop, rescale and a per-channel normalise whose
+constants come from the model repository. Every one of those is a place where a
+hand-written pipeline produces vectors that look reasonable and rank nothing
+correctly.
+
+Verified against the real weights rather than asserted: 384 and 512 dimensions,
+both unit length to four decimal places, 8 to 12 ms per text and about 38 ms
+per image single-threaded, and two descriptions of the same wallet scoring
+0.865 against each other and 0.619 against a bicycle. That last number is the
+signal phase 23 will rank on. It is a sanity check and not the evaluation:
+the labelled set that decides whether a model is good enough to keep is phase
+24, and ADR 0004 is explicit that nothing is adopted on reputation.
+
+Four decisions worth recording.
+
+Vectors live on the item document, as native Firestore vector values. The
+document, because a nearest-neighbour query has to filter by type, status and
+time in the same query it ranks by distance, and splitting them out would mean
+fetching a large candidate set and filtering it in application code. Native
+vector values, because that is the type `findNearest` indexes: plain arrays
+would have needed a second backfill before retrieval could use them. That is
+also the answer to ADR 0003's open question, which was blocked on whether the
+pinned `firebase-admin` exposes them at all. It does, at 12.7.0, and the ADR
+now says so.
+
+They never leave the server. Every read path in `item.repository.ts` spreads a
+document straight to a caller that serialises it to a browser, so a vector on
+the item document would have been kilobytes per item on every list response.
+The mapper strips them, and the one caller that wants them asks by name. The
+unused `embedding?: number[]` placeholder came off the shared `Item` type for
+the same reason: it is storage, not contract.
+
+An item is embedded once in its lifetime. `embeddingKey` is a hash of the
+model, its revision and the exact text, so a moderation flag flipping, a match
+score being written or a re-run of the backfill all cost nothing. The same hash
+keys a Redis cache shared by the API and every worker.
+
+And an event became a fact with two consumers rather than one. `item.created`
+and `item.approved` now dispatch both `embed.item` and `match.item`, which
+meant `routeEvent` returning a list instead of a single job. Each dispatch
+carries its own idempotency key, so a redelivery runs neither twice and a retry
+after a partial failure does not re-run what already landed. Embedding is
+behind the same moderation gate as matching, so nothing is spent on a report
+that is about to be rejected.
+
+The worker only ever has a Cloudinary URL, because raw bytes arrive in the
+create request and are dropped once uploaded, so fetching them back is an
+outbound request driven by a value read out of a document. That is the shape of
+defect SEC-23, so it is constrained rather than trusted: HTTPS only, a host
+allowlist, an image content type, a size cap enforced while reading, and a
+timeout. A URL that fails any of those is skipped rather than retried.
+
+Model weights are downloaded on first use into a gitignored cache rather than
+committed, because they are roughly 115 MB and every future swap would add more
+history forever. `npm run warm-models` prefetches them for a container build,
+and `EMBEDDINGS_OFFLINE=true` then refuses the network at runtime.
+`npm run backfill:embeddings` walks the items that existed before this phase
+and raised no event; it is a dry run by default, resumable, and re-runnable.
+
+53 new tests across four files, plus the outbox drainer's updated to cover an
+event dispatching two jobs as one publication.
+
+### Phase 22 - what the review found and the phase then fixed
+
+Twelve defects, in three groups.
+
+The one that mattered most was the image fetch. `fetch` follows redirects on
+its own and the host allowlist was applied only to the first URL, so a stored
+Cloudinary URL answering 302 to a link-local address would have been fetched
+and decoded: an allowlist that a redirect walks straight through is not one.
+Redirects are now followed by hand and every hop is checked. In the same file,
+the size cap was documented as enforced while reading and was not: the body was
+materialised with `arrayBuffer()` and measured afterwards, so a response with
+an absent or understated `content-length` had no bound at all. It is now read
+in chunks and abandoned the moment it passes the cap. Both have tests that fail
+against the previous code.
+
+Then two ways an item could be left with a vector that was wrong rather than
+missing. `embedItem` returned `unchanged` on a matching text hash before it
+ever looked at the image, so a photo that timed out on the first run could
+never be repaired: the approval re-run and the backfill both applied the same
+text-only test and both said the item was done. And `setEmbeddings` only ever
+wrote an image vector, never cleared one, so an item whose description was
+edited and whose photo was replaced with an unreadable one kept ranking on the
+picture it no longer had. The gate now includes work owed on the image half,
+reusing the text vector rather than recomputing it, and a missing image vector
+is a delete rather than a no-op.
+
+The rest were smaller but real. Both embedding flags parsed booleans by the two
+opposite halves of the same mistake, `value !== 'false'` and `value === 'true'`,
+so `EMBEDDINGS_OFFLINE=1` in an air-gapped deployment would have quietly left
+the network on; there is now one strict parser that refuses a value it cannot
+read. `setEmbeddings` went through `update`, which throws `NOT_FOUND`, so an
+owner deleting a report during the ten seconds the job spends fetching and
+embedding burned all three attempts and dead-lettered on a routine race; it is
+now a skip. The image cache was keyed on the URL rather than the bytes, which
+is safe only while every upload produces a fresh URL. The `EmbedItemReason`
+union carried `'edited'` and `'backfill'`, neither of which the catalogue can
+raise. Four embedding metadata fields were still being serialised to the
+browser alongside the vectors that were stripped. The backfill read every item
+twice and counted an item it could not embed as unchanged rather than skipped.
+And two comments claimed guarantees the code does not make: that the in-process
+queue driver honours an idempotency key, which it ignores, and that enqueue
+order is run order, which it is not once two queues are consumed concurrently.
 
 ## 19. Additional defects found during the architecture pass
 

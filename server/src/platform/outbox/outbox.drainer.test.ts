@@ -132,8 +132,9 @@ describe('drainOnce', () => {
   });
 
   /**
-   * The idempotency key names the event, not the item, so a second approval of
-   * the same item is a second run while a redelivery of one event is not.
+   * The idempotency key names the job and the event, not the item, so a second
+   * approval of the same item is a second run, a redelivery of one event is
+   * not, and the two jobs one event dispatches never collide with each other.
    */
   it('keys each event separately', async () => {
     const outbox = fakeOutbox([row(), row({ id: 'event-2' })]);
@@ -143,7 +144,46 @@ describe('drainOnce', () => {
 
     const keys = queue.enqueue.mock.calls.map((call) => call[2].idempotencyKey);
 
-    expect(keys).toEqual(['match.item:item-1:event-1', 'match.item:item-1:event-2']);
+    expect(keys).toEqual([
+      'embed.item:item-1:event-1',
+      'match.item:item-1:event-1',
+      'embed.item:item-1:event-2',
+      'match.item:item-1:event-2',
+    ]);
+  });
+
+  /**
+   * One fact, two consumers. An item becoming visible both needs a vector and
+   * starts a matching run, and neither knows the other exists. It is still one
+   * outbox row, published once.
+   */
+  it('dispatches every job an event interests, as one publication', async () => {
+    const rows = [row()];
+    const outbox = fakeOutbox(rows);
+    const queue = fakeQueue();
+
+    const summary = await new OutboxDrainer(queue, outbox, OPTIONS).drainOnce();
+
+    expect(queue.enqueue.mock.calls.map((call) => call[0])).toEqual(['embed.item', 'match.item']);
+    expect(queue.enqueue).toHaveBeenCalledWith(
+      'embed.item',
+      { itemId: 'item-1', reason: 'approved' },
+      expect.objectContaining({ idempotencyKey: 'embed.item:item-1:event-1' }),
+    );
+    expect(summary.published).toBe(1);
+    expect(rows[0].status).toBe('published');
+  });
+
+  /** A report awaiting review is not embedded either: it may be rejected. */
+  it('embeds nothing for an item that still needs review', async () => {
+    const outbox = fakeOutbox([
+      row({ name: 'item.created', payload: { itemId: 'item-1', moderation: 'pending' } }),
+    ]);
+    const queue = fakeQueue();
+
+    await new OutboxDrainer(queue, outbox, OPTIONS).drainOnce();
+
+    expect(queue.enqueue).not.toHaveBeenCalled();
   });
 
   it('leaves an event another drainer holds alone', async () => {

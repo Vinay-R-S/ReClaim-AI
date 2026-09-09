@@ -82,7 +82,6 @@ export interface Item<TTime = unknown> {
   /** Base64 or URLs carried on the document itself. */
   images?: string[];
   cloudinaryUrls?: string[];
-  embedding?: number[];
   matchScore?: number;
   /** Best score seen while matching when nothing crossed the threshold. */
   bestCandidateScore?: number;
