@@ -56,10 +56,21 @@ jobs:
       - name: Typecheck and build
         run: npm run build
 
+      # The eval is excluded here and run as its own step below. Actions stops
+      # at the first failing step, so leaving it in the suite meant a quality
+      # regression failed `Test` and the job ended before the step named for it
+      # ever ran: the separate step could only ever execute when everything had
+      # already passed.
       - name: Test
-        run: npm test -- --run
+        run: npm test -- --run --exclude '**/eval/**'
         env:
           REDIS_URL: redis://localhost:6379
+
+      # Retrieval only, and no Redis: the dense half needs model weights and
+      # the reranker needs a provider key, and a gate that runs only where a
+      # download succeeded or a secret exists is a gate nobody trusts.
+      - name: Matching eval
+        run: npx vitest run src/eval
 
   client:
     name: Client

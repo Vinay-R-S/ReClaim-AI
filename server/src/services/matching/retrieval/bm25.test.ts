@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { Bm25Index, tokenize } from './bm25.js';
+import { Bm25Index, isIdentifier, tokenize } from './bm25.js';
 
 const CORPUS = [
   { id: 'wallet', text: 'Black leather wallet with cards inside' },
@@ -22,9 +22,66 @@ function index() {
   return new Bm25Index(CORPUS);
 }
 
+describe('isIdentifier', () => {
+  it.each(['wh-ch720n', 'whch720n', '7xkq2m3', '356938035643809'])('recognises %s', (token) => {
+    expect(isIdentifier(token)).toBe(true);
+  });
+
+  it.each(['wallet', 'black', 'nike', 'a1', '13'])('does not claim %s is one', (token) => {
+    expect(isIdentifier(token)).toBe(false);
+  });
+
+  /**
+   * The false positives that matter, because an identifier is both weighted
+   * and promoted: a token wrongly called one hoists every candidate sharing it
+   * above the ranked order. "Contains a letter and a digit" matched exactly
+   * the words a phone report is full of, every one of them a specification
+   * shared by thousands of objects.
+   *
+   * What separates them is shape. A capacity or a resolution is one run of
+   * digits and one of letters; a real identifier interleaves them twice.
+   */
+  it.each(['128gb', '1080p', 'usb3', 'wd40', '5000mah', 'iphone13', '4k'])(
+    'does not treat the specification %s as an identifier',
+    (token) => {
+      expect(isIdentifier(token)).toBe(false);
+    },
+  );
+});
+
 describe('tokenize', () => {
   it('keeps digits joined to letters, so a model number stays one token', () => {
     expect(tokenize('iPhone 13 IMEI 356938035643809')).toContain('356938035643809');
+  });
+
+  /**
+   * The regression this exists for. Splitting on the hyphen destroyed the
+   * exact identifier in the one case lexical retrieval is supposed to win: the
+   * model number ranked second, behind a candidate that merely repeated the
+   * words "headphones" and "black".
+   */
+  it('keeps a hyphenated model number whole, as well as split', () => {
+    const tokens = tokenize('model WH-CH720N');
+
+    expect(tokens).toContain('wh-ch720n');
+    expect(tokens).toContain('whch720n');
+    expect(tokens).toContain('ch720n');
+  });
+
+  it('does not double ordinary hyphenated words', () => {
+    const tokens = tokenize('over-ear headphones');
+
+    expect(tokens).not.toContain('overear');
+    expect(tokens).toEqual(['over', 'ear', 'headphones']);
+  });
+
+  /**
+   * Term frequency is half of what BM25 is. An earlier version deduped across
+   * the whole text, which silently turned it into set overlap with the
+   * saturation and length normalisation switched off.
+   */
+  it('keeps repeated words repeated', () => {
+    expect(tokenize('black bag black shoes')).toEqual(['black', 'bag', 'black', 'shoes']);
   });
 
   it('drops single characters and the words every report uses', () => {
@@ -41,6 +98,25 @@ describe('Bm25Index', () => {
     const [top] = index().search('356938035643809', 5);
 
     expect(top.id).toBe('phone');
+  });
+
+  /**
+   * An identifier outweighs a pile of ordinary words. Two reports agreeing on
+   * a serial number describe one object; two agreeing on "black" and "phone"
+   * describe a category.
+   */
+  it('ranks a shared identifier above a candidate sharing more common words', () => {
+    const corpus = new Bm25Index([
+      {
+        id: 'common-words',
+        text: 'Black over-ear headphones found in the cafe, no case, good condition',
+      },
+      { id: 'identifier', text: 'Headphones handed in, WH-CH720N printed inside the headband' },
+    ]);
+
+    const hits = corpus.search('Black over-ear headphones model WH-CH720N lost in the cafe', 5);
+
+    expect(hits[0].id).toBe('identifier');
   });
 
   it('ranks the better lexical overlap first', () => {

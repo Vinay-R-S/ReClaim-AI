@@ -182,6 +182,16 @@ const rawSchema = z.object({
   /** How many candidates retrieval hands the scorers when the mode is `on`. */
   RETRIEVAL_LIMIT: withDefault(z.coerce.number().int().positive().max(500).default(50)),
 
+  /**
+   * Batched reranking (section 8.2 stage 2): off, measured against the
+   * per-pair scorer, or used. `shadow` costs one extra call per run against
+   * the N the per-pair scorer already makes, which is what makes measuring it
+   * on real traffic affordable.
+   */
+  RERANK_MODE: withDefault(z.enum(['off', 'shadow', 'on']).default('shadow')),
+  /** Candidates per rerank call. One huge prompt reasons worse, and fails bigger. */
+  RERANK_BATCH_SIZE: withDefault(z.coerce.number().int().positive().max(100).default(20)),
+
   YOLO_SERVICE_URL: withDefault(z.string().url().default('http://localhost:5000')),
   YOLO_SERVICE_TOKEN: optionalString,
 
@@ -278,6 +288,9 @@ export interface AppEnv {
     /** See RETRIEVAL_MODE. `shadow` measures without changing what is scored. */
     retrievalMode: 'off' | 'shadow' | 'on';
     retrievalLimit: number;
+    /** See RERANK_MODE. `shadow` measures without changing any score. */
+    rerankMode: 'off' | 'shadow' | 'on';
+    rerankBatchSize: number;
   };
   embeddings: {
     /** False turns the feature off entirely; nothing is computed and nothing is stored. */
@@ -516,6 +529,8 @@ export function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
     matching: Object.freeze({
       retrievalMode: raw.RETRIEVAL_MODE,
       retrievalLimit: raw.RETRIEVAL_LIMIT,
+      rerankMode: raw.RERANK_MODE,
+      rerankBatchSize: raw.RERANK_BATCH_SIZE,
     }),
     embeddings: Object.freeze({
       enabled: raw.EMBEDDINGS_ENABLED,
