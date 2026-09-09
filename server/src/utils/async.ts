@@ -172,3 +172,21 @@ export function singleFlight<T>(producer: () => Promise<T>): () => Promise<T> {
     return inFlight;
   };
 }
+
+/**
+ * Split a list into fixed-size batches, in order.
+ *
+ * A size of zero or less would loop forever rather than produce nothing, so it
+ * is treated as one batch of everything.
+ */
+export function chunk<T>(items: T[], size: number): T[][] {
+  if (size <= 0) return items.length > 0 ? [items] : [];
+
+  const batches: T[][] = [];
+
+  for (let start = 0; start < items.length; start += size) {
+    batches.push(items.slice(start, start + size));
+  }
+
+  return batches;
+}

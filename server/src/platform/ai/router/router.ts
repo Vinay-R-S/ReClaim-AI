@@ -47,6 +47,26 @@ export interface RouterResponse extends ChatResponse {
   cacheKey?: string;
 }
 
+/**
+ * What the circuit breaker trips on.
+ *
+ * The provider and the task, not the provider alone. Two tasks on one provider
+ * fail for different reasons and at different sizes: a rerank sends twenty
+ * candidates in one prompt against a 45-second ceiling, and a pair score sends
+ * two lines against fifteen. A rerank that times out says nothing about
+ * whether the provider can answer the small call, and a provider-wide key made
+ * it say everything — the batch's failures opened the breaker, and the
+ * per-pair scorer that was supposed to be the fallback ran straight into it
+ * and returned nothing for every candidate.
+ *
+ * The cost is that a provider which is genuinely down is discovered once per
+ * task rather than once. That is a handful of timeouts, and it buys a fallback
+ * that actually falls back.
+ */
+function breakerKey(providerId: string, task: AiTask): string {
+  return `${providerId}:${task}`;
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms).unref();
@@ -165,7 +185,7 @@ export class AiRouter {
         // Inside the loop: a failed attempt can open the circuit, and checking
         // once per provider would hand the remaining attempts to a provider
         // the breaker had already given up on.
-        if (!this.breaker.allows(provider.id)) {
+        if (!this.breaker.allows(breakerKey(provider.id, task))) {
           log.debug('Skipping provider, circuit is open', { provider: provider.id, task });
           break;
         }
@@ -299,7 +319,7 @@ export class AiRouter {
         );
       }
     } catch (error) {
-      this.breaker.releaseProbe(provider.id);
+      this.breaker.releaseProbe(breakerKey(provider.id, task));
 
       throw error;
     }
@@ -317,7 +337,7 @@ export class AiRouter {
       const costUsd = priceOf(response.usage, provider.cost);
       const key = cacheKey(provider.id, provider.model, request);
 
-      this.breaker.recordSuccess(provider.id);
+      this.breaker.recordSuccess(breakerKey(provider.id, task));
 
       log.info('AI call', {
         task,
@@ -343,7 +363,7 @@ export class AiRouter {
       // flight. The tokens are already committed either way.
       controller.abort();
 
-      this.breaker.recordFailure(provider.id);
+      this.breaker.recordFailure(breakerKey(provider.id, task));
 
       log.warn('AI call failed', {
         task,

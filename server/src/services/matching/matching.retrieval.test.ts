@@ -31,6 +31,24 @@ vi.mock('../../repositories/item.repository.js', () => ({
 }));
 
 const mode = vi.fn(() => 'shadow');
+const rerankMode = vi.fn(() => 'off');
+
+vi.mock('../../config/env.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../config/env.js')>();
+
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      matching: {
+        ...actual.env.matching,
+        get rerankMode() {
+          return rerankMode();
+        },
+      },
+    },
+  };
+});
 
 vi.mock('./retrieval/retrieval.service.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./retrieval/retrieval.service.js')>();
@@ -154,6 +172,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   listPendingByType.mockResolvedValue(CANDIDATES);
   mode.mockReturnValue('shadow');
+  rerankMode.mockReturnValue('off');
 });
 
 describe('RETRIEVAL_MODE', () => {
@@ -230,6 +249,141 @@ describe('RETRIEVAL_MODE', () => {
     await service.run(SUBJECT, 'Lost');
 
     expect(retrieval.retrieve.mock.calls[0][2]).toBe(50);
+  });
+});
+
+/**
+ * The rerank stage, in each mode.
+ *
+ * Same argument as retrieval: `shadow` must not change a single score, or
+ * the numbers it logs describe a system nobody is running.
+ */
+describe('RERANK_MODE', () => {
+  function reranker(scores: Record<string, number>) {
+    return {
+      rerank: vi.fn(async () => ({
+        scores: new Map(
+          Object.entries(scores).map(([id, score]) => [
+            id,
+            { id, score, verdict: 'likely' as const },
+          ]),
+        ),
+        model: 'test-model',
+        requested: Object.keys(scores).length,
+        ms: 5,
+      })),
+    };
+  }
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  function pipeline(batch: Record<string, number>, perPair = 40) {
+    const semantic = { score: vi.fn(async () => perPair) };
+    const rerank = reranker(batch);
+
+    return {
+      service: new MatchingService({
+        semantic: semantic as any,
+        visual: { isConfigured: () => false, score: vi.fn(async () => null) } as any,
+        reranker: rerank as any,
+      }),
+      semantic,
+      rerank,
+    };
+  }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  it('does not call the reranker at all when it is off', async () => {
+    const { service, rerank, semantic } = pipeline({ 'lexical-first': 95 });
+
+    await service.run(SUBJECT, 'Lost');
+
+    expect(rerank.rerank).not.toHaveBeenCalled();
+    expect(semantic.score).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * Shadow costs one extra call, not N extra: the batch runs once and every
+   * candidate still gets the per-pair call whose score actually counts.
+   */
+  it('runs the reranker in shadow but scores from the per-pair scorer', async () => {
+    rerankMode.mockReturnValue('shadow');
+
+    const { service, rerank, semantic } = pipeline({ 'lexical-first': 95, 'dense-first': 95 });
+    const result = await service.run(SUBJECT, 'Lost');
+
+    expect(rerank.rerank).toHaveBeenCalledTimes(1);
+    expect(semantic.score).toHaveBeenCalledTimes(2);
+
+    // The per-pair scorer said 40, the batch said 95. The score is the 40.
+    const semanticComponent = result.best!.breakdown.semantic;
+
+    expect(Math.round((semanticComponent.score / semanticComponent.weight) * 100)).toBe(40);
+  });
+
+  it('produces the same scores in shadow as with the reranker off', async () => {
+    rerankMode.mockReturnValue('off');
+    const off = await pipeline({ 'lexical-first': 95 }).service.run(SUBJECT, 'Lost');
+
+    rerankMode.mockReturnValue('shadow');
+    const shadow = await pipeline({ 'lexical-first': 95 }).service.run(SUBJECT, 'Lost');
+
+    expect(shadow.matches.map((entry) => entry.score)).toEqual(
+      off.matches.map((entry) => entry.score),
+    );
+    expect(shadow.best?.score).toBe(off.best?.score);
+  });
+
+  /** The saving: the batch answers, so the per-pair call is not made at all. */
+  it('replaces the per-pair calls entirely when it is on', async () => {
+    rerankMode.mockReturnValue('on');
+
+    const { service, semantic } = pipeline({ 'lexical-first': 95, 'dense-first': 95 });
+    const result = await service.run(SUBJECT, 'Lost');
+
+    expect(semantic.score).not.toHaveBeenCalled();
+
+    // The weighted component, not a round trip back to 0-100: the component is
+    // an integer share of a weight of 50, so it carries two points of
+    // resolution and 95 stores as 48 rather than as itself.
+    const semanticComponent = result.best!.breakdown.semantic;
+
+    expect(semanticComponent.score).toBe(Math.round((95 / 100) * semanticComponent.weight));
+  });
+
+  /** A candidate the batch did not answer for still gets its per-pair call. */
+  it('falls back per candidate for anything the batch skipped', async () => {
+    rerankMode.mockReturnValue('on');
+
+    const { service, semantic } = pipeline({ 'lexical-first': 95 });
+
+    await service.run(SUBJECT, 'Lost');
+
+    expect(semantic.score).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the per-pair scorer when the reranker throws', async () => {
+    rerankMode.mockReturnValue('on');
+
+    const { service, rerank, semantic } = pipeline({});
+
+    rerank.rerank.mockRejectedValue(new Error('provider down'));
+
+    const result = await service.run(SUBJECT, 'Lost');
+
+    expect(semantic.score).toHaveBeenCalledTimes(2);
+    expect(result.evaluated).toBe(2);
+  });
+
+  it('falls back when the reranker answers nothing', async () => {
+    rerankMode.mockReturnValue('on');
+
+    const { service, rerank, semantic } = pipeline({});
+
+    rerank.rerank.mockResolvedValue(null);
+
+    await service.run(SUBJECT, 'Lost');
+
+    expect(semantic.score).toHaveBeenCalledTimes(2);
   });
 });
 

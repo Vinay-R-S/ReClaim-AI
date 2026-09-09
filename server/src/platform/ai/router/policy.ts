@@ -23,6 +23,7 @@ export const AI_TASKS = [
   'item.analyze',
   'item.enhance',
   'match.semantic',
+  'match.rerank',
   'cctv.describe',
   'cctv.verify',
 ] as const;
@@ -96,6 +97,25 @@ export const DEFAULT_POLICIES: Record<AiTask, TaskPolicy> = {
     // backstop around the same call was 40s for a single provider.
     deadlineMs: 90_000,
     cacheTtlSeconds: 3_600,
+    attempts: 2,
+  },
+  /**
+   * One call for a whole batch, so it is allowed to be slower and larger than
+   * the per-pair scorer it replaces and still cost less overall.
+   *
+   * Not cached. The key would be the whole batch, and a batch is a set of
+   * candidates for one subject at one moment: the same batch essentially never
+   * recurs, so a cache would store entries nothing ever reads. The per-pair
+   * task keeps its cache because a pair genuinely does recur.
+   */
+  'match.rerank': {
+    primary: 'groq',
+    fallbacks: [],
+    temperature: 0.1,
+    maxTokens: 4096,
+    timeoutMs: 45_000,
+    deadlineMs: 120_000,
+    cacheTtlSeconds: 0,
     attempts: 2,
   },
   'cctv.describe': {

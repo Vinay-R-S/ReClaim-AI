@@ -180,6 +180,74 @@ describe('the candidate set', () => {
   });
 });
 
+describe('identifier priority', () => {
+  /**
+   * A serial or model number shared by two reports is near-conclusive, and it
+   * is exactly the signal the dense retriever blurs: measured on the labelled
+   * set, promoting an exact identifier match ahead of the fused order takes
+   * hybrid recall@1 from 0.778 to 0.889.
+   */
+  it('puts a candidate sharing an identifier first, over the fused order', async () => {
+    const candidates = [
+      item('wordy', {
+        name: 'Black headphones',
+        description: 'Over-ear black headphones found in the cafe, no case',
+      }),
+      item('exact', {
+        name: 'Headphones',
+        description: 'Handed in, WH-CH720N printed inside the headband',
+      }),
+    ];
+
+    const { service } = serviceWith({
+      // The dense half disagrees, which is the case this rule is for.
+      hits: [{ id: 'wordy', distance: 0.1 }],
+    });
+
+    const result = await service.retrieve(
+      { ...SUBJECT, name: 'Headphones', description: 'Model WH-CH720N, lost in the cafe' },
+      'Lost',
+      10,
+      eligible(candidates),
+    );
+
+    expect(result.candidates[0].item.id).toBe('exact');
+  });
+
+  it('changes nothing when the subject carries no identifier', async () => {
+    const candidates = [item('a'), item('b')];
+    const { service } = serviceWith({ hits: [{ id: 'b', distance: 0.1 }] });
+
+    const result = await service.retrieve(
+      { ...SUBJECT, name: 'Wallet', description: 'Black leather wallet' },
+      'Lost',
+      10,
+      eligible(candidates),
+    );
+
+    expect(result.candidates[0].item.id).toBe('b');
+  });
+
+  it('does not promote a candidate carrying a different identifier', async () => {
+    const candidates = [
+      item('other-serial', { description: 'Laptop handed in, service tag 9ZZZZZZ' }),
+      item('plain', { description: 'Grey laptop handed in' }),
+    ];
+
+    const { service } = serviceWith({ enabled: false });
+
+    const result = await service.retrieve(
+      { ...SUBJECT, name: 'Laptop', description: 'Service tag 7XKQ2M3' },
+      'Lost',
+      10,
+      eligible(candidates),
+    );
+
+    expect(result.candidates.map((entry) => entry.item.id)).toContain('plain');
+    expect(result.candidates).toHaveLength(2);
+  });
+});
+
 describe('the dense half', () => {
   /**
    * Firestore could only pre-filter on equality, so a vector hit still has to

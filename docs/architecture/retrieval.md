@@ -49,6 +49,29 @@ flowchart LR
     rrf --> score
 ```
 
+## Identifiers outrank everything
+
+A serial number, a model number, an IMEI, a registration, a name written inside
+a bag. Two reports carrying the same one describe the same object, and no
+amount of agreement about "black" and "backpack" is comparable evidence.
+
+Three things follow, and all three were measured rather than assumed:
+
+- The tokeniser keeps a hyphenated identifier whole as well as split.
+  `WH-CH720N` used to become `wh` and `ch720n`, which destroyed the exact term
+  in the one case lexical retrieval exists to win.
+- BM25 weights an identifier term three times an ordinary one. IDF already
+  rewards a rare term, but not enough to beat a candidate sharing half a dozen
+  common words.
+- A candidate sharing an identifier with the subject is promoted ahead of the
+  fused order. This matters most against the dense half, which blurs one
+  identifier into every other and can bury a candidate lexical ranked first.
+
+Together they took lexical recall@1 from 0.556 to 0.667 and hybrid from 0.778
+to 0.889 on the labelled set. The prompts that write item descriptions ask
+explicitly for any identifier, in the description and as its own tag, which is
+what makes the signal available in the first place.
+
 ## Why both retrievers
 
 They fail in opposite directions, so section 8.2 fuses them rather than

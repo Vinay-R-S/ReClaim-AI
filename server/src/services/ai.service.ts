@@ -15,6 +15,7 @@ import {
   StructuredOutputError,
 } from '../platform/ai/index.js';
 import { AppError } from '../middleware/errorHandler.middleware.js';
+import { CATEGORIES, COLOURS, DESCRIPTION_RULES } from './vocabulary.js';
 import { createLogger } from '../utils/logger.js';
 import type { AnalyzeImageBody, EnhanceDescriptionBody } from '../schemas/index.js';
 
@@ -45,8 +46,12 @@ const ITEM_ANALYSIS = defineStructured({
       name: { type: 'string' },
       description: { type: 'string' },
       tags: { type: 'array', items: { type: 'string' } },
-      color: { type: 'string' },
-      category: { type: 'string' },
+      // Enumerated here as well as in the prompt, so a provider that
+      // constrains output enforces the vocabulary rather than asking for it.
+      // The empty string is allowed because "not stated" is a real answer and
+      // a guessed colour is worse than a missing one.
+      color: { type: 'string', enum: ['', ...COLOURS] },
+      category: { type: 'string', enum: [...CATEGORIES] },
     },
   },
 });
@@ -68,23 +73,38 @@ const EMPTY_ANALYSIS: ItemAnalysis = {
   category: 'Other',
 };
 
-const ANALYSIS_PROMPT = `Analyze this image (or these images) of a lost/found item and provide:
-1. A proper, descriptive name for the item
-2. A detailed description (2-3 sentences) - if multiple images, synthesize details from all of them
-3. Tags/attributes as an array - include features visible across all images
-4. The primary color of the item (a single word like "Black", "Silver", "Red")
-5. The most appropriate category (e.g., "Electronics", "Personal Accessories", "Documents", "Clothing", "Bags", "Keys", "Pets", "Other")
-
-If multiple images are provided, analyze ALL of them together to create a comprehensive description.
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "name": "Item Name",
-  "description": "Detailed description here.",
-  "tags": ["tag1", "tag2"],
-  "color": "ColorName",
-  "category": "CategoryName"
-}`;
+/**
+ * The image-analysis prompt.
+ *
+ * What it is really for is not describing the photograph; it is producing the
+ * fields the matching pipeline will later compare against somebody else's
+ * description of the same object, written from memory and in different words.
+ * So it asks for what survives that translation: an identifier, a brand, a
+ * model, a mark you could check — and for a colour and a category from closed
+ * lists, because a free-choice "Dark" and a free-choice "Black" describe one
+ * wallet and match on nothing.
+ *
+ * It does not ask for JSON. The router constrains the reply against a schema
+ * and validates it, so a hand-written format block would be a second, weaker
+ * copy of the contract that can disagree with the first.
+ */
+const ANALYSIS_PROMPT = [
+  'You are cataloguing an object for a lost-property office.',
+  '',
+  'Describe the object in the image well enough that the person who lost it,',
+  'writing from memory and without seeing your text, could be matched to it.',
+  '',
+  DESCRIPTION_RULES,
+  '',
+  'Fields:',
+  '- name: what the object is, specific but short. "Sony WH-CH720N headphones",',
+  '  not "a pair of headphones" and not "Black Sony over-ear wireless',
+  '  headphones in good condition".',
+  '- description: two or three sentences. Lead with the object type and any',
+  '  identifier, then brand and model, then distinguishing marks, contents or',
+  '  damage. Say what is visible; do not speculate about how it was lost.',
+  '- tags, color, category: as the rules above.',
+].join('\n');
 
 export class AiService {
   isAvailable(): boolean {
@@ -105,7 +125,13 @@ export class AiService {
     const { images } = body;
     const prompt =
       images.length > 1
-        ? `${ANALYSIS_PROMPT}\n\nYou are analyzing ${images.length} images of the SAME item from different angles. Synthesize information from ALL images.`
+        ? [
+            ANALYSIS_PROMPT,
+            '',
+            `These ${images.length} images are the same object from different angles.`,
+            'Describe it once, using every angle: a serial number or a mark visible',
+            'in only one of them still belongs in the description.',
+          ].join('\n')
         : ANALYSIS_PROMPT;
 
     try {
@@ -158,26 +184,32 @@ export class AiService {
 
     if (!this.isAvailable()) return original;
 
-    const prompt = `You are helping a lost and found system. A user has reported a lost item with the following details:
-
-Name: ${body.name}
-Description: ${body.description || 'None provided'}
-
-Please:
-1. Enhance the item name
-2. Improve the description
-3. Generate relevant tags
-4. Identify the primary color
-5. Identify the best category
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "name": "Enhanced Item Name",
-  "description": "Enhanced detailed description here.",
-  "tags": ["tag1", "tag2"],
-  "color": "ColorName",
-  "category": "CategoryName"
-}`;
+    // Structuring, not enhancing. The old prompt said "enhance the item name"
+    // and "improve the description", which invites a model to embellish a
+    // report somebody wrote from memory: the invented detail then becomes
+    // evidence in a comparison, and a specific that was never true is worse
+    // than a vague one that was.
+    const prompt = [
+      'Somebody has reported a lost object. Reorganise what they wrote into the',
+      'fields below so it can be compared against found-property reports.',
+      '',
+      'You are extracting and tidying, not improving. Every fact in your answer',
+      'must be present in their text. Do not add a brand, a material, a size or',
+      'a condition they did not mention, however likely it seems.',
+      '',
+      DESCRIPTION_RULES,
+      '',
+      'What they wrote:',
+      `  name: ${body.name}`,
+      `  description: ${body.description || '(nothing)'}`,
+      '',
+      'Fields:',
+      '- name: their object, said plainly. Keep any brand or model they gave.',
+      '- description: their details, ordered with identifier and brand first.',
+      '  If they wrote little, your description is short. Do not pad it.',
+      '- tags, color, category: as the rules above. Leave colour empty if they',
+      '  did not say what colour it was.',
+    ].join('\n');
 
     try {
       const { value } = await aiRouter.chatStructured(

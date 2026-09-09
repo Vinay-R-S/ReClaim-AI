@@ -22,7 +22,8 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "warm-models": "tsx scripts/warm-models.ts",
-    "backfill:embeddings": "tsx scripts/backfill-embeddings.ts"
+    "backfill:embeddings": "tsx scripts/backfill-embeddings.ts",
+    "eval": "tsx scripts/eval.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

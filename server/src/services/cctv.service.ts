@@ -4,6 +4,7 @@
  */
 
 import { aiRouter } from '../platform/ai/index.js';
+import { DESCRIPTION_RULES } from './vocabulary.js';
 import { createLogger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import type { CctvAnalyzeBody, CctvDescribeBody, CctvDetectBody } from '../schemas/index.js';
@@ -111,14 +112,26 @@ export class CctvService {
     };
 
     const imageData = body.image.includes(',') ? body.image.split(',')[1] : body.image;
-    const prompt = `Analyze this found item image (detected as "${detectedClass || 'unknown'}"). Respond in JSON:
-{
-"name": "Descriptive name",
-"description": "Detailed description",
-"category": "Electronics/Bags/Clothing/Accessories/Documents/Keys/Wallet/Sports/Books/Other",
-"tags": ["tag1", "tag2"],
-"color": "Primary color"
-}`;
+    // The same rules the report flow uses. An object described here is filed
+    // as a found item and compared against lost reports written by people, so
+    // it has to be described in the same words those people are asked for.
+    const prompt = [
+      'This is a still from a security camera. An object detector has flagged',
+      `it as "${detectedClass || 'an object'}", which may be wrong.`,
+      '',
+      'Describe the object well enough that the person who lost it, writing',
+      'from memory, could be matched to it.',
+      '',
+      DESCRIPTION_RULES,
+      '',
+      'A camera still is worse evidence than a photograph: it is lower',
+      'resolution, often at an angle, and often partly hidden. Describe only',
+      "what you can actually make out. If the detector's label disagrees with",
+      'what you see, describe what you see. If you cannot tell what the object',
+      'is, say so in the name rather than guessing a category.',
+      '',
+      'Respond as JSON with keys: name, description, category, tags, color.',
+    ].join('\n');
 
     let content = '';
 
@@ -128,7 +141,11 @@ export class CctvService {
       // provider changed matching but left CCTV where it was.
       const result = await aiRouter.chat('cctv.describe', {
         messages: [
-          { role: 'system', content: 'Analyze found item images. Respond with valid JSON.' },
+          {
+            role: 'system',
+            content:
+              'You catalogue objects seen on security cameras for a lost-property office. You answer with a single JSON object and no other text.',
+          },
           { role: 'user', content: prompt },
         ],
         images: [{ base64: imageData, mimeType: 'image/jpeg' }],
@@ -171,25 +188,44 @@ export class CctvService {
       };
     }
 
-    const prompt = `You are an AI assistant helping to verify if a detected object matches a lost item report.
-
-Lost Item Details:
-- Name: ${body.itemName || 'Unknown'}
-- Description: ${body.itemDescription || 'No description provided'}
-- Category: ${body.targetClass || 'Unknown'}
-
-Detection Results:
-- Object Type Detected: ${yoloResult.targetClass}
-- Number of Keyframes: ${yoloResult.keyframes.length}
-- Average Confidence: ${yoloResult.stats?.averageConfidence}%
-- Max Confidence: ${yoloResult.stats?.maxConfidence}%
-
-Respond in JSON format:
-{
-"matchConfidence": number,
-"explanation": "string",
-"recommendations": ["string", "string"]
-}`;
+    // What this can and cannot conclude is the whole point of the wording. The
+    // detector reports that an object of some category appeared on camera; it
+    // does not compare that object to the one in the report. So the honest
+    // ceiling here is "consistent with", and a prompt that invites a
+    // confidence score without saying so gets a number that reads as
+    // identification (PLAN.md section 21.2).
+    const prompt = [
+      'A lost-property report has been checked against security-camera footage.',
+      '',
+      'The report:',
+      `  name: ${body.itemName || '(not given)'}`,
+      `  description: ${body.itemDescription || '(not given)'}`,
+      `  category searched for: ${body.targetClass || '(not given)'}`,
+      '',
+      'What the detector found:',
+      `  object type detected: ${yoloResult.targetClass}`,
+      `  frames containing it: ${yoloResult.keyframes.length}`,
+      `  average detector confidence: ${yoloResult.stats?.averageConfidence}%`,
+      `  highest detector confidence: ${yoloResult.stats?.maxConfidence}%`,
+      '',
+      "Read those percentages as the detector's certainty that an object of",
+      'that category is present. They say nothing about whether it is the',
+      'reported object: the detector cannot tell one backpack from another.',
+      '',
+      'So matchConfidence is how consistent the sighting is with the report,',
+      'not how likely it is to be the same object:',
+      '  70-100  the detected category is what was lost and the footage is clear',
+      '  40-69   the category fits but the detection is weak or the report is',
+      '          too vague to say more',
+      '  0-39    the detected category is not what was reported, or nothing',
+      '          useful was detected',
+      '',
+      'Never claim the object has been identified. An admin reviews the frames;',
+      'your job is to tell them whether it is worth their time and what to look',
+      'for. Recommendations are concrete next steps, two or three of them.',
+      '',
+      'Respond as JSON with keys: matchConfidence, explanation, recommendations.',
+    ].join('\n');
 
     try {
       const { content } = await aiRouter.chat('cctv.verify', {

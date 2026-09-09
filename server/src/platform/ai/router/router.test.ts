@@ -303,15 +303,40 @@ describe('circuit breaker', () => {
     const groq = provider('groq');
     const { router } = routerWith([groq], { breaker, limiter });
 
-    breaker.recordFailure('groq');
-    expect(breaker.state('groq')).toBe('half-open');
+    breaker.recordFailure('groq:cctv.verify');
+    expect(breaker.state('groq:cctv.verify')).toBe('half-open');
 
     await expect(
       router.chat('cctv.verify', { messages: [{ role: 'user', content: 'hi' }] }),
     ).rejects.toThrow(/rate budget/);
 
     // The probe was handed back, so the next caller can still take one.
-    expect(breaker.allows('groq')).toBe(true);
+    expect(breaker.allows('groq:cctv.verify')).toBe(true);
+  });
+
+  /**
+   * The breaker is keyed on the provider and the task, not the provider alone.
+   *
+   * Two tasks on one provider fail for different reasons and at different
+   * sizes: a batched rerank sends twenty candidates against a 45-second
+   * ceiling, a pair score sends two lines against fifteen. Keyed provider-wide,
+   * the batch's timeouts opened the circuit and the per-pair scorer that was
+   * meant to be the fallback ran straight into it and returned nothing for
+   * every candidate, which the matching pipeline turns into no matches at all.
+   */
+  it("does not let one task's failures open the circuit for another", async () => {
+    const breaker = new CircuitBreaker({ threshold: 1, cooldownMs: 60_000 });
+    const groq = provider('groq');
+    const { router } = routerWith([groq], { breaker });
+
+    breaker.recordFailure('groq:match.rerank');
+
+    const response = await router.chat('match.semantic', {
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(response.providerId).toBe('groq');
+    expect(groq.chat).toHaveBeenCalledTimes(1);
   });
 
   it('skips a provider whose circuit is open instead of waiting on it', async () => {
@@ -320,7 +345,7 @@ describe('circuit breaker', () => {
     const gemini = provider('gemini');
     const { router } = routerWith([groq, gemini], { breaker });
 
-    breaker.recordFailure('groq');
+    breaker.recordFailure('groq:match.semantic');
 
     const response = await router.chat('match.semantic', {
       messages: [{ role: 'user', content: 'hi' }],
@@ -339,7 +364,7 @@ describe('circuit breaker', () => {
 
     await router.chat('match.semantic', { messages: [{ role: 'user', content: 'hi' }] });
 
-    expect(breaker.state('groq')).toBe('open');
+    expect(breaker.state('groq:match.semantic')).toBe('open');
   });
 });
 
