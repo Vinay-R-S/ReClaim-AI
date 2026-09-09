@@ -45,7 +45,9 @@ const SAFE_KEYS = new Set(['statuscode', 'errorcode', 'httpcode', 'countrycode',
 
 const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const BEARER_PATTERN = /\b(bearer\s+)[A-Za-z0-9._~+/=-]{8,}/gi;
-const API_KEY_PATTERN = /\b(?:gsk|sk|pk|xai|AIza|re)[-_][A-Za-z0-9_-]{12,}\b/g;
+const API_KEY_PATTERN = /\b(?:gsk|sk|pk|xai|re)[-_][A-Za-z0-9_-]{12,}\b/g;
+/** Google keys carry no separator after the prefix, so they need their own. */
+const GOOGLE_KEY_PATTERN = /\bAIza[A-Za-z0-9_-]{20,}\b/g;
 
 function isPlainRecord(value: unknown): value is LogMeta {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -59,7 +61,8 @@ function scrubText(value: string): string {
   return value
     .replace(EMAIL_PATTERN, REDACTED)
     .replace(BEARER_PATTERN, `$1${REDACTED}`)
-    .replace(API_KEY_PATTERN, REDACTED);
+    .replace(API_KEY_PATTERN, REDACTED)
+    .replace(GOOGLE_KEY_PATTERN, REDACTED);
 }
 
 function redactError(error: Error): LogMeta {

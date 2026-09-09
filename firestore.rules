@@ -116,6 +116,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Model spend per day and per month. Written by the server only, and not
+    // read from the browser: the admin screen that will show it goes through
+    // the API like every other admin read.
+    match /aiUsage/{periodId} {
+      allow read, write: if false;
+    }
+
     // Anything not named above is server-only.
     match /{document=**} {
       allow read, write: if false;

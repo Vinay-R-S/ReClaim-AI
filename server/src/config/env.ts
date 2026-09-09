@@ -80,6 +80,25 @@ const rawSchema = z.object({
   GROQ_API_KEY: optionalString,
   GEMINI_API_KEY: optionalString,
   GROK_API_KEY: optionalString,
+  OPENAI_API_KEY: optionalString,
+  ANTHROPIC_API_KEY: optionalString,
+
+  // Model identifiers move faster than deployments do, so each is overridable
+  // without a release. The defaults live in the provider registry.
+  GROQ_MODEL: optionalString,
+  GEMINI_MODEL: optionalString,
+  GROK_MODEL: optionalString,
+  OPENAI_MODEL: optionalString,
+  ANTHROPIC_MODEL: optionalString,
+
+  /** An OpenAI-compatible endpoint on this machine, such as Ollama. */
+  LOCAL_LLM_URL: optionalString,
+  LOCAL_LLM_MODEL: optionalString,
+
+  // Zero means no ceiling, which is the behaviour before this phase.
+  AI_DAILY_BUDGET_USD: withDefault(z.coerce.number().min(0).default(0)),
+  AI_MONTHLY_BUDGET_USD: withDefault(z.coerce.number().min(0).default(0)),
+  AI_REQUESTS_PER_MINUTE: withDefault(z.coerce.number().int().min(0).max(10_000).default(120)),
 
   CLARIFAI_API_KEY: optionalString,
   CLARIFAI_PAT: optionalString,
@@ -150,6 +169,23 @@ export interface AppEnv {
     groqApiKey?: string;
     geminiApiKey?: string;
     grokApiKey?: string;
+    openaiApiKey?: string;
+    anthropicApiKey?: string;
+    groqModel?: string;
+    geminiModel?: string;
+    grokModel?: string;
+    openaiModel?: string;
+    anthropicModel?: string;
+    /** Set means a local runtime is available as a provider. */
+    localUrl?: string;
+    localModel?: string;
+  };
+  ai: {
+    /** Zero means no ceiling. */
+    dailyBudgetUsd: number;
+    monthlyBudgetUsd: number;
+    /** Per provider, per minute, across every process when Redis is configured. */
+    requestsPerMinute: number;
   };
   clarifai: {
     apiKey?: string;
@@ -246,10 +282,17 @@ function collectRequirementProblems(raw: RawEnv): string[] {
     );
   }
 
-  const hasLlmKey = Boolean(raw.GROQ_API_KEY || raw.GEMINI_API_KEY || raw.GROK_API_KEY);
+  const hasLlmKey = Boolean(
+    raw.GROQ_API_KEY ||
+    raw.GEMINI_API_KEY ||
+    raw.GROK_API_KEY ||
+    raw.OPENAI_API_KEY ||
+    raw.ANTHROPIC_API_KEY ||
+    raw.LOCAL_LLM_URL,
+  );
   if (!hasLlmKey) {
     problems.push(
-      'No LLM provider key is set. At least one of GROQ_API_KEY, GEMINI_API_KEY or GROK_API_KEY is required for matching and CCTV description.',
+      'No AI provider is configured. Set one of GROQ_API_KEY, GEMINI_API_KEY, GROK_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, or LOCAL_LLM_URL for a model running locally; matching and CCTV description need at least one.',
     );
   }
 
@@ -349,6 +392,20 @@ export function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
       groqApiKey: raw.GROQ_API_KEY,
       geminiApiKey: raw.GEMINI_API_KEY,
       grokApiKey: raw.GROK_API_KEY,
+      openaiApiKey: raw.OPENAI_API_KEY,
+      anthropicApiKey: raw.ANTHROPIC_API_KEY,
+      groqModel: raw.GROQ_MODEL,
+      geminiModel: raw.GEMINI_MODEL,
+      grokModel: raw.GROK_MODEL,
+      openaiModel: raw.OPENAI_MODEL,
+      anthropicModel: raw.ANTHROPIC_MODEL,
+      localUrl: raw.LOCAL_LLM_URL,
+      localModel: raw.LOCAL_LLM_MODEL,
+    }),
+    ai: Object.freeze({
+      dailyBudgetUsd: raw.AI_DAILY_BUDGET_USD,
+      monthlyBudgetUsd: raw.AI_MONTHLY_BUDGET_USD,
+      requestsPerMinute: raw.AI_REQUESTS_PER_MINUTE,
     }),
     clarifai: Object.freeze({
       apiKey: raw.CLARIFAI_API_KEY,

@@ -330,8 +330,14 @@ export interface AdminAuditEntry<TTime = unknown> {
 
 /* ============ System settings ============ */
 
-/** An LLM provider this deployment can be pointed at. */
-export type LlmProviderName = 'groq' | 'gemini' | 'grok';
+/**
+ * An AI provider this deployment can be pointed at.
+ *
+ * Every id the server can register, not only the three the settings screen
+ * offers: the rest are reached as fallbacks, which is a server decision. Keep
+ * this in step with `PROVIDER_IDS` in `server/src/platform/ai/providers/registry.ts`.
+ */
+export type LlmProviderName = 'groq' | 'gemini' | 'grok' | 'openai' | 'anthropic' | 'local';
 
 /**
  * Which provider runs, and whether a failure falls through to another.
