@@ -8,9 +8,21 @@
 
 import { embedItemHandler } from './embed-item.handler.js';
 import { matchItemHandler } from './match-item.handler.js';
+import {
+  handoverArchiveHandler,
+  handoverChainHandler,
+  handoverCreditsHandler,
+  handoverItemsHandler,
+  handoverNotifyHandler,
+} from './handover-step.handler.js';
 import type { JobHandlerMap } from '../queue.port.js';
 
 export const jobHandlers: JobHandlerMap = {
   'match.item': matchItemHandler,
   'embed.item': embedItemHandler,
+  'handover.items': handoverItemsHandler,
+  'handover.archive': handoverArchiveHandler,
+  'handover.credits': handoverCreditsHandler,
+  'handover.notify': handoverNotifyHandler,
+  'handover.chain': handoverChainHandler,
 };

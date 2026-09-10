@@ -6,70 +6,130 @@ with the target called out where they differ.
 
 ## Handover
 
-Today the state lives in one field on `handoverCodes/{matchId}`.
-
-```mermaid
-stateDiagram-v2
-    [*] --> pending: admin verifies the match<br/>code issued and emailed
-    pending --> verified: correct code
-    pending --> blocked: third wrong attempt
-    pending --> expired: a code tried after the deadline
-    blocked --> pending: admin re-issues<br/>attempts reset to 0
-    expired --> pending: admin re-issues
-    verified --> [*]: completion batch writes handovers/{id}
-    verified --> verified: replay of the same code is a no-op
-```
-
-Four rules the diagram is enforcing:
-
-- Three wrong attempts block the **session**, never the user's account. The
-  person typing the code is the finder; blocking the owner's account for the
-  finder's typos was defect LOG-12.
-- Only an admin re-issue clears the attempt budget. A plain re-trigger of an
-  open session keeps it, so re-running matching cannot hand fresh guesses to
-  whoever is grinding the code.
-- `expired` is only written when somebody actually tries a code after the
-  deadline. A session nobody attempted stays `pending` with its expiry in the
-  past, which is why the admin panel derives the state it displays from
-  `expiresAt` rather than trusting the stored value.
-- A verified session is terminal. There is no transition back, so a re-issue
-  cannot reopen a completed handover.
-
-### Target, phase 26
-
-States become `initiated`, `code_issued`, `awaiting_meet`, `verified`,
-`completed`, `expired`, `cancelled`, `disputed`, `reverted`, and every
-transition is an appended event rather than a field write:
-
-```
-handoverEvents/{id} = { handoverId, from, to, actor, actorRole, reason, metadata, at }
-```
-
-Current state becomes a projection of the log. That gives an audit trail for
-free, makes a dispute resolvable, and makes a revert safe, because the prior
-state is recorded rather than reconstructed. It also removes a whole class of
-bug by construction: a transition that is not in the table cannot happen, so a
-re-trigger can never silently rewind a blocked session (defect LOG-11).
+State is a projection of an append-only event log, `handoverEvents`, and every
+move is a row in it (PLAN.md 10.1). The current state is materialised onto
+`handoverCodes/{matchId}` in the same transaction that appends the event, so
+the log is the source of truth and the document is a cache of its last entry
+that every existing reader already reads.
 
 ```mermaid
 stateDiagram-v2
     [*] --> initiated
-    initiated --> code_issued: code generated and sent
-    code_issued --> awaiting_meet: finder opens the link
-    code_issued --> expired: deadline passes
-    awaiting_meet --> verified: code accepted<br/>optionally both parties confirm
-    awaiting_meet --> expired: deadline passes
-    verified --> completed: saga steps all succeed
-    completed --> disputed: either party, inside the window
-    disputed --> reverted: admin adjudicates
-    disputed --> completed: dispute rejected
-    initiated --> cancelled: admin or either party
-    code_issued --> cancelled: admin or either party
-    expired --> code_issued: admin re-issues
-    reverted --> [*]
+    initiated --> code_issued: issue_code
+    code_issued --> code_issued: issue_code (re-trigger)<br/>fail_attempt
+    code_issued --> awaiting_meet: present_code<br/>(two-party only)
+    code_issued --> verified: confirm_receipt
+    awaiting_meet --> verified: confirm_receipt<br/>(the owner)
+    awaiting_meet --> awaiting_meet: fail_attempt
+    verified --> completed: complete<br/>(both blocking saga steps done)
+    verified --> code_issued: reissue_code<br/>(the saga gave up)
+    code_issued --> blocked: block
+    awaiting_meet --> blocked: block
+    code_issued --> expired: expire
+    blocked --> code_issued: reissue_code<br/>(admin only)
+    expired --> code_issued: reissue_code
+    completed --> disputed: dispute
+    completed --> reverted: revert
+    disputed --> completed: complete
+    disputed --> reverted: revert
     completed --> [*]
-    cancelled --> [*]
 ```
+
+### What the table refuses, and why that is the point
+
+The rules below used to be checks that each new code path had to remember. Now
+they are absences in the transition table, so a path added later cannot break
+them without deliberately adding an edge.
+
+- **`blocked` has no `issue_code` edge.** Only an admin `reissue_code` reopens
+  a blocked session. Defect LOG-11 was `initiateHandover` overwriting the code
+  document and silently unblocking it; the fix then was a guard on that one
+  path, and this is the same rule with nowhere left to forget it.
+- **`completed` leads only to `disputed` and `reverted`.** A completed handover
+  is a fact about the physical world. The only honest moves from it are to
+  challenge it or to compensate for it, never to quietly rewind it — and
+  because there is no second `complete` edge, a replayed saga step writes one
+  event rather than two.
+- **Three wrong attempts block the session, never an account.** The person
+  typing is the finder; blocking the owner's account for the finder's typos was
+  defect LOG-12. Attempts are also spaced by a doubling backoff, because the
+  cap bounds how many guesses a session allows without bounding how fast they
+  arrive.
+- **A plain re-trigger keeps the attempt budget.** Only an admin re-issue
+  clears it, so re-running matching cannot hand fresh guesses to whoever is
+  grinding the code.
+- **`verified` can be reopened.** Not a rewind: nothing has completed. The
+  completion saga can give up, and a session left verified with no handover
+  record behind it would otherwise be stranded.
+
+### Two-party confirmation
+
+`HANDOVER_TWO_PARTY` is off by default, which is the single-step flow: the
+credential is presented and the handover goes straight to `verified`. On,
+presenting it means only that the two have met, and the *other* party has to
+confirm before anything is credited or archived. `awaiting_meet` is the state
+between the two, and it is unreachable with the flag off.
+
+Which party confirms is the whole security argument, and it is not the obvious
+one. The six-digit code is emailed to the person who reported the **lost**
+item and the verification link to the person who reported the **found** item,
+so the owner already holds the credential. Gating confirmation on the owner as
+well would let one person present their own code and then confirm their own
+receipt — one party closing a handover, which is exactly what this exists to
+stop. So `POST /handover/confirm` requires the **found** item's reporter:
+the owner cannot confirm, and the finder cannot present a code they were never
+sent.
+
+The public verify endpoint can never confirm while the flag is on. It only
+ever moves `code_issued` to `awaiting_meet`; a credential presented against a
+session already in `awaiting_meet` is answered "already accepted" rather than
+falling through. That branch is the one thing standing between two-party and
+one unauthenticated request being sent twice.
+
+The credential is six digits or a signed QR token. The token carries its own
+expiry and its own binding to the handover, and it is verified by an HMAC
+rather than a read, so nothing is stored and nothing has to be expired.
+
+### Completion is a saga, not a batch
+
+Reaching `verified` writes one outbox row, `handover.verified`, in the same
+commit as the transition. Nothing else happens inline. Five jobs consume it,
+each idempotent on `(handoverId, step)` and each with its own retry policy and
+dead-letter queue:
+
+| Step                | Forward                          | Compensation                                              | Holds completion |
+| ------------------- | -------------------------------- | --------------------------------------------------------- | ---------------- |
+| `handover.items`    | Both items become Claimed        | Restore the prior status from the step record             | Yes              |
+| `handover.archive`  | Archive the match, write the record | Restore the active match from the archived copy         | Yes              |
+| `handover.credits`  | Award credits to both parties    | Reversing ledger entries, never an edit                   | No               |
+| `handover.notify`   | Email both parties               | A correction notice                                       | No               |
+| `handover.chain`    | Write the attestation            | A linked revocation referencing the original transaction  | No               |
+
+Whichever blocking step finishes last moves the handover to `completed`, so
+there is no coordinator to keep alive and no ordering between the five. Email
+and the chain do not hold completion: a handover is not less true because a
+third party is down, and refusing to record it would be the system lying about
+the world to protect its own bookkeeping.
+
+A step that exhausts its retries writes an escalation carrying its own
+compensation text, because past the point where the credential was accepted the
+physical handover has already happened and no amount of retrying changes that.
+The compensations are declared but not yet driven: the admin revert and the
+dispute flow that call them are phase 27.
+
+Each step captures what its compensation will need *before* it runs, not after.
+"Restore the prior status of both items" needs the prior status, and the item
+documents stop carrying it the moment the step commits — so a worker that died
+between the write and the acknowledgement would, on redelivery, record the
+values the first run had already written and leave the revert restoring
+`Claimed` to `Claimed`.
+
+Completion moves the handover only from `verified`. The table also allows
+`disputed -> completed`, for a dispute an admin did not uphold, and that
+decision is a person's: without the guard, an operator re-running an escalated
+step after an owner disputed would have a worker close the dispute in the
+platform's favour and record it as a system action.
+
 
 ## Item lifecycle
 

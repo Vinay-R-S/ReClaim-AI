@@ -106,6 +106,35 @@ const rawSchema = z.object({
 
   HANDOVER_CODE_SECRET: optionalString,
 
+  /**
+   * Two-party confirmation (PLAN.md 10.4).
+   *
+   * Off by default, which is the flow that exists today: the finder enters the
+   * code and the handover completes. On, the code only says the two have met,
+   * and the owner has to confirm receipt before anything is credited or
+   * archived, so neither party alone can close a handover.
+   */
+  HANDOVER_TWO_PARTY: booleanWithDefault(false),
+  /**
+   * How long a scanned QR token is good for.
+   *
+   * Short on purpose. The token stands in for typing six digits in person, so
+   * it only has to outlive the walk from one phone to the other; anything
+   * longer is a credential that can be forwarded.
+   */
+  HANDOVER_QR_TTL_SECONDS: withDefault(z.coerce.number().int().positive().max(3_600).default(120)),
+  /**
+   * Base delay between failed verification attempts, doubling each time.
+   *
+   * The attempt cap stops a session being brute forced; this stops it being
+   * brute forced quickly, which matters because a six-digit code has a million
+   * values and three attempts against a fresh session is not the only way to
+   * spend them.
+   */
+  HANDOVER_ATTEMPT_BACKOFF_MS: withDefault(
+    z.coerce.number().int().min(0).max(600_000).default(2_000),
+  ),
+
   CLOUDINARY_CLOUD_NAME: optionalString,
   CLOUDINARY_API_KEY: optionalString,
   CLOUDINARY_API_SECRET: optionalString,
@@ -272,6 +301,10 @@ export interface AppEnv {
     /** HMAC key for handover code hashes. Never logged, never sent anywhere. */
     codeSecret: string;
     isConfigured: boolean;
+    /** See HANDOVER_TWO_PARTY. Off is the single-step flow that predates it. */
+    twoParty: boolean;
+    qrTtlSeconds: number;
+    attemptBackoffMs: number;
   };
   cloudinary: {
     cloudName?: string;
@@ -558,6 +591,9 @@ export function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
         ? (raw.HANDOVER_CODE_SECRET as string)
         : DEVELOPMENT_HANDOVER_SECRET,
       isConfigured: handoverSecretConfigured,
+      twoParty: raw.HANDOVER_TWO_PARTY,
+      qrTtlSeconds: raw.HANDOVER_QR_TTL_SECONDS,
+      attemptBackoffMs: raw.HANDOVER_ATTEMPT_BACKOFF_MS,
     }),
     cloudinary: Object.freeze({
       cloudName: raw.CLOUDINARY_CLOUD_NAME,

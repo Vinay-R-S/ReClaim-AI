@@ -116,6 +116,24 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The handover event log. Append-only through the Admin SDK, and closed to
+    // the browser in both directions: it names both parties of every handover,
+    // and it is the evidence a dispute is resolved from, so a client that could
+    // write it could rewrite the history it is about to be judged by.
+    match /handoverEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    // Saga step bookkeeping and the escalations a failed step raises. Both are
+    // read through the API by an admin, never directly.
+    match /handoverSteps/{stepId} {
+      allow read, write: if false;
+    }
+
+    match /escalations/{escalationId} {
+      allow read, write: if false;
+    }
+
     // Model spend per day and per month. Written by the server only, and not
     // read from the browser: the admin screen that will show it goes through
     // the API like every other admin read.

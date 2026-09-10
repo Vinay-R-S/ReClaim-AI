@@ -11,6 +11,9 @@ import {
   sendHandoverBlockedNotice,
 } from './email.service.js';
 import { HANDOVER_CONFIG, toDate, validateHandoverCriteria } from './handover.criteria.js';
+import { handoverMachine, stateOf } from './handover/handover.machine.js';
+import { acceptsCode, type HandoverState } from './handover/handover.states.js';
+import { issueQrToken, looksLikeQrToken, verifyQrToken } from './handover/handover.qr.js';
 import { createLogger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 
@@ -81,31 +84,6 @@ function codeMatches(code: string, stored: HandoverCode): boolean {
 
   if (expected.length !== actual.length) return false;
   return crypto.timingSafeEqual(expected, actual);
-}
-
-/**
- * Report what actually happened to a credit award.
- *
- * A failed transaction returns `success: false` with the intended amount still
- * on the result, so branching only on `alreadyApplied` logged an award that was
- * never written and left nothing to reconcile from.
- */
-function logCreditOutcome(
-  role: string,
-  userId: string,
-  result: { success: boolean; alreadyApplied: boolean; amount: number },
-): void {
-  if (!result.success) {
-    log.error(`Credit award FAILED for ${role} ${userId}, balance unchanged`);
-    return;
-  }
-
-  if (result.alreadyApplied) {
-    log.info(`Credits already recorded for ${role} ${userId}`);
-    return;
-  }
-
-  log.info(`Credits awarded to ${role} ${userId}: +${result.amount}`);
 }
 
 async function writeAuditEntry(
@@ -195,65 +173,95 @@ export async function initiateHandover(
 
     const codeRef = await resolveCodeRef(matchId);
 
-    const issue = await handoverRepository.runTransaction<IssueOutcome>(async (tx) => {
-      const snap = await tx.get(codeRef);
-      const existing = snap.exists ? (snap.data() as HandoverCode) : undefined;
+    const { result: issue, outcome } = await handoverMachine.decide<IssueOutcome>(
+      codeRef,
+      matchId,
+      (data, from) => {
+        const existing = data as unknown as HandoverCode | undefined;
 
-      if (existing?.status === 'verified') return { kind: 'already_completed' };
+        // Refused with a reason of their own, ahead of the table, so the caller
+        // can say which of the two it was. The table refuses both anyway:
+        // neither `verified` nor `completed` has an `issue_code` edge, and
+        // `blocked` has only `reissue_code`. That is defect LOG-11 made
+        // structural rather than guarded — no code path added later can reopen
+        // a blocked session by accident, because there is no edge to take.
+        // `completed` is final. `verified` is not: the saga can exhaust its
+        // retries and escalate, and a session left verified with no handover
+        // record behind it would otherwise be stranded with no way back —
+        // invisible to the admin list and refused by this endpoint. The table
+        // has the edge for exactly that, and only an admin re-issue takes it.
+        if (from === 'completed' || (from === 'verified' && !options.reissueBlocked)) {
+          return { kind: 'refuse', result: { kind: 'already_completed' } };
+        }
 
-      if (existing?.status === 'blocked' && !options.reissueBlocked) return { kind: 'blocked' };
+        if (from === 'blocked' && !options.reissueBlocked) {
+          return { kind: 'refuse', result: { kind: 'blocked' } };
+        }
 
-      // An admin re-issue clears the attempt budget; a plain re-trigger of an
-      // open session keeps it, so re-running matching cannot hand out fresh
-      // guesses to whoever is grinding the code.
-      const carriedAttempts = existing && !options.reissueBlocked ? (existing.attempts ?? 0) : 0;
+        // An admin re-issue clears the attempt budget; a plain re-trigger of an
+        // open session keeps it, so re-running matching cannot hand out fresh
+        // guesses to whoever is grinding the code.
+        const carriedAttempts = existing && !options.reissueBlocked ? (existing.attempts ?? 0) : 0;
 
-      const handoverCode: HandoverCode = {
-        matchId,
-        lostItemId,
-        foundItemId,
-        codeHash: hashCode(code, CURRENT_HASH_VERSION),
-        codeHashVersion: CURRENT_HASH_VERSION,
-        attempts: carriedAttempts,
-        expiresAt: Timestamp.fromDate(expiresAt),
-        createdAt: Timestamp.now(),
-        status: 'pending',
-      };
+        const patch: Record<string, unknown> = {
+          matchId,
+          lostItemId,
+          foundItemId,
+          codeHash: hashCode(code, CURRENT_HASH_VERSION),
+          codeHashVersion: CURRENT_HASH_VERSION,
+          attempts: carriedAttempts,
+          expiresAt: Timestamp.fromDate(expiresAt),
+          issuedAt: Timestamp.now(),
 
-      if (overridden) {
-        handoverCode.criteriaOverrideBy = options.actorId || 'unknown';
-        handoverCode.criteriaOverrideReason = options.overrideReason || null;
-        handoverCode.criteriaFailure = criteriaFailure as string;
-      }
-
-      // Clear whatever a previous round left behind, so a re-issued session
-      // does not inherit a stale terminal state or an old override marker.
-      tx.set(
-        codeRef,
-        {
-          ...handoverCode,
+          // Clear whatever a previous round left behind, so a re-issued session
+          // does not inherit a stale terminal marker or an old override.
+          //
+          // `lastAttemptAt` survives a plain re-trigger, because the backoff is
+          // measured from it and the attempts it applies to are deliberately
+          // carried. Deleting it while keeping `attempts` cancelled the wait
+          // those attempts were supposed to have earned, so a re-triggered
+          // match run handed the next guess back immediately.
+          ...(options.reissueBlocked ? { lastAttemptAt: FieldValue.delete() } : {}),
+          presentedAt: FieldValue.delete(),
           blockedAt: FieldValue.delete(),
           expiredAt: FieldValue.delete(),
           verifiedAt: FieldValue.delete(),
           completionError: FieldValue.delete(),
           ...(overridden
-            ? {}
+            ? {
+                criteriaOverrideBy: options.actorId || 'unknown',
+                criteriaOverrideReason: options.overrideReason || null,
+                criteriaFailure: criteriaFailure as string,
+              }
             : {
                 criteriaOverrideBy: FieldValue.delete(),
                 criteriaOverrideReason: FieldValue.delete(),
                 criteriaFailure: FieldValue.delete(),
               }),
-        },
-        { merge: true },
-      );
+        };
 
-      return {
-        kind: 'issued',
-        previousStatus: existing?.status ?? null,
-        previousAttempts: existing?.attempts ?? 0,
-        hadExisting: Boolean(existing),
-      };
-    });
+        return {
+          kind: 'transition',
+          plan: {
+            transition: options.reissueBlocked ? 'reissue_code' : 'issue_code',
+            actor: options.actorId ?? null,
+            actorRole: options.actorId ? 'admin' : 'system',
+            reason: options.reissueBlocked ? 'an admin re-issued the code' : 'code issued',
+            metadata: {
+              carriedAttempts,
+              ...(overridden ? { criteriaFailure } : {}),
+            },
+            patch,
+          },
+          result: {
+            kind: 'issued',
+            previousStatus: existing?.status ?? null,
+            previousAttempts: existing?.attempts ?? 0,
+            hadExisting: Boolean(data),
+          },
+        };
+      },
+    );
 
     if (issue.kind === 'already_completed') {
       return { success: false, message: 'This handover has already been completed' };
@@ -265,6 +273,14 @@ export async function initiateHandover(
         message:
           'This handover is blocked after too many failed attempts and needs an admin to re-issue the code',
       };
+    }
+
+    if (!outcome.ok) {
+      // The table refused a move the checks above did not anticipate, which is
+      // the machine doing its job rather than a bug to route around.
+      log.warn(`Handover ${matchId} could not be issued from state ${outcome.from}`);
+
+      return { success: false, message: 'This handover cannot be re-opened in its current state' };
     }
 
     // 4. Audit, once the code has actually been issued.
@@ -329,367 +345,378 @@ async function resolveReporterEmail(item: Item): Promise<string | undefined> {
 
   return user?.email;
 }
-
-type VerifyOutcome =
+/**
+ * What one verification attempt decided.
+ *
+ * Every one of these is worked out inside the same transaction that writes the
+ * transition, which is what stops parallel guesses each reading `attempts: 2`
+ * and collectively spending more than the cap (defect LOG-13).
+ */
+type VerifyResult =
   | { kind: 'not_found' }
-  | { kind: 'blocked' }
+  | { kind: 'not_live'; state: HandoverState }
   | { kind: 'expired' }
-  | { kind: 'already_verified' }
-  | { kind: 'accepted'; data: HandoverCode }
+  | { kind: 'too_soon'; retryAfterMs: number }
+  | { kind: 'presented' }
+  | { kind: 'already_presented' }
+  | { kind: 'accepted' }
   | { kind: 'invalid'; attemptsLeft: number }
   | { kind: 'now_blocked'; data: HandoverCode };
 
 /**
- * Verify a handover code.
+ * How long to make somebody wait after a failed attempt.
  *
- * The attempt counter, the status transition and the accept decision all happen
- * inside one transaction, so parallel guesses cannot each read `attempts: 2`
- * and collectively spend more than the cap.
+ * Doubling from the configured base. Three attempts against a fresh session is
+ * not the only way to spend a million codes: a caller who can get sessions
+ * re-issued gets three more each time, and without a delay those three cost
+ * nothing but the round trip.
+ */
+export function attemptBackoffMs(attempts: number): number {
+  if (attempts <= 0) return 0;
+
+  return env.handover.attemptBackoffMs * 2 ** (attempts - 1);
+}
+
+/** Whether the credential presented matches, whichever kind it is. */
+function credentialMatches(credential: string, matchId: string, stored: HandoverCode): boolean {
+  if (looksLikeQrToken(credential)) return verifyQrToken(credential, matchId).ok;
+
+  return codeMatches(credential, stored);
+}
+
+/**
+ * Verify a handover credential: six digits, or a scanned QR token.
+ *
+ * The transaction decides everything and writes one transition. What it does
+ * not do is any of the five side effects of a completed handover: those hang
+ * off the `handover.verified` event written in the same commit, so a failure
+ * in any of them cannot leave the verification half applied (section 10.2).
  */
 export async function verifyHandoverCode(
   matchId: string,
-  code: string,
-): Promise<{ success: boolean; message: string; attemptsLeft?: number }> {
+  credential: string,
+): Promise<{ success: boolean; message: string; attemptsLeft?: number; retryAfterMs?: number }> {
   try {
     const codeRef = await resolveCodeRef(matchId);
+    const now = new Date();
 
-    const outcome = await handoverRepository.runTransaction<VerifyOutcome>(async (tx) => {
-      const snap = await tx.get(codeRef);
+    const { result, outcome } = await handoverMachine.decide<VerifyResult>(
+      codeRef,
+      matchId,
+      (data, from) => {
+        if (!data) return { kind: 'refuse', result: { kind: 'not_found' } };
 
-      if (!snap.exists) return { kind: 'not_found' };
+        const stored = data as unknown as HandoverCode;
 
-      const data = snap.data() as HandoverCode;
-
-      if (data.status === 'blocked') return { kind: 'blocked' };
-      if (data.status === 'verified') return { kind: 'already_verified' };
-
-      const expiresAt = toDate(data.expiresAt);
-      if (!expiresAt || expiresAt < new Date()) {
-        if (data.status !== 'expired') {
-          tx.update(snap.ref, { status: 'expired', expiredAt: FieldValue.serverTimestamp() });
+        if (!acceptsCode(from)) {
+          return { kind: 'refuse', result: { kind: 'not_live', state: from } };
         }
-        return { kind: 'expired' };
-      }
 
-      if (codeMatches(code, data)) {
-        // Flip to verified inside the transaction: a second concurrent request
-        // then reads `verified` and cannot run completion a second time.
-        tx.update(snap.ref, { status: 'verified', verifiedAt: FieldValue.serverTimestamp() });
-        return { kind: 'accepted', data };
-      }
+        const expiresAt = toDate(stored.expiresAt);
 
-      const newAttempts = (data.attempts ?? 0) + 1;
+        if (!expiresAt || expiresAt < now) {
+          return {
+            kind: 'transition',
+            plan: {
+              transition: 'expire',
+              actor: null,
+              actorRole: 'system',
+              reason: 'the code outlived its expiry',
+              patch: { expiredAt: FieldValue.serverTimestamp() },
+            },
+            result: { kind: 'expired' },
+          };
+        }
 
-      if (newAttempts >= HANDOVER_CONFIG.MAX_ATTEMPTS) {
-        tx.update(snap.ref, {
-          attempts: newAttempts,
-          status: 'blocked',
-          blockedAt: FieldValue.serverTimestamp(),
+        const attempts = stored.attempts ?? 0;
+        const lastAttemptAt = toDate((stored as { lastAttemptAt?: unknown }).lastAttemptAt);
+        const waitUntil = lastAttemptAt ? lastAttemptAt.getTime() + attemptBackoffMs(attempts) : 0;
+
+        if (waitUntil > now.getTime()) {
+          return {
+            kind: 'refuse',
+            result: { kind: 'too_soon', retryAfterMs: waitUntil - now.getTime() },
+          };
+        }
+
+        if (credentialMatches(credential, matchId, stored)) {
+          // With two-party confirmation on, this endpoint can never finish a
+          // handover. Presenting the credential says the two have met; only
+          // `confirmHandoverReceipt`, which is authenticated as the other
+          // party, says the item changed hands.
+          //
+          // The `from` test used to be `=== 'code_issued'`, which meant a
+          // second submission of the same credential arrived with the session
+          // already at `awaiting_meet`, fell past this branch and confirmed
+          // itself. That is the entire two-party guarantee lost to one
+          // unauthenticated request being sent twice.
+          if (env.handover.twoParty) {
+            if (from === 'awaiting_meet') {
+              return { kind: 'refuse', result: { kind: 'already_presented' } };
+            }
+
+            return {
+              kind: 'transition',
+              plan: {
+                transition: 'present_code',
+                actor: null,
+                // Nobody here is authenticated: the credential is the owner's
+                // secret and the link is the finder's, so who typed it is not
+                // known. Recording a party would be a guess in the one log a
+                // dispute is resolved from.
+                actorRole: 'system',
+                reason: 'credential accepted, waiting for the other party to confirm receipt',
+                metadata: { credential: looksLikeQrToken(credential) ? 'qr' : 'code' },
+                patch: { presentedAt: FieldValue.serverTimestamp() },
+              },
+              result: { kind: 'presented' },
+            };
+          }
+
+          return {
+            kind: 'transition',
+            plan: {
+              transition: 'confirm_receipt',
+              actor: null,
+              actorRole: 'system',
+              reason: 'credential accepted',
+              metadata: { credential: looksLikeQrToken(credential) ? 'qr' : 'code' },
+              patch: { verifiedAt: FieldValue.serverTimestamp() },
+              // The fact, written in the same commit as the transition.
+              // Nothing else about completion happens inline.
+              publish: {
+                name: 'handover.verified',
+                payload: {
+                  handoverId: matchId,
+                  lostItemId: stored.lostItemId,
+                  foundItemId: stored.foundItemId,
+                },
+              },
+            },
+            result: { kind: 'accepted' },
+          };
+        }
+
+        const newAttempts = attempts + 1;
+
+        if (newAttempts >= HANDOVER_CONFIG.MAX_ATTEMPTS) {
+          return {
+            kind: 'transition',
+            plan: {
+              transition: 'block',
+              actor: null,
+              actorRole: 'system',
+              reason: 'the attempt cap was reached',
+              patch: {
+                attempts: newAttempts,
+                lastAttemptAt: FieldValue.serverTimestamp(),
+                blockedAt: FieldValue.serverTimestamp(),
+              },
+            },
+            result: { kind: 'now_blocked', data: stored },
+          };
+        }
+
+        return {
+          kind: 'transition',
+          plan: {
+            transition: 'fail_attempt',
+            actor: null,
+            actorRole: 'system',
+            reason: 'the credential did not match',
+            patch: { attempts: newAttempts, lastAttemptAt: FieldValue.serverTimestamp() },
+          },
+          result: {
+            kind: 'invalid',
+            attemptsLeft: HANDOVER_CONFIG.MAX_ATTEMPTS - newAttempts,
+          },
+        };
+      },
+    );
+
+    // A decider that chose a transition the table refused wrote nothing, so
+    // reporting its intended answer would claim a handover that did not
+    // happen and, for `now_blocked`, email both parties and every admin about
+    // a block that was never recorded. Unreachable while the guards and the
+    // table agree, which is exactly the coupling the machine exists to remove.
+    if (!outcome.ok && result.kind !== 'not_found' && result.kind !== 'not_live') {
+      const expectedRefusal = result.kind === 'too_soon' || result.kind === 'already_presented';
+
+      if (!expectedRefusal) {
+        log.error('Verification decided a transition the table refused', {
+          matchId,
+          from: outcome.from,
+          decided: result.kind,
         });
-        return { kind: 'now_blocked', data };
+
+        return { success: false, message: 'Verification failed' };
       }
+    }
 
-      tx.update(snap.ref, { attempts: newAttempts });
-      return { kind: 'invalid', attemptsLeft: HANDOVER_CONFIG.MAX_ATTEMPTS - newAttempts };
-    });
-
-    switch (outcome.kind) {
+    switch (result.kind) {
       case 'not_found':
         return { success: false, message: 'Handover session not found' };
 
-      case 'blocked':
-        return {
-          success: false,
-          message: 'This handover is blocked due to excessive failed attempts.',
-          attemptsLeft: 0,
-        };
+      case 'not_live':
+        return notLiveMessage(result.state);
 
       case 'expired':
         return { success: false, message: 'Code expired' };
 
-      case 'already_verified':
-        return { success: true, message: 'Already verified' };
+      case 'too_soon':
+        return {
+          success: false,
+          message: 'Too many attempts in a row. Wait a moment and try again.',
+          retryAfterMs: result.retryAfterMs,
+        };
 
       case 'invalid':
-        return { success: false, message: 'Invalid code', attemptsLeft: outcome.attemptsLeft };
+        return { success: false, message: 'Invalid code', attemptsLeft: result.attemptsLeft };
 
       case 'now_blocked':
-        await onSessionBlocked(matchId, outcome.data);
+        await onSessionBlocked(matchId, result.data);
+
         return {
           success: false,
           message: 'Too many failed attempts. Verification blocked.',
           attemptsLeft: 0,
         };
 
-      case 'accepted': {
-        const completed = await completeHandover(matchId, codeRef, outcome.data);
+      case 'presented':
+        return {
+          success: true,
+          message: 'Code accepted. Waiting for the other party to confirm the handover.',
+        };
 
-        if (!completed) {
-          return {
-            success: false,
-            message: 'Verification could not be completed. Please enter the code again.',
-          };
-        }
+      case 'already_presented':
+        return {
+          success: true,
+          message:
+            'This code has already been accepted. The handover completes once the other party confirms.',
+        };
 
+      case 'accepted':
         return { success: true, message: 'Verification successful! Item handed over.' };
-      }
 
       default:
         return { success: false, message: 'Verification failed' };
     }
   } catch (error) {
     log.error('Verify Error:', error);
+
     return { success: false, message: 'Verification failed' };
   }
 }
 
-/**
- * Complete a verified handover.
- *
- * The code has already been accepted by the time this runs, so nothing here may
- * throw: every write is guarded by an existence check and the whole body is
- * wrapped, with the failure recorded on the code document for reconciliation.
- */
-async function completeHandover(
-  matchId: string,
-  codeDocRef: DocumentReference,
-  data: HandoverCode,
-): Promise<boolean> {
-  try {
-    const context = await handoverRepository.loadCompletionContext(
-      matchId,
-      data.lostItemId,
-      data.foundItemId,
-    );
-    const { lostItem, foundItem, matchData } = context;
-
-    if (!lostItem || !foundItem) {
-      log.warn(
-        `Handover ${matchId} completing with a missing item document (lost: ${context.lostItemExists}, found: ${context.foundItemExists})`,
-      );
-    }
-
-    const [lostUser, foundUser] = await Promise.all([
-      loadUser(lostItem?.reportedBy),
-      loadUser(foundItem?.reportedBy),
-    ]);
-
-    // The record is written from whatever survives, never skipped: a handover
-    // that happened is worth recording even when one of its items has since
-    // been deleted.
-    const record = {
-      matchId,
-      lostItemId: data.lostItemId,
-      foundItemId: data.foundItemId,
-      lostPersonId: lostItem?.reportedBy || null,
-      foundPersonId: foundItem?.reportedBy || null,
-
-      // The pair again, as an array, so "the handovers this person took part
-      // in" is an indexed `array-contains` rather than a read of every
-      // completed handover followed by an in-memory filter (defect PERF-03).
-      participantIds: [lostItem?.reportedBy, foundItem?.reportedBy].filter(
-        (id): id is string => typeof id === 'string' && id.length > 0,
-      ),
-
-      matchScore: matchData?.matchScore ?? lostItem?.matchScore ?? foundItem?.matchScore ?? 0,
-      matchCreatedAt: matchData?.createdAt || null,
-
-      lostItemDetails: itemSnapshot(lostItem),
-      foundItemDetails: {
-        ...itemSnapshot(foundItem),
-        collectionPoint: foundItem?.collectionPoint || null,
-      },
-
-      lostPersonDetails: {
-        userId: lostItem?.reportedBy || null,
-        email: lostItem?.reportedByEmail || lostUser?.email || null,
-        displayName: lostUser?.displayName || null,
-      },
-      foundPersonDetails: {
-        userId: foundItem?.reportedBy || null,
-        email: foundItem?.reportedByEmail || foundUser?.email || null,
-        displayName: foundUser?.displayName || null,
-      },
-
-      verificationCode: data.codeHash || null, // Hashed, for reference only
-      handoverTime: FieldValue.serverTimestamp(),
-      createdAt: FieldValue.serverTimestamp(),
-      status: 'completed',
-    };
-
-    const handoverRef = await handoverRepository.completeHandover({
-      matchId,
-      codeDocRef,
-      record,
-      matchData,
-      lostItemId: data.lostItemId,
-      foundItemId: data.foundItemId,
-      lostItemExists: context.lostItemExists,
-      foundItemExists: context.foundItemExists,
-    });
-
-    await awardHandoverCredits(data, lostItem, foundItem, lostUser?.role, foundUser?.role);
-    await recordOnBlockchain(
-      matchId,
-      data,
-      lostItem,
-      foundItem,
-      matchData?.matchScore ?? 0,
-      handoverRef,
-    );
-
-    return true;
-  } catch (error) {
-    // The accept transaction already flipped the session to `verified`. Put it
-    // back so the finder can simply enter the code again: leaving it verified
-    // with no handover record would strand the session, since initiate and
-    // re-issue both refuse a verified one.
-    log.error(
-      `Handover completion failed for match ${matchId}, session returned to pending`,
-      error,
-    );
-
-    await codeDocRef
-      .set(
-        {
-          status: 'pending',
-          verifiedAt: FieldValue.delete(),
-          completionError: 'completion_failed',
-        },
-        { merge: true },
-      )
-      .catch((revertError) => {
-        log.error(`Could not return handover ${matchId} to pending`, revertError);
-      });
-
-    return false;
+/** What to tell somebody presenting a code against a session that is not live. */
+function notLiveMessage(state: HandoverState): {
+  success: boolean;
+  message: string;
+  attemptsLeft?: number;
+} {
+  switch (state) {
+    case 'blocked':
+      return {
+        success: false,
+        message: 'This handover is blocked due to excessive failed attempts.',
+        attemptsLeft: 0,
+      };
+    case 'expired':
+      return { success: false, message: 'Code expired' };
+    case 'verified':
+    case 'completed':
+      return { success: true, message: 'Already verified' };
+    case 'cancelled':
+      return { success: false, message: 'This handover was cancelled' };
+    case 'disputed':
+      return { success: false, message: 'This handover is under review' };
+    default:
+      return { success: false, message: 'This handover is not accepting a code' };
   }
 }
 
-function itemSnapshot(item: Item | null) {
+/**
+ * The second party confirms the handover (PLAN.md 10.4, two-party).
+ *
+ * The only place a handover is closed when two-party confirmation is on, and
+ * the caller is authenticated as the person who reported the found item. The
+ * credential was emailed to the other side, so the two halves are held by two
+ * different people and neither can finish alone.
+ *
+ * With `HANDOVER_TWO_PARTY` off nothing reaches this: verification goes
+ * straight to `verified` and there is no `awaiting_meet` to confirm from.
+ */
+export async function confirmHandoverReceipt(
+  matchId: string,
+  actorId: string,
+  actorRole: 'finder' | 'admin',
+): Promise<HandoverResult> {
+  const codeRef = await resolveCodeRef(matchId);
+
+  const { result, outcome } = await handoverMachine.decide<HandoverCode | null>(
+    codeRef,
+    matchId,
+    (data, from) => {
+      if (!data) return { kind: 'refuse', result: null };
+
+      const stored = data as unknown as HandoverCode;
+
+      if (from !== 'awaiting_meet') return { kind: 'refuse', result: stored };
+
+      return {
+        kind: 'transition',
+        plan: {
+          transition: 'confirm_receipt',
+          actor: actorId,
+          actorRole,
+          reason: 'the second party confirmed the handover',
+          patch: { verifiedAt: FieldValue.serverTimestamp() },
+          publish: {
+            name: 'handover.verified',
+            payload: {
+              handoverId: matchId,
+              lostItemId: stored.lostItemId,
+              foundItemId: stored.foundItemId,
+            },
+          },
+        },
+        result: stored,
+      };
+    },
+  );
+
+  if (outcome.ok) return { success: true, message: 'Receipt confirmed. Handover complete.' };
+
+  if (!result) return { success: false, message: 'Handover session not found' };
+
   return {
-    name: item?.name || null,
-    description: item?.description || null,
-    location: item?.location || null,
-    date: item?.date || null,
-    color: item?.color || null,
-    category: item?.category || null,
-    tags: item?.tags || null,
-    imageUrl: item?.imageUrl || item?.cloudinaryUrls?.[0] || null,
+    success: false,
+    message:
+      outcome.from === 'code_issued'
+        ? 'The code has not been presented yet, so there is nothing to confirm'
+        : 'This handover is not waiting for a confirmation',
   };
 }
 
-async function loadUser(
-  userId?: string,
-): Promise<{ email?: string; displayName?: string; role?: string } | null> {
-  if (!userId) return null;
-
-  const user = await userRepository.findById(userId);
-
-  if (!user) return null;
-
-  return user as { email?: string; displayName?: string; role?: string };
-}
-
 /**
- * Award credits to both parties. Admins submit on behalf of others and are
- * skipped. Failures are logged, never propagated: the handover already happened.
- */
-async function awardHandoverCredits(
-  data: HandoverCode,
-  lostItem: Item | null,
-  foundItem: Item | null,
-  lostUserRole?: string,
-  foundUserRole?: string,
-): Promise<void> {
-  try {
-    const lostUserId = lostItem?.reportedBy;
-    const foundUserId = foundItem?.reportedBy;
-
-    if (!lostUserId || !foundUserId) return;
-
-    const { awardOwnerCredits, awardFinderCredits } = await import('./credits.service.js');
-
-    // Keyed on the item, so a retried handover cannot pay out twice.
-    if (lostUserRole !== 'admin') {
-      logCreditOutcome(
-        'lost person',
-        lostUserId,
-        await awardOwnerCredits(lostUserId, data.lostItemId),
-      );
-    } else {
-      log.info(`Skipping credits for admin user ${lostUserId}`);
-    }
-
-    if (foundUserRole !== 'admin') {
-      logCreditOutcome(
-        'found person',
-        foundUserId,
-        await awardFinderCredits(foundUserId, data.foundItemId),
-      );
-    } else {
-      log.info(`Skipping credits for admin user ${foundUserId}`);
-    }
-  } catch (creditError) {
-    log.error('Failed to award handover credits:', creditError);
-  }
-}
-
-async function recordOnBlockchain(
-  matchId: string,
-  data: HandoverCode,
-  lostItem: Item | null,
-  foundItem: Item | null,
-  matchScore: number,
-  handoverRef: DocumentReference,
-): Promise<void> {
-  if (!env.blockchain.enabled) {
-    log.info('Blockchain disabled in config, skipping...');
-    return;
-  }
-
-  try {
-    log.info('Recording handover on blockchain...');
-    const { recordHandoverOnBlockchain } = await import('./blockchain.service.js');
-
-    const result = await recordHandoverOnBlockchain({
-      matchId,
-      lostItemId: data.lostItemId,
-      foundItemId: data.foundItemId,
-      lostPersonId: lostItem?.reportedBy || '',
-      foundPersonId: foundItem?.reportedBy || '',
-      itemDetails: {
-        lostItemName: lostItem?.name || '',
-        foundItemName: foundItem?.name || '',
-        location: foundItem?.collectionPoint || foundItem?.location || '',
-        matchScore,
-      },
-    });
-
-    if (!result.success) {
-      log.error(`Blockchain recording failed: ${result.error}`);
-      await handoverRef.update({ blockchainRecorded: false, blockchainError: result.error });
-      return;
-    }
-
-    log.info(`Blockchain record created: ${result.txHash}`);
-    await handoverRef.update({
-      blockchainTxHash: result.txHash,
-      blockchainRecorded: true,
-      blockchainRecordedAt: FieldValue.serverTimestamp(),
-    });
-  } catch (blockchainError) {
-    log.error('Blockchain integration error:', blockchainError);
-  }
-}
-
-/**
- * Handle a session that just hit the attempt cap.
+ * A QR token for the owner to show.
  *
- * The session is blocked, no account is. Blocking the owner punished the party
- * that was not even typing, which let a finder lock an owner out on purpose.
- * The match is left in place so an admin can review it and re-issue.
+ * Only for a session still accepting a credential: minting one for a blocked
+ * or completed handover would hand out something that looks like a way in and
+ * is not.
  */
+export async function issueHandoverQr(
+  matchId: string,
+): Promise<{ token: string; expiresAt: Date } | null> {
+  const codeRef = await resolveCodeRef(matchId);
+  const snapshot = await codeRef.get();
+
+  if (!snapshot.exists) return null;
+  if (!acceptsCode(stateOf(snapshot.data() as Record<string, unknown>))) return null;
+
+  return issueQrToken(matchId);
+}
+
 async function onSessionBlocked(matchId: string, data: HandoverCode): Promise<void> {
   await writeAuditEntry('session_blocked', matchId, undefined, {
     lostItemId: data.lostItemId,
@@ -740,15 +767,33 @@ export async function getHandoverStatus(matchId: string) {
 
   if (!codeDoc.exists) return null;
 
-  const data = codeDoc.data() as HandoverCode;
+  const raw = codeDoc.data() as Record<string, unknown>;
+  const data = raw as unknown as HandoverCode;
   const expiresAt = toDate(data.expiresAt);
+  const attempts = data.attempts ?? 0;
+  const lastAttemptAt = toDate(raw.lastAttemptAt);
 
+  // What the page has always read, plus the machine's own state. `status` is
+  // the projection of `state` through the four values that existed before the
+  // event log, so a client that has not been updated keeps working.
   return {
     status: data.status,
-    attempts: data.attempts ?? 0,
+    state: stateOf(raw),
+    attempts,
     maxAttempts: HANDOVER_CONFIG.MAX_ATTEMPTS,
     expiresAt,
+    /** Milliseconds until another attempt is accepted. Zero when one is. */
+    retryAfterMs: lastAttemptAt
+      ? Math.max(0, lastAttemptAt.getTime() + attemptBackoffMs(attempts) - Date.now())
+      : 0,
+    /** True when the finder has presented the code and the owner has not confirmed. */
+    awaitingConfirmation: stateOf(raw) === 'awaiting_meet',
   };
+}
+
+/** The event log for one handover, for the admin timeline and a dispute. */
+export async function getHandoverHistory(matchId: string) {
+  return handoverMachine.history(matchId);
 }
 
 // Both live in `handover.criteria.ts`, which is where a caller should take

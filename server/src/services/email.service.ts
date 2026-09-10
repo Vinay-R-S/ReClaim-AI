@@ -385,6 +385,60 @@ export async function sendHandoverBlockedNotice(
 }
 
 /**
+ * Tell one party that the handover is finished.
+ *
+ * Written to each side separately and carrying nothing about the other person.
+ * The code-issue email puts the finder's address in front of the owner and
+ * sends two strangers to meet at an address (defect SEC-22); phase 29 replaces
+ * that with a mediated channel, and this is not going to add a second instance
+ * of it before then.
+ */
+export async function sendHandoverCompletedNotice(
+  email: string,
+  itemName: string,
+): Promise<boolean> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #34a853, #4285f4); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; }
+        .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
+        .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #34a853; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Handover Complete</h1>
+        </div>
+        <div class="content">
+          <p>The handover for <strong>${escapeHtml(itemName)}</strong> is complete, and the verification code is now closed.</p>
+          <div class="info-box">
+            <p style="margin: 0;">Both reports have been marked as claimed, and the match has been archived to your history.</p>
+          </div>
+          <p>If this is not what you expected, contact support and quote the item name above. A completed handover can be reviewed and reversed by an administrator.</p>
+        </div>
+        <div class="footer">
+          <p>ReClaim AI - Secure Handover</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `Handover complete: ${itemName}`,
+    html,
+    text: `The handover for "${itemName}" is complete and the verification code is closed. Both reports are marked as claimed. If this is not what you expected, contact support and quote the item name.`,
+  });
+}
+
+/**
  * Check if email service is configured (either Resend or NodeMailer)
  */
 export function isEmailConfigured(): boolean {

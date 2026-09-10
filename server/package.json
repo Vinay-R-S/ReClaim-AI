@@ -16,6 +16,7 @@
     "migrate:credits": "tsx scripts/migrate-credits.ts",
     "migrate:items": "tsx scripts/migrate-items.ts",
     "migrate:handovers": "tsx scripts/migrate-handovers.ts",
+    "migrate:handover-states": "tsx scripts/migrate-handover-states.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

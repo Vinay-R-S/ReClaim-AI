@@ -2110,6 +2110,173 @@
           }
         ]
       }
+    },
+    "/handover/confirm": {
+      "post": {
+        "operationId": "confirmHandoverReceipt",
+        "summary": "Confirm receipt of the item",
+        "tags": [
+          "Handover"
+        ],
+        "description": "The second half of two-party confirmation (HANDOVER_TWO_PARTY). The finder presents the code, which moves the handover to awaiting_meet; this is the owner saying they have the item, which moves it to verified and starts the completion saga. Authenticated, and only the person who reported the lost item or an admin may call it: the finder already holds the code, so letting them confirm as well would close a handover on one party say-so. With two-party off nothing reaches this endpoint, because verification goes straight to verified.",
+        "responses": {
+          "200": {
+            "description": "Receipt confirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The handover is not waiting for a confirmation"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "matchId"
+                ],
+                "properties": {
+                  "matchId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/handover/qr/{matchId}": {
+      "get": {
+        "operationId": "issueHandoverQr",
+        "summary": "A short-lived QR token for the owner to show",
+        "tags": [
+          "Handover"
+        ],
+        "description": "Mints a signed token that stands in for typing the six-digit code, for the case where both parties have the app open. The token is signed rather than stored: it carries its own expiry (HANDOVER_QR_TTL_SECONDS, 120 seconds by default) and its own binding to this handover, and it is submitted to /handover/verify in the code field. Only the person who reported the lost item, or an admin, may mint one, and only while the session is still accepting a credential.",
+        "responses": {
+          "200": {
+            "description": "A token and its expiry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverQrToken"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The handover is not accepting a code"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "matchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Match id, which is the session id"
+          }
+        ]
+      }
+    },
+    "/handover/timeline/{matchId}": {
+      "get": {
+        "operationId": "getHandoverTimeline",
+        "summary": "Every transition one handover has made",
+        "tags": [
+          "Handover"
+        ],
+        "description": "The append-only event log behind the state machine: who moved the handover, from what to what, why, and when. Admin only, because it names both parties. This is the evidence a dispute is resolved from and the record a revert is built on.",
+        "responses": {
+          "200": {
+            "description": "The log, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "events"
+                  ],
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/HandoverEvent"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "parameters": [
+          {
+            "name": "matchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Match id, which is the session id"
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -2937,6 +3104,30 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "initiated",
+              "code_issued",
+              "awaiting_meet",
+              "verified",
+              "completed",
+              "blocked",
+              "expired",
+              "cancelled",
+              "disputed",
+              "reverted"
+            ],
+            "description": "The machine state. `status` is its projection through the four values that existed before the event log, and is kept so a client written against the old vocabulary keeps working. Absent from a server that predates phase 26."
+          },
+          "retryAfterMs": {
+            "type": "integer",
+            "description": "Milliseconds until another attempt is accepted. Zero when one is."
+          },
+          "awaitingConfirmation": {
+            "type": "boolean",
+            "description": "The credential was accepted and the other party has not confirmed the handover. Only ever true when the server runs with HANDOVER_TWO_PARTY on."
           }
         }
       },
@@ -2952,7 +3143,18 @@
           },
           "code": {
             "type": "string",
-            "pattern": "^[0-9]{6}$"
+            "description": "Either the six-digit code emailed to the person who reported the lost item, or a signed QR token from /handover/qr, submitted verbatim. Six digits match ^[0-9]{6}$; a token matches ^v1\\.[A-Za-z0-9_-]+\\.[0-9]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$.",
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{6}$"
+              },
+              {
+                "type": "string",
+                "maxLength": 256,
+                "pattern": "^v1\\.[A-Za-z0-9_-]+\\.[0-9]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+              }
+            ]
           }
         }
       },
@@ -3970,6 +4172,10 @@
           "attemptsLeft": {
             "type": "integer",
             "description": "Present on a wrong code. Absent once the session is blocked, which the message says"
+          },
+          "retryAfterMs": {
+            "type": "integer",
+            "description": "Present when the attempt was refused for arriving too soon after the last one. The attempt cap bounds how many guesses a session allows; this bounds how fast they arrive."
           }
         }
       },
@@ -4074,6 +4280,118 @@
           "pipelineScore": {
             "type": "integer",
             "description": "The deterministic score that put the pair in the band."
+          }
+        }
+      },
+      "HandoverQrToken": {
+        "type": "object",
+        "required": [
+          "token",
+          "expiresAt"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Submit verbatim in the code field of /handover/verify."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "HandoverEvent": {
+        "type": "object",
+        "description": "One transition. Append-only: nothing updates or deletes a row.",
+        "required": [
+          "handoverId",
+          "from",
+          "to",
+          "transition",
+          "actorRole",
+          "sequence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "handoverId": {
+            "type": "string"
+          },
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Null for the first event of a handover."
+          },
+          "to": {
+            "type": "string",
+            "enum": [
+              "initiated",
+              "code_issued",
+              "awaiting_meet",
+              "verified",
+              "completed",
+              "blocked",
+              "expired",
+              "cancelled",
+              "disputed",
+              "reverted"
+            ]
+          },
+          "transition": {
+            "type": "string",
+            "enum": [
+              "issue_code",
+              "reissue_code",
+              "present_code",
+              "confirm_receipt",
+              "complete",
+              "fail_attempt",
+              "block",
+              "expire",
+              "cancel",
+              "dispute",
+              "revert"
+            ]
+          },
+          "actor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The uid that caused it, or null for the system."
+          },
+          "actorRole": {
+            "type": "string",
+            "enum": [
+              "system",
+              "owner",
+              "finder",
+              "admin"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "sequence": {
+            "type": "integer",
+            "description": "Position in this handover log. Ordering is by this, not by time."
+          },
+          "at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         }
       }
