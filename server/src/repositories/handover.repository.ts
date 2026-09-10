@@ -114,22 +114,54 @@ export class HandoverRepository {
   }
 
   /**
-   * The completion write, as one batch.
+   * The code document for a match, without the legacy fallback's date reader.
    *
-   * The handover document id is the match id, so a retry after a partial
-   * failure rewrites the same document instead of leaving a second one behind.
+   * The saga runs in a worker, where the caller has no reason to know how a
+   * pre-phase-7 document stored its timestamp. Same resolution, one argument.
    */
-  async completeHandover(write: CompletionWrite): Promise<DocumentReference> {
+  async resolveCodeRefById(matchId: string): Promise<DocumentReference> {
+    return this.resolveCodeRef(matchId, (value) => {
+      const timestamp = value as { toDate?: () => Date } | undefined;
+
+      return timestamp?.toDate?.() ?? null;
+    });
+  }
+
+  /**
+   * Archive the match and write the handover record.
+   *
+   * What is left of the old `completeHandover` batch after the item writes
+   * moved to their own saga step. Still one batch, because these three writes
+   * describe a single fact: the match is settled, and here is the record of it.
+   *
+   * The handover document id is the match id, so a retried step rewrites the
+   * same document instead of leaving a second one behind.
+   */
+  async archiveOnCompletion(write: {
+    matchId: string;
+    /**
+     * The session document, resolved by the caller.
+     *
+     * Not `codes.doc(matchId)`. A session created before phase 7 lives at a
+     * random id, and writing the back-link to the keyed path instead would
+     * *create* a stub document there — which `resolveCodeRef` then prefers
+     * over the real one, so the handover reads as an open session with no
+     * expiry while the real document sits at `verified`. Two documents
+     * disagreeing about whether a handover happened is the failure this whole
+     * phase exists to remove.
+     */
+    codeDocRef: DocumentReference;
+    record: Record<string, unknown>;
+    matchData: Record<string, unknown> | null;
+  }): Promise<DocumentReference> {
     const batch = this.firestore.batch();
     const handoverRef = this.handovers.doc(write.matchId);
 
-    batch.set(handoverRef, write.record);
-
-    // Link the completed handover back to the code document.
+    batch.set(handoverRef, write.record, { merge: true });
     batch.set(write.codeDocRef, { handoverId: handoverRef.id }, { merge: true });
 
-    // Archive the match, then remove it from the active collection. Both steps
-    // are skipped when the match was synthesized and never persisted.
+    // Skipped when the match was synthesized by the verify route and never
+    // persisted: there is nothing to archive and nothing to delete.
     if (write.matchData) {
       batch.set(this.matchHistory.doc(write.matchId), {
         ...write.matchData,
@@ -140,24 +172,21 @@ export class HandoverRepository {
       batch.delete(this.matches.doc(write.matchId));
     }
 
-    // Items, only the ones that still exist.
-    if (write.lostItemExists) {
-      batch.update(this.items.doc(write.lostItemId), {
-        status: 'Claimed',
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    }
-
-    if (write.foundItemExists) {
-      batch.update(this.items.doc(write.foundItemId), {
-        status: 'Claimed',
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    }
-
     await batch.commit();
 
     return handoverRef;
+  }
+
+  /** The chain attestation, once the write has actually landed. */
+  async recordChainAttestation(matchId: string, txHash: string): Promise<void> {
+    await this.handovers.doc(matchId).set(
+      {
+        blockchainTxHash: txHash,
+        blockchainRecorded: true,
+        blockchainRecordedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
   }
 
   /**
@@ -192,6 +221,43 @@ export class HandoverRepository {
     if (!doc.exists) return null;
 
     return doc.data() as HandoverCode;
+  }
+
+  /**
+   * The session for a match, wherever its document lives.
+   *
+   * `findCodeByMatch` reads `handoverCodes/{matchId}` and nothing else, so it
+   * answers null for a session created before phase 7, whose document carries
+   * a random id. Every other path resolves through `resolveCodeRef`, which
+   * falls back to a query; a caller that does not would 404 forever on exactly
+   * the sessions the fallback exists for.
+   */
+  async findSessionByMatch(matchId: string): Promise<HandoverCode | null> {
+    const ref = await this.resolveCodeRefById(matchId);
+    const doc = await ref.get();
+
+    if (!doc.exists) return null;
+
+    return doc.data() as HandoverCode;
+  }
+
+  /**
+   * Who reported one item.
+   *
+   * Read from the item rather than from the session, because the session
+   * stores ids and not owners, and the question being asked is whether the
+   * caller is entitled to act as the owner.
+   */
+  async ownerOf(itemId: string): Promise<string | null> {
+    if (!itemId) return null;
+
+    const doc = await this.items.doc(itemId).get();
+
+    if (!doc.exists) return null;
+
+    const reportedBy = (doc.data() as { reportedBy?: unknown }).reportedBy;
+
+    return typeof reportedBy === 'string' ? reportedBy : null;
   }
 
   /** The two items a session refers to, for the notices it has to send. */

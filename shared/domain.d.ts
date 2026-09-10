@@ -289,11 +289,87 @@ export interface CreditTransaction<TTime = unknown> {
  */
 export type HandoverCodeStatus = 'pending' | 'verified' | 'blocked' | 'expired';
 
-/** `GET /api/handover/status/:matchId`. */
+/**
+ * Where a handover is in its state machine (PLAN.md 10.1).
+ *
+ * `status` above is the projection of this through the four values that
+ * existed before the event log, and both are returned so a client written
+ * against the old vocabulary keeps working. New code should read `state`:
+ * `status` cannot tell `verified` from `completed`, or `cancelled` from
+ * `expired`, and both distinctions decide what an admin can do next.
+ */
+export type HandoverState =
+  | 'initiated'
+  | 'code_issued'
+  | 'awaiting_meet'
+  | 'verified'
+  | 'completed'
+  | 'blocked'
+  | 'expired'
+  | 'cancelled'
+  | 'disputed'
+  | 'reverted';
+
+export type HandoverTransition =
+  | 'issue_code'
+  | 'reissue_code'
+  | 'present_code'
+  | 'confirm_receipt'
+  | 'complete'
+  | 'fail_attempt'
+  | 'block'
+  | 'expire'
+  | 'cancel'
+  | 'dispute'
+  | 'revert';
+
+/** Who caused a transition. `system` is the pipeline or a worker. */
+export type HandoverActorRole = 'system' | 'owner' | 'finder' | 'admin';
+
+/** One row of the append-only handover event log. */
+export interface HandoverEvent<TTime = unknown> {
+  id: string;
+  handoverId: string;
+  /** Null for the first event of a handover. */
+  from: HandoverState | null;
+  to: HandoverState;
+  transition: HandoverTransition;
+  /** The uid that caused it, or null for the system. */
+  actor: string | null;
+  actorRole: HandoverActorRole;
+  reason: string | null;
+  metadata: Record<string, unknown>;
+  /** Position in this handover's log. Ordering is by this, not by time. */
+  sequence: number;
+  at: TTime;
+}
+
+/**
+ * `GET /api/handover/status/:matchId`.
+ *
+ * The three fields the event log added are optional, and deliberately so. The
+ * client and the API deploy separately, so a browser holding the new bundle
+ * can be talking to a server that predates phase 26 and sends only `status`.
+ * The verify page reads `state` where it is there and falls back to `status`
+ * where it is not; typing them as required would make that fallback look like
+ * dead code and invite somebody to delete it.
+ */
 export interface HandoverStatus {
   status: HandoverCodeStatus;
+  state?: HandoverState;
   attempts: number;
   maxAttempts: number;
+  expiresAt: string;
+  /** Milliseconds until another attempt is accepted. Zero when one is. */
+  retryAfterMs?: number;
+  /** The finder presented the code and the owner has not confirmed receipt. */
+  awaitingConfirmation?: boolean;
+}
+
+/** `GET /api/handover/qr/:matchId`. */
+export interface HandoverQrToken {
+  /** Submitted verbatim in the `code` field of the verify endpoint. */
+  token: string;
   expiresAt: string;
 }
 
@@ -302,6 +378,15 @@ export interface VerifyCodeResult {
   success: boolean;
   message: string;
   attemptsLeft?: number;
+  /**
+   * Milliseconds to wait before another attempt is accepted.
+   *
+   * Present when the attempt was refused for coming too soon after the last
+   * one. A six-digit code has a million values, and the attempt cap alone
+   * bounds how many guesses a session allows without bounding how fast they
+   * arrive.
+   */
+  retryAfterMs?: number;
 }
 
 /**

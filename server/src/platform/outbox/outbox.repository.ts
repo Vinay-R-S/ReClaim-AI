@@ -8,7 +8,7 @@
  * only thing that has to succeed for the work to be guaranteed.
  */
 
-import { FieldValue, Timestamp, type WriteBatch } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type Transaction, type WriteBatch } from 'firebase-admin/firestore';
 import { collections } from '../../utils/firebase-admin.js';
 import { currentTraceparent } from '../tracing/context.js';
 import { EVENT_VERSIONS, type OutboxEvent, type OutboxEventName } from './event.catalog.js';
@@ -42,6 +42,32 @@ export class OutboxRepository {
     const ref = this.outbox.doc();
 
     batch.set(ref, {
+      name: event.name,
+      version: EVENT_VERSIONS[event.name],
+      payload: event.payload,
+      status: 'pending',
+      attempts: 0,
+      availableAt: Timestamp.now(),
+      leaseExpiresAt: null,
+      traceparent: currentTraceparent(),
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return ref.id;
+  }
+
+  /**
+   * The same, inside a transaction the caller is already running.
+   *
+   * A batch cannot read, and a state transition has to read the current state
+   * before it may write the next one, so the handover machine runs in a
+   * transaction rather than a batch. The guarantee is the one that matters
+   * either way: the event and the state change it describes commit together.
+   */
+  appendInTransaction(tx: Transaction, event: OutboxEvent): string {
+    const ref = this.outbox.doc();
+
+    tx.set(ref, {
       name: event.name,
       version: EVENT_VERSIONS[event.name],
       payload: event.payload,

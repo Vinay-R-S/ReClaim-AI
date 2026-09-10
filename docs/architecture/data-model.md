@@ -16,6 +16,8 @@ erDiagram
     handovers }o--|| users : "owner and finder"
     items ||--o{ adminAudit : "moderated in"
     handoverCodes ||--o{ handoverAudit : "overridden in"
+    handoverCodes ||--o{ handoverEvents : "every transition"
+    handoverCodes ||--o{ handoverSteps : "one row per saga step"
 
     users {
         string uid PK
@@ -54,8 +56,27 @@ erDiagram
         string codeHash
         number codeHashVersion
         number attempts
-        string status
+        string state "the machine state; `status` projects it for old readers"
+        number sequence "position of the last event, for the next event id"
         timestamp expiresAt
+    }
+    handoverEvents {
+        string id PK "handoverId:sequence"
+        string handoverId FK
+        string from
+        string to
+        string transition
+        string actor
+        string actorRole
+        number sequence
+        timestamp at
+    }
+    handoverSteps {
+        string id PK "handoverId:step"
+        string handoverId FK
+        string step
+        string status "done, skipped or escalated"
+        map undo "what a compensation will need"
     }
     handovers {
         string id PK
@@ -83,7 +104,10 @@ erDiagram
 | `items`              | auto                     | The report: text, type, status, moderation, location, coordinates, images, tags                                     | Nothing. Closed entirely; every screen reads `GET /api/v1/items`               |
 | `matches`            | auto                     | An open proposed or verified pair, with the per-signal scores and, when the pair was adjudicated, the agent's trace | Admin read                                                                     |
 | `matchHistory`       | the match id             | A match archived on completion, so dashboards keep counting it                                                      | Admin read                                                                     |
-| `handoverCodes`      | the match id             | The hashed code, attempt count, expiry, override markers                                                            | Nothing, either direction                                                      |
+| `handoverCodes`      | the match id             | The hashed code, attempt count, expiry, override markers, and the machine's current state                           | Nothing, either direction                                                      |
+| `handoverEvents`     | `handoverId:sequence`    | Every handover transition, append-only. The source of truth the state above projects, and the evidence a dispute is resolved from | Nothing, either direction                     |
+| `handoverSteps`      | `handoverId:step`        | One row per completed completion-saga step, with what a compensation would need. Also what makes a redelivered job a no-op | Nothing, either direction                             |
+| `escalations`        | `handoverId:step`        | A saga step that exhausted its retries, with the compensation an admin would apply                                  | Nothing, either direction                                                      |
 | `handovers`          | auto                     | The completed handover: both item snapshots, both people, score, chain hash, `participantIds`                       | Admin read                                                                     |
 | `handoverAudit`      | auto                     | Criteria overrides and code re-issues, with the admin and their reason                                              | Nothing                                                                        |
 | `adminAudit`         | auto                     | Moderation decisions and match verdicts                                                                             | Nothing                                                                        |

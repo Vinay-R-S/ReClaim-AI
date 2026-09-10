@@ -15,12 +15,14 @@ import {
   authMiddleware,
   handoverStatusLimiter,
   handoverVerifyLimiter,
+  requireActiveUser,
   requireAdmin,
   requireOwnership,
   validate,
   validateParams,
 } from '../middleware/index.js';
 import {
+  handoverConfirmSchema,
   handoverReissueSchema,
   handoverVerifySchema,
   matchIdParamsSchema,
@@ -48,6 +50,50 @@ router.post(
   handoverVerifyLimiter,
   validate(handoverVerifySchema),
   asyncHandler(handoverController.verify),
+);
+
+/**
+ * POST /confirm - the owner confirms they have the item.
+ *
+ * The second half of two-party confirmation. Authenticated, and the controller
+ * checks that the caller is the person who reported the lost item: the finder
+ * already holds the code, so letting them confirm as well would close the
+ * handover with one party's say-so, which is what two-party exists to prevent.
+ */
+router.post(
+  '/confirm',
+  authMiddleware,
+  // Blocked accounts and deleted profiles are refused here, as they are on
+  // every other authenticated route on this router. Without it a user banned
+  // for handover fraud kept the ability to close handovers and collect the
+  // credits for them.
+  requireActiveUser,
+  handoverVerifyLimiter,
+  validate(handoverConfirmSchema),
+  asyncHandler(handoverController.confirm),
+);
+
+/**
+ * GET /qr/:matchId - a short-lived token for the owner to show the finder.
+ *
+ * Rate limited like verification, because it mints a credential.
+ */
+router.get(
+  '/qr/:matchId',
+  authMiddleware,
+  requireActiveUser,
+  handoverVerifyLimiter,
+  validateParams(matchIdParamsSchema),
+  asyncHandler(handoverController.qr),
+);
+
+/** GET /timeline/:matchId - admin: every transition this handover has made */
+router.get(
+  '/timeline/:matchId',
+  authMiddleware,
+  requireAdmin,
+  validateParams(matchIdParamsSchema),
+  asyncHandler(handoverController.timeline),
 );
 
 /** GET /status/:matchId - public: what state the session is in */

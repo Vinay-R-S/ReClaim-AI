@@ -7,13 +7,23 @@ import { AlertTriangle, CheckCircle, Clock, Lock } from 'lucide-react';
 /**
  * Page states.
  *
- * These are not the server's states. The server reports the code document as
- * `pending`, `verified`, `blocked` or `expired`; this maps those onto what the
+ * These are not the server's states. The server reports a handover state from
+ * its own machine; this maps the ones a finder can be looking at onto what the
  * page shows, and adds the states only the page has: the initial read, an
  * in-flight submit, a rejected code, and a link with no session behind it.
  */
 type PageStatus =
-  'checking' | 'idle' | 'loading' | 'success' | 'error' | 'blocked' | 'expired' | 'not_found';
+  | 'checking'
+  | 'idle'
+  | 'loading'
+  | 'success'
+  | 'error'
+  | 'blocked'
+  | 'expired'
+  | 'not_found'
+  // The code was accepted and the owner has not confirmed receipt yet. Only
+  // reachable when the server runs with two-party confirmation on.
+  | 'awaiting_confirmation';
 
 /**
  * Whether a session has lapsed, whatever its stored status says.
@@ -69,19 +79,45 @@ export default function VerifyHandoverPage() {
     // Order matters. A handover completed weeks ago has a long-past
     // `expiresAt`, so the settled states are decided first and expiry only
     // describes a session that is still open.
-    if (statusData.status === 'verified') {
+    //
+    // `state` where it exists, `status` otherwise: a server that predates the
+    // event log sends only the second, and the page has to work against both
+    // for as long as one of them might be deployed.
+    const state = statusData.state;
+
+    if (state === 'completed' || state === 'verified' || (!state && statusData.status === 'verified')) {
       setStatus('success');
       setMessage('This handover has already been completed.');
       return true;
     }
 
-    if (statusData.status === 'blocked') {
+    if (state === 'awaiting_meet' || statusData.awaitingConfirmation) {
+      setStatus('awaiting_confirmation');
+      setMessage(
+        'Your code was accepted. The handover completes once the owner confirms they have the item.',
+      );
+      return true;
+    }
+
+    if (state === 'cancelled') {
+      setStatus('expired');
+      setMessage('This handover was cancelled. Ask an admin if you think that is wrong.');
+      return true;
+    }
+
+    if (state === 'disputed') {
+      setStatus('blocked');
+      setMessage('This handover is under review and is not accepting a code.');
+      return true;
+    }
+
+    if (state === 'blocked' || (!state && statusData.status === 'blocked')) {
       setStatus('blocked');
       setMessage('Too many failed attempts. This handover is blocked.');
       return true;
     }
 
-    if (statusData.status === 'expired' || hasExpired(statusData)) {
+    if (state === 'expired' || statusData.status === 'expired' || hasExpired(statusData)) {
       setStatus('expired');
       setMessage('This handover code has expired. Ask an admin to issue a new one.');
       return true;
@@ -117,6 +153,29 @@ export default function VerifyHandoverPage() {
 
       setStatus('error');
       setMessage('Could not reach the verification service. Please try again.');
+    }
+  };
+
+  /**
+   * Whether the accepted code left the handover waiting on the owner.
+   *
+   * A read of its own rather than a flag on the verify response, because the
+   * page has to answer the same question on a reload, where there is no verify
+   * response to read.
+   */
+  const isAwaitingConfirmation = async (): Promise<boolean> => {
+    if (!matchId) return false;
+
+    try {
+      const statusData = await handoverService.getStatus(matchId);
+
+      return Boolean(statusData?.awaitingConfirmation || statusData?.state === 'awaiting_meet');
+    } catch {
+      // A read that fails says nothing about the handover, and the code was
+      // accepted either way. Treating it as finished is the honest default:
+      // the alternative tells the finder to wait for something that may
+      // already have happened.
+      return false;
     }
   };
 
@@ -169,8 +228,20 @@ export default function VerifyHandoverPage() {
       const result = await handoverService.verifyCode(matchId, fullCode);
 
       if (result.success) {
-        setStatus('success');
-        setMessage('Handover verified successfully! Thank you for helping return the item.');
+        // Two-party confirmation turns an accepted code into a wait rather
+        // than an ending: the owner still has to say they have the item. The
+        // server's own message says which of the two happened, so it is shown
+        // rather than a message assumed here.
+        const awaiting = await isAwaitingConfirmation();
+
+        setStatus(awaiting ? 'awaiting_confirmation' : 'success');
+        setMessage(
+          awaiting
+            ? result.message ||
+                'Your code was accepted. The handover completes once the owner confirms.'
+            : 'Handover verified successfully! Thank you for helping return the item.',
+        );
+
         return;
       }
 
@@ -281,6 +352,24 @@ export default function VerifyHandoverPage() {
                   style={{ color: googleBlue }}
                 >
                   Contact Support
+                </button>
+              </div>
+            ) : status === 'awaiting_confirmation' ? (
+              <div className="text-center">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                  style={{ backgroundColor: '#E8F0FE' }}
+                >
+                  <Clock className="w-8 h-8" style={{ color: googleBlue }} />
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-1">Code accepted</h3>
+                <p className="text-gray-600 mb-6 text-sm">{message}</p>
+                <button
+                  onClick={() => navigate('/')}
+                  className="px-6 py-2 rounded text-white font-medium text-sm transition-colors hover:opacity-90"
+                  style={{ backgroundColor: googleBlue }}
+                >
+                  Return to Home
                 </button>
               </div>
             ) : status === 'success' ? (

@@ -13,13 +13,22 @@
 
 import type { JobName, JobPayloads } from '../jobs/job.types.js';
 
-export const OUTBOX_EVENTS = ['item.created', 'item.approved'] as const;
+export const OUTBOX_EVENTS = ['item.created', 'item.approved', 'handover.verified'] as const;
 
 export type OutboxEventName = (typeof OUTBOX_EVENTS)[number];
 
 export interface OutboxEventPayloads {
   'item.created': { itemId: string; moderation: 'pending' | 'approved' | 'rejected' };
   'item.approved': { itemId: string };
+  /**
+   * Both parties have done what the policy requires, and the handover is real.
+   *
+   * A fact, not a command: it says the verification happened, and the five
+   * consumers below decide what that means for items, matches, credits, email
+   * and the chain. The old code ran all five inline and lost whichever ones
+   * came after the first failure.
+   */
+  'handover.verified': { handoverId: string; lostItemId: string; foundItemId: string };
 }
 
 export interface OutboxEvent<N extends OutboxEventName = OutboxEventName> {
@@ -30,6 +39,7 @@ export interface OutboxEvent<N extends OutboxEventName = OutboxEventName> {
 export const EVENT_VERSIONS: Record<OutboxEventName, number> = {
   'item.created': 1,
   'item.approved': 1,
+  'handover.verified': 1,
 };
 
 export interface JobDispatch {
@@ -59,6 +69,8 @@ export function routeEvent(
   name: OutboxEventName,
   payload: Record<string, unknown>,
 ): JobDispatch[] {
+  if (name === 'handover.verified') return routeHandoverVerified(eventId, payload);
+
   const itemId = typeof payload.itemId === 'string' ? payload.itemId : null;
 
   if (!itemId) return [];
@@ -79,4 +91,46 @@ export function routeEvent(
       idempotencyKey: `match.item:${itemId}:${eventId}`,
     },
   ];
+}
+
+/**
+ * The five side effects of a completed handover.
+ *
+ * All five are dispatched from the one fact rather than chained, because they
+ * are independent: crediting the finder does not depend on the chain write,
+ * and making it depend on one would mean an outage in the slowest step
+ * withholding the reward for the fastest. Each is idempotent on
+ * `(handoverId, step)`, so redelivery is a no-op and order does not matter.
+ *
+ * What is ordered is the handover's own state: it reaches `completed` when the
+ * steps that must have happened have happened, which the saga decides, not
+ * this function.
+ */
+function routeHandoverVerified(eventId: string, payload: Record<string, unknown>): JobDispatch[] {
+  const handoverId = typeof payload.handoverId === 'string' ? payload.handoverId : null;
+  const lostItemId = typeof payload.lostItemId === 'string' ? payload.lostItemId : null;
+  const foundItemId = typeof payload.foundItemId === 'string' ? payload.foundItemId : null;
+
+  // All three, not just the handover. Coercing a missing item id to an empty
+  // string dispatched five jobs anyway, and `items.doc('')` throws on every
+  // attempt: the blocking step burned its retries, escalated, and raised an
+  // escalation whose stated remedy is to re-run a job that can never succeed.
+  if (!handoverId || !lostItemId || !foundItemId) return [];
+
+  const steps: JobName[] = [
+    'handover.items',
+    'handover.archive',
+    'handover.credits',
+    'handover.notify',
+    'handover.chain',
+  ];
+
+  return steps.map((step) => ({
+    name: step,
+    payload: { handoverId, lostItemId, foundItemId },
+    // The event id rather than the handover id alone: a redelivery of this
+    // event is the same run, and a genuine second verification after a revert
+    // is a new one.
+    idempotencyKey: `${step}:${handoverId}:${eventId}`,
+  }));
 }

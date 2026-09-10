@@ -243,6 +243,20 @@
           }
         }
       ]
+    },
+    {
+      "collectionGroup": "handoverEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "handoverId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sequence",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

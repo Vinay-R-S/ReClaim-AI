@@ -87,7 +87,17 @@ the effect idempotent is what does.
 | Event           | Raised by                              | Dispatches                                                                                      |
 | --------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `item.created`  | `POST /items`, in the item's own batch | `match.item`, only when created by an admin, because an admin's own report is approved on write |
-| `item.approved` | `PUT /items/:id/moderate`, approving   | `match.item`                                                                                    |
+| `item.approved` | `PUT /items/:id/moderate`, approving   | `match.item`, `embed.item`                                                                      |
+| `handover.verified` | The handover state machine, in the same transaction as the transition to `verified` | `handover.items`, `handover.archive`, `handover.credits`, `handover.notify`, `handover.chain` |
+
+`handover.verified` is the completion saga (PLAN.md 10.2). Completing a
+handover has five side effects, and they used to run inline as a batch plus
+three fire-and-forget blocks, so a failure past the batch left the item
+statuses, the match record and the credits disagreeing about whether the
+handover had happened. Each is now a job with its own retry policy, its own
+dead-letter queue and its own idempotency key, and a step that exhausts its
+retries raises an escalation carrying the compensation an admin would need.
+See [state machines](state-machines.md) for the table.
 
 Versioning rule: add fields, never repurpose one. A change an old consumer
 could not read is a new `version`, and the drainer handles both until the last

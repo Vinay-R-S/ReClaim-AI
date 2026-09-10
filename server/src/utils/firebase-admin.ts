@@ -57,6 +57,9 @@ export const collections = {
   handovers: db.collection('handovers'),
   handoverCodes: db.collection('handoverCodes'),
   handoverAudit: db.collection('handoverAudit'), // Admin overrides and code re-issues
+  handoverEvents: db.collection('handoverEvents'), // Every handover state transition, append-only
+  handoverSteps: db.collection('handoverSteps'), // One row per completed saga step, for idempotency
+  escalations: db.collection('escalations'), // Saga steps that gave up and need a person
   adminAudit: db.collection('adminAudit'), // Moderation and match verification decisions
   outbox: db.collection('outbox'), // Domain events written with the state change that raised them
   jobClaims: db.collection('jobClaims'), // Idempotency keys held by a running job

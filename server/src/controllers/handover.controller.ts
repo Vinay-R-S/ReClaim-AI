@@ -4,15 +4,22 @@
 
 import { Request, Response } from 'express';
 import {
+  confirmHandoverReceipt,
+  getHandoverHistory,
   getHandoverStatus,
   initiateHandover,
+  issueHandoverQr,
   verifyHandoverCode,
 } from '../services/handover.service.js';
 import { HandoverRepository, handoverRepository } from '../repositories/handover.repository.js';
 import { settingsRepository } from '../repositories/settings.repository.js';
 import { AppError } from '../middleware/errorHandler.middleware.js';
 import type { AuthRequest } from '../middleware/auth.middleware.js';
-import type { HandoverReissueBody, HandoverVerifyBody } from '../schemas/index.js';
+import type {
+  HandoverConfirmBody,
+  HandoverReissueBody,
+  HandoverVerifyBody,
+} from '../schemas/index.js';
 
 export class HandoverController {
   constructor(private readonly handovers: HandoverRepository = handoverRepository) {}
@@ -50,6 +57,85 @@ export class HandoverController {
     const { matchId, code } = req.body as HandoverVerifyBody;
 
     return res.json(await verifyHandoverCode(matchId, code));
+  };
+
+  /**
+   * The second party confirms, closing a two-party handover.
+   *
+   * The party entitled to confirm is the one who reported the *found* item,
+   * and that is the whole security argument. The six-digit code is emailed to
+   * the person who lost the item and the verification link to the person who
+   * found it, so the owner already holds the credential: gating confirmation
+   * on the owner as well would let one person present their own code and then
+   * confirm their own receipt, which is exactly what two-party exists to stop.
+   * Requiring the other side means neither can finish alone — the owner cannot
+   * confirm, and the finder cannot present a code they were never sent.
+   */
+  confirm = async (req: AuthRequest, res: Response): Promise<Response> => {
+    const { matchId } = req.body as HandoverConfirmBody;
+    const uid = req.user?.uid;
+
+    if (!uid) throw new AppError('Authentication required', 401);
+
+    const session = await this.handovers.findSessionByMatch(matchId);
+
+    if (!session) throw new AppError('Handover session not found', 404);
+
+    const isAdmin = req.user?.role === 'admin';
+    const finder = await this.handovers.ownerOf(session.foundItemId);
+
+    if (!isAdmin && finder !== uid) {
+      throw new AppError('Only the person who reported the found item can confirm a handover', 403);
+    }
+
+    const result = await confirmHandoverReceipt(matchId, uid, isAdmin ? 'admin' : 'finder');
+
+    if (!result.success) throw new AppError(result.message, 409);
+
+    return res.json(result);
+  };
+
+  /**
+   * A short-lived QR token for the owner to show the finder.
+   *
+   * The token stands in for the six-digit code, and the code is the owner's,
+   * so this is the one endpoint gated on the person who reported the lost
+   * item. Minting it for anyone else would hand the credential to the party
+   * whose confirmation is supposed to be the second factor.
+   */
+  qr = async (req: AuthRequest, res: Response): Promise<Response> => {
+    const { matchId } = req.params;
+    const uid = req.user?.uid;
+
+    if (!uid) throw new AppError('Authentication required', 401);
+
+    const session = await this.handovers.findSessionByMatch(matchId);
+
+    if (!session) throw new AppError('Handover session not found', 404);
+
+    const owner = await this.handovers.ownerOf(session.lostItemId);
+
+    if (req.user?.role !== 'admin' && owner !== uid) {
+      throw new AppError('Only the person who reported the lost item can show this code', 403);
+    }
+
+    const token = await issueHandoverQr(matchId);
+
+    if (!token) throw new AppError('This handover is not accepting a code', 409);
+
+    return res.json({ token: token.token, expiresAt: token.expiresAt.toISOString() });
+  };
+
+  /** The event log for one handover. Admin only: it names both parties. */
+  timeline = async (req: AuthRequest, res: Response): Promise<Response> => {
+    const events = await getHandoverHistory(req.params.matchId);
+
+    return res.json({
+      events: events.map((event) => ({
+        ...event,
+        at: event.at ? event.at.toISOString() : null,
+      })),
+    });
   };
 
   status = async (req: Request, res: Response): Promise<Response> => {
