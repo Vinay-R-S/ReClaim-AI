@@ -150,8 +150,18 @@ export class ItemRepository {
    * would silently exclude legacy items written before that field existed and
    * persist a wrong total, which is the opposite of what a repair is for.
    */
-  async listAllByReporter(userId: string): Promise<StoredItem[]> {
-    const snapshot = await this.items.where('reportedBy', '==', userId).get();
+  /**
+   * Every report an account has filed.
+   *
+   * `cap` bounds the read for callers that only want to know roughly how much
+   * somebody has filed rather than what. An equality filter takes a limit from
+   * the single-field index, so this needs no composite index; the order is
+   * unspecified, which is why the only capped caller reports "N or more"
+   * rather than a total it cannot stand behind.
+   */
+  async listAllByReporter(userId: string, cap?: number): Promise<StoredItem[]> {
+    const base = this.items.where('reportedBy', '==', userId);
+    const snapshot = await (cap ? base.limit(cap) : base).get();
 
     return snapshot.docs.map((doc) => toStoredItem(doc));
   }

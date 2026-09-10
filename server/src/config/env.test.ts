@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { MATCH_CONFIG } from '../utils/scoring.js';
 import { buildEnv } from './env.js';
 
 /** Enough of an environment to build without tripping an unrelated rule. */
@@ -129,5 +130,65 @@ describe('queue configuration', () => {
         }),
       ).queue,
     ).toMatchObject({ concurrency: 8, outboxPollIntervalMs: 500, outboxBatchSize: 50 });
+  });
+});
+
+describe('retired settings', () => {
+  it('says so when RERANK_MODE is still set', () => {
+    // Silence would be worse than a warning. An operator who set
+    // `RERANK_MODE=off` to stop paying for the reranker would get the opposite
+    // of what they asked for: it is the only semantic scorer there is.
+    const env = buildEnv(environment({ RERANK_MODE: 'off' }));
+
+    expect(env.warnings.join(' ')).toContain('RERANK_MODE is set to "off" and is no longer read');
+  });
+
+  it('stays quiet when it is absent', () => {
+    expect(buildEnv(environment()).warnings.join(' ')).not.toContain('RERANK_MODE');
+  });
+});
+
+describe('the adjudication band', () => {
+  it('takes the documented defaults, including the budget chosen against the job timeout', () => {
+    expect(buildEnv(environment()).matching).toMatchObject({
+      adjudicationMode: 'shadow',
+      adjudicationBandLow: 60,
+      adjudicationBandHigh: 85,
+      adjudicationMaxToolCalls: 8,
+      // Chosen against the 120s `match.item` attempt this stage runs inside,
+      // which it shares with retrieval, scoring and the rerank.
+      adjudicationDeadlineMs: 20_000,
+      adjudicationMinConfidence: 70,
+    });
+  });
+
+  it('starts the band above the match threshold, so the agent demotes rather than promotes', () => {
+    const { adjudicationBandLow } = buildEnv(environment()).matching;
+
+    // With the band above the threshold the agent can take a pair out of the
+    // matched set or hold it for a person, and cannot add one. Lowering
+    // BAND_LOW below the threshold is what surfaces a sub-threshold pair for
+    // review, and `.env.example` says so.
+    expect(adjudicationBandLow).toBeGreaterThan(MATCH_CONFIG.THRESHOLD);
+  });
+
+  it('warns when the band is empty, because nothing would ever be adjudicated', () => {
+    const env = buildEnv(
+      environment({ ADJUDICATION_BAND_LOW: '85', ADJUDICATION_BAND_HIGH: '60' }),
+    );
+
+    expect(env.warnings.join(' ')).toContain('is not below ADJUDICATION_BAND_HIGH');
+  });
+
+  it('stays quiet about the band when the agent is switched off', () => {
+    const env = buildEnv(
+      environment({
+        ADJUDICATION_MODE: 'off',
+        ADJUDICATION_BAND_LOW: '85',
+        ADJUDICATION_BAND_HIGH: '60',
+      }),
+    );
+
+    expect(env.warnings.join(' ')).not.toContain('ADJUDICATION_BAND_HIGH');
   });
 });

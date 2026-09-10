@@ -81,3 +81,35 @@ export interface VectorIndex {
 export function similarityFromDistance(distance: number): number {
   return Math.max(0, Math.min(1, 1 - distance));
 }
+
+/**
+ * Cosine similarity between two vectors held in memory.
+ *
+ * The encoders in `platform/embeddings` L2-normalise their output, so for
+ * their vectors this is a dot product and the division is by one. It divides
+ * anyway: the caller here is a tool that reads whatever is stored on an item
+ * document, which may have been written by an older encoder or a backfill, and
+ * a similarity that is silently a dot product of unnormalised vectors is
+ * unbounded and reads as a confident number.
+ *
+ * Returns null rather than a number when the two cannot be compared at all: a
+ * length mismatch means two different models, and comparing across them
+ * produces a value with no meaning.
+ */
+export function cosineSimilarity(a: Float32Array, b: Float32Array): number | null {
+  if (a.length === 0 || a.length !== b.length) return null;
+
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let index = 0; index < a.length; index += 1) {
+    dot += a[index] * b[index];
+    normA += a[index] * a[index];
+    normB += b[index] * b[index];
+  }
+
+  if (normA === 0 || normB === 0) return null;
+
+  return dot / Math.sqrt(normA * normB);
+}

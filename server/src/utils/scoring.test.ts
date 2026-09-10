@@ -238,3 +238,41 @@ describe('getTagsWithFallback', () => {
     expect(getTagsWithFallback()).toEqual([]);
   });
 });
+
+describe('the weights, as the matching guards depend on them', () => {
+  /**
+   * `REQUIRE_SEMANTIC_FOR_MATCH` and `MIN_APPLICABLE_WEIGHT` are two guards
+   * against pairing reports on almost nothing, and today the second makes the
+   * first redundant: without the semantic component the applicable weight can
+   * reach at most 50, and the floor is 65. That redundancy is defence in
+   * depth and worth keeping — but it is also why no test can reach the
+   * semantic guard, so a retune that lowers the floor or raises the other
+   * weights would quietly make it the only thing standing between a provider
+   * outage and two strangers being emailed a collection code.
+   *
+   * This pins the arithmetic rather than the guard, so the retune is what
+   * fails.
+   */
+  it('cannot reach the applicable-weight floor without a semantic verdict', () => {
+    const { color, location, time, image } = MATCH_CONFIG.WEIGHTS;
+    const withoutSemantic = color + location + time + image;
+
+    // 65 in matching.pipeline.ts. Duplicated deliberately: a test that
+    // imported it would move with it and prove nothing.
+    expect(withoutSemantic).toBeLessThan(65);
+  });
+
+  it('sums to one hundred, which is what makes a normalised score a percentage', () => {
+    const total = Object.values(MATCH_CONFIG.WEIGHTS).reduce((sum, weight) => sum + weight, 0);
+
+    expect(total).toBe(100);
+  });
+
+  it('keeps the threshold inside the band the adjudication agent is asked about', () => {
+    // The band defaults to 60-85 and the threshold is 55, so the agent can
+    // demote or hold but never promote. That is the intended shipping posture;
+    // if the threshold ever rises above the band's floor, a pair could be a
+    // match the agent is never asked about.
+    expect(MATCH_CONFIG.THRESHOLD).toBeLessThan(60);
+  });
+});

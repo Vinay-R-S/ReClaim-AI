@@ -76,7 +76,9 @@
       "post": {
         "operationId": "analyzeImage",
         "summary": "Describe and tag item photos",
-        "tags": ["AI"],
+        "tags": [
+          "AI"
+        ],
         "description": "Fills the report form from the photos. Rate limited on its own budget.",
         "responses": {
           "200": {
@@ -129,7 +131,9 @@
       "post": {
         "operationId": "enhanceDescription",
         "summary": "Improve a description",
-        "tags": ["AI"],
+        "tags": [
+          "AI"
+        ],
         "description": "Rewrites the reporter's text into something searchable.",
         "responses": {
           "200": {
@@ -179,7 +183,9 @@
       "get": {
         "operationId": "getAiStatus",
         "summary": "Which providers are configured",
-        "tags": ["AI"],
+        "tags": [
+          "AI"
+        ],
         "description": "Reports availability without revealing a key.",
         "responses": {
           "200": {
@@ -216,7 +222,9 @@
       "post": {
         "operationId": "sendLoginNotification",
         "summary": "Email a sign-in notice",
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "description": "Fires once per successful sign-in, which is why it has its own limiter rather than the credential one.",
         "responses": {
           "200": {
@@ -266,7 +274,9 @@
       "post": {
         "operationId": "bootstrapProfile",
         "summary": "Create or refresh the caller's profile",
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "description": "The only route that creates `users/{uid}`. Runs on every app mount. Role, status and credits are server-set; the body may carry display fields only, and they are dropped rather than rejected when they do not fit. A 403 means the account is blocked.",
         "responses": {
           "200": {
@@ -326,7 +336,9 @@
       "post": {
         "operationId": "analyzeFootage",
         "summary": "Detect across sampled video frames",
-        "tags": ["CCTV"],
+        "tags": [
+          "CCTV"
+        ],
         "description": "Frames are sampled in the browser, not decoded here.",
         "responses": {
           "200": {
@@ -379,7 +391,9 @@
       "get": {
         "operationId": "listDetectionClasses",
         "summary": "Classes the detector knows",
-        "tags": ["CCTV"],
+        "tags": [
+          "CCTV"
+        ],
         "description": "Returns 503 with a hint when the vision service is unreachable, because an empty list would read as a working detector that knows nothing.",
         "responses": {
           "200": {
@@ -419,7 +433,9 @@
       "post": {
         "operationId": "describeDetection",
         "summary": "Describe a detected object",
-        "tags": ["CCTV"],
+        "tags": [
+          "CCTV"
+        ],
         "description": "Turns a detection into the text a found-item report needs.",
         "responses": {
           "200": {
@@ -469,7 +485,9 @@
       "post": {
         "operationId": "detectObjects",
         "summary": "Detect objects in one frame",
-        "tags": ["CCTV"],
+        "tags": [
+          "CCTV"
+        ],
         "description": "Proxies the Flask service, which refuses every request without the shared token. Has its own scan limiter so the live tab does not exhaust the AI budget.",
         "responses": {
           "200": {
@@ -522,7 +540,9 @@
       "get": {
         "operationId": "listCreditHistory",
         "summary": "The ledger behind a balance",
-        "tags": ["Credits"],
+        "tags": [
+          "Credits"
+        ],
         "description": "Own history, or any if the caller is an admin. Newest first, capped at 50.",
         "responses": {
           "200": {
@@ -571,7 +591,9 @@
       "get": {
         "operationId": "getCreditBalance",
         "summary": "Credit balance",
-        "tags": ["Credits"],
+        "tags": [
+          "Credits"
+        ],
         "description": "Own balance, or any if the caller is an admin.",
         "responses": {
           "200": {
@@ -621,7 +643,9 @@
       "put": {
         "operationId": "adjustCredits",
         "summary": "Adjust a balance",
-        "tags": ["Credits"],
+        "tags": [
+          "Credits"
+        ],
         "description": "A delta, not a target. Writes a ledger entry with the reason and is deliberately not idempotent: the same adjustment twice is two events.",
         "responses": {
           "200": {
@@ -686,7 +710,9 @@
       "get": {
         "operationId": "listHandovers",
         "summary": "Every completed handover",
-        "tags": ["Handover"],
+        "tags": [
+          "Handover"
+        ],
         "description": "The admin history.",
         "responses": {
           "200": {
@@ -723,7 +749,9 @@
       "post": {
         "operationId": "reissueHandover",
         "summary": "Issue a fresh code",
-        "tags": ["Handover"],
+        "tags": [
+          "Handover"
+        ],
         "description": "The only way back from a session blocked by three wrong attempts: the code is hashed, so the old one cannot be looked up. Clears the attempt budget and is recorded in the handover audit trail.",
         "responses": {
           "200": {
@@ -773,7 +801,9 @@
       "get": {
         "operationId": "listHandoverSessions",
         "summary": "Sessions that have not completed",
-        "tags": ["Handover"],
+        "tags": [
+          "Handover"
+        ],
         "description": "Open, blocked and expired sessions. The code hash is deliberately absent from the response.",
         "responses": {
           "200": {
@@ -810,7 +840,9 @@
       "get": {
         "operationId": "getHandoverStatus",
         "summary": "State of a handover session",
-        "tags": ["Handover"],
+        "tags": [
+          "Handover"
+        ],
         "description": "Public. A 404 means the link is dead, which the page must tell apart from a failure. Mounted at both `/handover` and `/handovers`. The two paths answer identically.",
         "responses": {
           "200": {
@@ -852,7 +884,9 @@
       "get": {
         "operationId": "listUserHandovers",
         "summary": "One person's handovers",
-        "tags": ["Handover"],
+        "tags": [
+          "Handover"
+        ],
         "description": "Own handovers, or any if the caller is an admin. Served by an `array-contains` query on `participantIds` once the backfill has run.",
         "responses": {
           "200": {
@@ -901,7 +935,9 @@
       "post": {
         "operationId": "verifyHandoverCode",
         "summary": "Verify a handover code",
-        "tags": ["Handover"],
+        "tags": [
+          "Handover"
+        ],
         "description": "Public by design: the finder holds a link and a code, not an account. A wrong code is a 200 with `success: false` and the attempts left, so a rate limit or an outage is never reported as a wrong code. Mounted at both `/handover` and `/handovers`. The two paths answer identically.",
         "responses": {
           "200": {
@@ -941,7 +977,9 @@
       "get": {
         "operationId": "listItems",
         "summary": "List items",
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "description": "Cursor paginated. A non-admin caller sees approved items only, whatever `moderation` asks for. Public: the browse list is readable signed out.",
         "responses": {
           "200": {
@@ -968,7 +1006,10 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": ["Lost", "Found"]
+              "enum": [
+                "Lost",
+                "Found"
+              ]
             },
             "description": "Filter by report type"
           },
@@ -978,7 +1019,11 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": ["Pending", "Matched", "Claimed"]
+              "enum": [
+                "Pending",
+                "Matched",
+                "Claimed"
+              ]
             },
             "description": "Filter by match state"
           },
@@ -988,7 +1033,11 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": ["pending", "approved", "rejected"]
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ]
             },
             "description": "Admin only"
           },
@@ -1029,7 +1078,9 @@
       "post": {
         "operationId": "createItem",
         "summary": "Report an item",
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "description": "Creates the report and returns before matching runs, so a provider failure cannot fail a saved item. A user report starts unmoderated and is invisible until an admin approves it.",
         "responses": {
           "201": {
@@ -1079,7 +1130,9 @@
       "get": {
         "operationId": "listUserItems",
         "summary": "List one person's reports",
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "description": "Own reports, or any if the caller is an admin.",
         "responses": {
           "200": {
@@ -1128,7 +1181,9 @@
       "get": {
         "operationId": "getItem",
         "summary": "Get one item",
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "description": "An unapproved or rejected item is visible only to its reporter and to admins.",
         "responses": {
           "200": {
@@ -1172,7 +1227,9 @@
       "put": {
         "operationId": "updateItem",
         "summary": "Edit an item",
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "description": "Owner or admin. `status`, `type` and `matchScore` are admin only and are dropped for anyone else. Every server-owned field is unreachable here.",
         "responses": {
           "200": {
@@ -1235,7 +1292,9 @@
       "delete": {
         "operationId": "deleteItem",
         "summary": "Delete an item",
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "description": "Owner or admin. Also removes the images from Cloudinary.",
         "responses": {
           "200": {
@@ -1287,7 +1346,9 @@
       "get": {
         "operationId": "getItemAudit",
         "summary": "Moderation history for an item",
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "description": "Every admin decision recorded against this item.",
         "responses": {
           "200": {
@@ -1336,7 +1397,9 @@
       "post": {
         "operationId": "moderateItem",
         "summary": "Approve or reject a report",
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "description": "The moderation gate. Approval is what starts matching; a rejection needs a reason, which is what the audit trail records.",
         "responses": {
           "200": {
@@ -1401,7 +1464,9 @@
       "post": {
         "operationId": "rematchItem",
         "summary": "Run matching again",
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "description": "Re-runs the pipeline for one approved item.",
         "responses": {
           "200": {
@@ -1450,7 +1515,9 @@
       "put": {
         "operationId": "setItemStatus",
         "summary": "Set item status",
-        "tags": ["Items"],
+        "tags": [
+          "Items"
+        ],
         "description": "Admin override of the match state.",
         "responses": {
           "200": {
@@ -1512,7 +1579,9 @@
       "get": {
         "operationId": "listMatches",
         "summary": "Live matches",
-        "tags": ["Matches"],
+        "tags": [
+          "Matches"
+        ],
         "description": "Open proposed and verified pairs.",
         "responses": {
           "200": {
@@ -1549,7 +1618,9 @@
       "get": {
         "operationId": "listAllMatches",
         "summary": "Live and archived matches",
-        "tags": ["Matches"],
+        "tags": [
+          "Matches"
+        ],
         "description": "Includes completed ones, so a dashboard keeps counting a handover after its match is archived. Each carries `isActive`.",
         "responses": {
           "200": {
@@ -1586,7 +1657,9 @@
       "post": {
         "operationId": "verifyMatch",
         "summary": "Decide a proposed match",
-        "tags": ["Matches"],
+        "tags": [
+          "Matches"
+        ],
         "description": "Accepting opens the handover and emails both parties. Rejecting resets both halves of the pair to Pending, and charges the false-claim penalty only when the admin ticks it and the named user is part of the pair.",
         "responses": {
           "200": {
@@ -1639,7 +1712,9 @@
       "get": {
         "operationId": "getSystemSettings",
         "summary": "System settings",
-        "tags": ["Settings"],
+        "tags": [
+          "Settings"
+        ],
         "description": "Feature flags, the AI provider and the map centre. Readable by any signed-in user because the client needs the flags.",
         "responses": {
           "200": {
@@ -1671,7 +1746,9 @@
       "put": {
         "operationId": "updateSystemSettings",
         "summary": "Change system settings",
-        "tags": ["Settings"],
+        "tags": [
+          "Settings"
+        ],
         "description": "Admin only.",
         "responses": {
           "200": {
@@ -1721,7 +1798,9 @@
       "get": {
         "operationId": "getAnalytics",
         "summary": "Visitor counter",
-        "tags": ["Settings"],
+        "tags": [
+          "Settings"
+        ],
         "description": "Admin only.",
         "responses": {
           "200": {
@@ -1758,7 +1837,9 @@
       "get": {
         "operationId": "getMode",
         "summary": "Public runtime flags",
-        "tags": ["Settings"],
+        "tags": [
+          "Settings"
+        ],
         "description": "The handful of flags a signed-out page needs. Falls back to defaults rather than failing.",
         "responses": {
           "200": {
@@ -1785,7 +1866,9 @@
       "post": {
         "operationId": "uploadProfilePicture",
         "summary": "Upload the caller's avatar",
-        "tags": ["Settings"],
+        "tags": [
+          "Settings"
+        ],
         "description": "The target account always comes from the token.",
         "responses": {
           "200": {
@@ -1835,7 +1918,9 @@
       "post": {
         "operationId": "recordVisit",
         "summary": "Count a visit",
-        "tags": ["Settings"],
+        "tags": [
+          "Settings"
+        ],
         "description": "Fire and forget from the landing page.",
         "responses": {
           "200": {
@@ -1862,7 +1947,9 @@
       "get": {
         "operationId": "getDashboard",
         "summary": "Everything the admin dashboard shows",
-        "tags": ["Stats"],
+        "tags": [
+          "Stats"
+        ],
         "description": "One request per refresh. Counts come from aggregation queries and the lists from field-masked reads, so the browser never pulls a collection.",
         "responses": {
           "200": {
@@ -1899,7 +1986,9 @@
       "get": {
         "operationId": "listUsers",
         "summary": "List accounts",
-        "tags": ["Users"],
+        "tags": [
+          "Users"
+        ],
         "description": "Cursor paginated. The browser cannot enumerate the collection directly.",
         "responses": {
           "200": {
@@ -1959,7 +2048,9 @@
       "put": {
         "operationId": "setUserStatus",
         "summary": "Block or unblock an account",
-        "tags": ["Users"],
+        "tags": [
+          "Users"
+        ],
         "description": "A blocked account is signed out with a visible reason on its next request.",
         "responses": {
           "200": {
@@ -2034,7 +2125,9 @@
       "AiStatus": {
         "type": "object",
         "description": "Availability only. No key or provider name is returned",
-        "required": ["available"],
+        "required": [
+          "available"
+        ],
         "properties": {
           "available": {
             "type": "boolean"
@@ -2048,13 +2141,18 @@
             "type": "integer"
           },
           "lastVisit": {
-            "type": ["object", "null"]
+            "type": [
+              "object",
+              "null"
+            ]
           }
         }
       },
       "AnalyzeImage": {
         "type": "object",
-        "required": ["images"],
+        "required": [
+          "images"
+        ],
         "properties": {
           "images": {
             "type": "array",
@@ -2062,7 +2160,9 @@
             "maxItems": 5,
             "items": {
               "type": "object",
-              "required": ["base64"],
+              "required": [
+                "base64"
+              ],
               "properties": {
                 "base64": {
                   "type": "string",
@@ -2104,7 +2204,9 @@
       },
       "CctvAnalyze": {
         "type": "object",
-        "required": ["frames"],
+        "required": [
+          "frames"
+        ],
         "properties": {
           "frames": {
             "type": "array",
@@ -2112,7 +2214,10 @@
             "maxItems": 300,
             "items": {
               "type": "object",
-              "required": ["image", "timestamp"],
+              "required": [
+                "image",
+                "timestamp"
+              ],
               "properties": {
                 "image": {
                   "type": "string"
@@ -2137,7 +2242,12 @@
       },
       "CctvAnalyzeResult": {
         "type": "object",
-        "required": ["success", "keyframes", "stats", "aiAnalysis"],
+        "required": [
+          "success",
+          "keyframes",
+          "stats",
+          "aiAnalysis"
+        ],
         "properties": {
           "success": {
             "type": "boolean"
@@ -2188,7 +2298,9 @@
       },
       "CctvDescribe": {
         "type": "object",
-        "required": ["image"],
+        "required": [
+          "image"
+        ],
         "properties": {
           "image": {
             "type": "string"
@@ -2227,7 +2339,9 @@
       },
       "CctvDetect": {
         "type": "object",
-        "required": ["image"],
+        "required": [
+          "image"
+        ],
         "properties": {
           "image": {
             "type": "string",
@@ -2260,7 +2374,10 @@
       },
       "Coordinates": {
         "type": "object",
-        "required": ["lat", "lng"],
+        "required": [
+          "lat",
+          "lng"
+        ],
         "properties": {
           "lat": {
             "type": "number",
@@ -2276,7 +2393,9 @@
       },
       "CreditAdjustment": {
         "type": "object",
-        "required": ["amount"],
+        "required": [
+          "amount"
+        ],
         "properties": {
           "amount": {
             "type": "integer",
@@ -2306,7 +2425,10 @@
       },
       "CreditBalance": {
         "type": "object",
-        "required": ["userId", "credits"],
+        "required": [
+          "userId",
+          "credits"
+        ],
         "properties": {
           "userId": {
             "type": "string"
@@ -2507,7 +2629,10 @@
                   "type": "string"
                 },
                 "createdAt": {
-                  "type": ["string", "null"],
+                  "type": [
+                    "string",
+                    "null"
+                  ],
                   "format": "date-time"
                 }
               }
@@ -2527,11 +2652,18 @@
                 },
                 "type": {
                   "type": "string",
-                  "enum": ["Lost", "Found"]
+                  "enum": [
+                    "Lost",
+                    "Found"
+                  ]
                 },
                 "status": {
                   "type": "string",
-                  "enum": ["Pending", "Matched", "Claimed"]
+                  "enum": [
+                    "Pending",
+                    "Matched",
+                    "Claimed"
+                  ]
                 },
                 "location": {
                   "type": "string"
@@ -2586,7 +2718,9 @@
       },
       "EnhanceDescription": {
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
           "name": {
             "type": "string",
@@ -2604,7 +2738,9 @@
       },
       "Error": {
         "type": "object",
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "string",
@@ -2672,7 +2808,11 @@
       },
       "HandoverReissue": {
         "type": "object",
-        "required": ["matchId", "lostItemId", "foundItemId"],
+        "required": [
+          "matchId",
+          "lostItemId",
+          "foundItemId"
+        ],
         "properties": {
           "matchId": {
             "type": "string"
@@ -2694,7 +2834,10 @@
       },
       "HandoverResult": {
         "type": "object",
-        "required": ["success", "message"],
+        "required": [
+          "success",
+          "message"
+        ],
         "properties": {
           "success": {
             "type": "boolean"
@@ -2723,21 +2866,34 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "blocked", "expired"]
+            "enum": [
+              "pending",
+              "blocked",
+              "expired"
+            ]
           },
           "attempts": {
             "type": "integer"
           },
           "expiresAt": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time"
           },
           "blockedAt": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time"
           },
           "criteriaOverrideBy": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -2754,11 +2910,20 @@
       },
       "HandoverStatus": {
         "type": "object",
-        "required": ["status", "attempts", "maxAttempts"],
+        "required": [
+          "status",
+          "attempts",
+          "maxAttempts"
+        ],
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["pending", "verified", "blocked", "expired"]
+            "enum": [
+              "pending",
+              "verified",
+              "blocked",
+              "expired"
+            ]
           },
           "attempts": {
             "type": "integer"
@@ -2767,14 +2932,20 @@
             "type": "integer"
           },
           "expiresAt": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time"
           }
         }
       },
       "HandoverVerify": {
         "type": "object",
-        "required": ["matchId", "code"],
+        "required": [
+          "matchId",
+          "code"
+        ],
         "properties": {
           "matchId": {
             "type": "string"
@@ -2811,15 +2982,26 @@
           },
           "type": {
             "type": "string",
-            "enum": ["Lost", "Found"]
+            "enum": [
+              "Lost",
+              "Found"
+            ]
           },
           "status": {
             "type": "string",
-            "enum": ["Pending", "Matched", "Claimed"]
+            "enum": [
+              "Pending",
+              "Matched",
+              "Claimed"
+            ]
           },
           "moderation": {
             "type": "string",
-            "enum": ["pending", "approved", "rejected"],
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
             "description": "Absent on items that predate review, which read as approved"
           },
           "moderatedBy": {
@@ -2834,7 +3016,10 @@
           },
           "coordinates": {
             "type": "object",
-            "required": ["lat", "lng"],
+            "required": [
+              "lat",
+              "lng"
+            ],
             "properties": {
               "lat": {
                 "type": "number",
@@ -2879,7 +3064,10 @@
           },
           "collectionCoordinates": {
             "type": "object",
-            "required": ["lat", "lng"],
+            "required": [
+              "lat",
+              "lng"
+            ],
             "properties": {
               "lat": {
                 "type": "number",
@@ -2915,7 +3103,13 @@
       "ItemAnalysis": {
         "type": "object",
         "description": "What both AI endpoints answer. Placeholder values when the model gave nothing usable",
-        "required": ["name", "description", "tags", "color", "category"],
+        "required": [
+          "name",
+          "description",
+          "tags",
+          "color",
+          "category"
+        ],
         "properties": {
           "name": {
             "type": "string"
@@ -2939,7 +3133,11 @@
       },
       "ItemCreated": {
         "type": "object",
-        "required": ["id", "item", "matching"],
+        "required": [
+          "id",
+          "item",
+          "matching"
+        ],
         "properties": {
           "id": {
             "type": "string"
@@ -2954,11 +3152,19 @@
       },
       "ItemInput": {
         "type": "object",
-        "required": ["item"],
+        "required": [
+          "item"
+        ],
         "properties": {
           "item": {
             "type": "object",
-            "required": ["name", "description", "type", "location", "date"],
+            "required": [
+              "name",
+              "description",
+              "type",
+              "location",
+              "date"
+            ],
             "properties": {
               "name": {
                 "type": "string",
@@ -2972,7 +3178,10 @@
               },
               "type": {
                 "type": "string",
-                "enum": ["Lost", "Found"]
+                "enum": [
+                  "Lost",
+                  "Found"
+                ]
               },
               "location": {
                 "type": "string",
@@ -3000,7 +3209,10 @@
               },
               "coordinates": {
                 "type": "object",
-                "required": ["lat", "lng"],
+                "required": [
+                  "lat",
+                  "lng"
+                ],
                 "properties": {
                   "lat": {
                     "type": "number",
@@ -3026,7 +3238,10 @@
               },
               "collectionCoordinates": {
                 "type": "object",
-                "required": ["lat", "lng"],
+                "required": [
+                  "lat",
+                  "lng"
+                ],
                 "properties": {
                   "lat": {
                     "type": "number",
@@ -3069,11 +3284,16 @@
       },
       "ItemModerate": {
         "type": "object",
-        "required": ["decision"],
+        "required": [
+          "decision"
+        ],
         "properties": {
           "decision": {
             "type": "string",
-            "enum": ["approved", "rejected"]
+            "enum": [
+              "approved",
+              "rejected"
+            ]
           },
           "reason": {
             "type": "string",
@@ -3084,7 +3304,9 @@
       },
       "ItemPage": {
         "type": "object",
-        "required": ["items"],
+        "required": [
+          "items"
+        ],
         "properties": {
           "items": {
             "type": "array",
@@ -3093,14 +3315,19 @@
             }
           },
           "nextCursor": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Pass as `cursor` for the next page. Null on the last page"
           }
         }
       },
       "ItemResponse": {
         "type": "object",
-        "required": ["item"],
+        "required": [
+          "item"
+        ],
         "properties": {
           "item": {
             "$ref": "#/components/schemas/Item"
@@ -3109,11 +3336,17 @@
       },
       "ItemStatusUpdate": {
         "type": "object",
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["Pending", "Matched", "Claimed"]
+            "enum": [
+              "Pending",
+              "Matched",
+              "Claimed"
+            ]
           },
           "matchedUserId": {
             "type": "string"
@@ -3137,7 +3370,10 @@
                 "type": "string"
               },
               "date": {
-                "type": ["string", "null"],
+                "type": [
+                  "string",
+                  "null"
+                ],
                 "format": "date-time"
               },
               "category": {
@@ -3157,7 +3393,10 @@
               },
               "collectionCoordinates": {
                 "type": "object",
-                "required": ["lat", "lng"],
+                "required": [
+                  "lat",
+                  "lng"
+                ],
                 "properties": {
                   "lat": {
                     "type": "number",
@@ -3173,7 +3412,10 @@
               },
               "coordinates": {
                 "type": "object",
-                "required": ["lat", "lng"],
+                "required": [
+                  "lat",
+                  "lng"
+                ],
                 "properties": {
                   "lat": {
                     "type": "number",
@@ -3197,11 +3439,18 @@
               },
               "status": {
                 "type": "string",
-                "enum": ["Pending", "Matched", "Claimed"]
+                "enum": [
+                  "Pending",
+                  "Matched",
+                  "Claimed"
+                ]
               },
               "type": {
                 "type": "string",
-                "enum": ["Lost", "Found"]
+                "enum": [
+                  "Lost",
+                  "Found"
+                ]
               },
               "matchScore": {
                 "type": "number"
@@ -3219,7 +3468,10 @@
       },
       "ItemUpdated": {
         "type": "object",
-        "required": ["success", "item"],
+        "required": [
+          "success",
+          "item"
+        ],
         "properties": {
           "success": {
             "type": "boolean"
@@ -3285,7 +3537,18 @@
           },
           "status": {
             "type": "string",
-            "enum": ["matched", "claimed", "rejected"]
+            "enum": [
+              "matched",
+              "claimed",
+              "rejected"
+            ]
+          },
+          "adjudication": {
+            "$ref": "#/components/schemas/Adjudication"
+          },
+          "handoverHeld": {
+            "type": "boolean",
+            "description": "True when the adjudication agent stopped the automatic handover and left the pair for an admin. The status stays \"matched\"."
           },
           "isActive": {
             "type": "boolean",
@@ -3309,7 +3572,10 @@
       },
       "MatchVerify": {
         "type": "object",
-        "required": ["itemId", "isValid"],
+        "required": [
+          "itemId",
+          "isValid"
+        ],
         "properties": {
           "itemId": {
             "type": "string"
@@ -3359,7 +3625,11 @@
       },
       "MatchingOutcome": {
         "type": "string",
-        "enum": ["pending", "awaiting_review", "not_started"],
+        "enum": [
+          "pending",
+          "awaiting_review",
+          "not_started"
+        ],
         "description": "`pending` matching was started, `awaiting_review` the item needs approval first, `not_started` there was nothing to match on"
       },
       "ModeResponse": {
@@ -3370,21 +3640,31 @@
             "type": "boolean"
           },
           "dailyLimit": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "description": "The testing-mode call budget, null when off"
           }
         }
       },
       "ModerationResult": {
         "type": "object",
-        "required": ["success", "moderation", "matching"],
+        "required": [
+          "success",
+          "moderation",
+          "matching"
+        ],
         "properties": {
           "success": {
             "type": "boolean"
           },
           "moderation": {
             "type": "string",
-            "enum": ["approved", "rejected"]
+            "enum": [
+              "approved",
+              "rejected"
+            ]
           },
           "matching": {
             "$ref": "#/components/schemas/MatchingOutcome"
@@ -3407,7 +3687,9 @@
       },
       "ProfilePicture": {
         "type": "object",
-        "required": ["imageData"],
+        "required": [
+          "imageData"
+        ],
         "properties": {
           "imageData": {
             "type": "string",
@@ -3428,7 +3710,10 @@
       },
       "ProfileResult": {
         "type": "object",
-        "required": ["created", "profile"],
+        "required": [
+          "created",
+          "profile"
+        ],
         "properties": {
           "created": {
             "type": "boolean",
@@ -3446,7 +3731,9 @@
           },
           {
             "type": "object",
-            "required": ["aiProvider"]
+            "required": [
+              "aiProvider"
+            ]
           }
         ]
       },
@@ -3584,7 +3871,10 @@
             }
           },
           "nextCursor": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -3595,21 +3885,36 @@
             "type": "string"
           },
           "email": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "displayName": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "photoURL": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "role": {
             "type": "string",
-            "enum": ["user", "admin"]
+            "enum": [
+              "user",
+              "admin"
+            ]
           },
           "status": {
             "type": "string",
-            "enum": ["active", "blocked"]
+            "enum": [
+              "active",
+              "blocked"
+            ]
           },
           "credits": {
             "type": "integer"
@@ -3627,23 +3932,34 @@
           },
           "status": {
             "type": "string",
-            "enum": ["active", "blocked"]
+            "enum": [
+              "active",
+              "blocked"
+            ]
           }
         }
       },
       "UserStatusUpdate": {
         "type": "object",
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["active", "blocked"]
+            "enum": [
+              "active",
+              "blocked"
+            ]
           }
         }
       },
       "VerifyCodeResult": {
         "type": "object",
-        "required": ["success", "message"],
+        "required": [
+          "success",
+          "message"
+        ],
         "properties": {
           "success": {
             "type": "boolean"
@@ -3654,6 +3970,110 @@
           "attemptsLeft": {
             "type": "integer",
             "description": "Present on a wrong code. Absent once the session is blocked, which the message says"
+          }
+        }
+      },
+      "AdjudicationStep": {
+        "type": "object",
+        "description": "One tool call the adjudication agent made, with what the tool answered.",
+        "properties": {
+          "tool": {
+            "type": "string",
+            "enum": [
+              "get_item",
+              "compare_images",
+              "geo_distance",
+              "time_delta",
+              "search_similar",
+              "get_claim_history"
+            ]
+          },
+          "args": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "result": {
+            "type": "string",
+            "description": "Model-facing text, truncated. Contains fenced user-written content and must be rendered as text."
+          },
+          "failed": {
+            "type": "boolean",
+            "description": "True when the tool refused the call."
+          }
+        }
+      },
+      "Adjudication": {
+        "type": "object",
+        "description": "The stage 3 agent verdict and trace. Present only on a pair whose score fell inside the uncertainty band while ADJUDICATION_MODE was not off. Every string is model-generated from user-written reports: render as text, never as markup.",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "match",
+              "no_match",
+              "needs_human_review"
+            ]
+          },
+          "confidence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "contradictions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdjudicationStep"
+            }
+          },
+          "toolCalls": {
+            "type": "integer"
+          },
+          "stoppedBy": {
+            "type": "string",
+            "enum": [
+              "verdict",
+              "tool_budget",
+              "deadline"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "promptVersion": {
+            "type": "string"
+          },
+          "costUsd": {
+            "type": "number"
+          },
+          "ms": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "shadow",
+              "on"
+            ],
+            "description": "shadow means the verdict was recorded and acted on by nothing."
+          },
+          "pipelineScore": {
+            "type": "integer",
+            "description": "The deterministic score that put the pair in the band."
           }
         }
       }

@@ -358,3 +358,60 @@ describe('LlmReranker', () => {
     expect(chatStructured.mock.calls[0][0]).toBe('match.rerank');
   });
 });
+
+describe('the total budget', () => {
+  /**
+   * The bound has to be on the loop, not on the decision to enter it.
+   *
+   * Checking the clock between batches bounds nothing: a batch that starts one
+   * millisecond inside the budget runs to its own ceiling, and that ceiling is
+   * two router calls deep because `chatStructured` may repair. Two batches of
+   * that is minutes, inside a `match.item` attempt killed at two.
+   */
+  it('cuts a batch off at what is left of the budget rather than waiting it out', async () => {
+    vi.useFakeTimers();
+
+    try {
+      // Never resolves, so only a timeout can end it.
+      chatStructured.mockImplementation(() => new Promise(() => {}));
+
+      const pending = new LlmReranker().rerank(SUBJECT, [item('a')]);
+      const settled = vi.fn();
+
+      void pending.then(settled);
+
+      await vi.advanceTimersByTimeAsync(59_000);
+      expect(settled).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      // Nothing was scored, which is a run that produces candidates and no
+      // matches rather than a run that never returns.
+      await expect(pending).resolves.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the batches that answered before the budget ran out', async () => {
+    vi.useFakeTimers();
+
+    try {
+      chatStructured
+        .mockResolvedValueOnce(answers([{ id: 'a', score: 90, verdict: 'same' }]))
+        .mockImplementation(() => new Promise(() => {}));
+
+      const candidates = Array.from({ length: 40 }, (unused, index) => item(`c${index}`));
+      const pending = new LlmReranker().rerank(SUBJECT, [item('a'), ...candidates]);
+
+      await vi.advanceTimersByTimeAsync(61_000);
+
+      const result = await pending;
+
+      expect(result?.scores.get('a')?.score).toBe(90);
+      expect(result?.scores.size).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -75,7 +75,14 @@ export class BullMqJobQueue implements JobQueue {
   async close(): Promise<void> {
     await Promise.all([...this.queues.values()].map((queue) => queue.close()));
     this.queues.clear();
-    await this.connection.quit();
+
+    // `quit` is itself a command, and a producer connection refuses commands
+    // when the stream is not writeable, so during a Redis outage it rejects
+    // rather than closing. Unhandled, that rejection propagates through
+    // `shutdown` and the process exits non-zero on every restart that happens
+    // to land in a blip — and the shared client is never closed, because the
+    // shutdown sequence never reaches it.
+    await this.connection.quit().catch(() => this.connection.disconnect());
   }
 
   private queueFor(name: JobName): Queue {

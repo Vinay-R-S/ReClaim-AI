@@ -34,6 +34,7 @@ const { BullMqJobQueue, queueNameFor, toJobId } = await import('./bullmq.queue.j
 const { BullMqJobWorker } = await import('./bullmq.worker.js');
 const { JobRunner } = await import('./job.runner.js');
 const { createRedisConnection } = await import('./redis.connection.js');
+const { whenReady } = await import('../redis/ready.js');
 const { getTraceContext } = await import('../tracing/context.js');
 
 describe.skipIf(!REDIS_URL)('BullMQ driver', () => {
@@ -44,6 +45,13 @@ describe.skipIf(!REDIS_URL)('BullMQ driver', () => {
   beforeAll(async () => {
     // A run must not inherit jobs left by the previous one.
     const admin = createRedisConnection(url, 'producer');
+
+    // A producer connection does not buffer, so the first command has to wait
+    // for the socket. Without this the cleanup below raced the handshake and
+    // failed the whole suite with "Stream isn't writeable" on a CI runner that
+    // had Redis up and healthy.
+    await whenReady(admin);
+
     const keys = await admin.keys(`bull:${queueNameFor('match.item')}:*`);
 
     if (keys.length > 0) await admin.del(...keys);
@@ -53,9 +61,13 @@ describe.skipIf(!REDIS_URL)('BullMQ driver', () => {
     queue = new BullMqJobQueue(createRedisConnection(url, 'producer'));
   });
 
+  // Optional chaining on both: a `beforeAll` that threw leaves them unset, and
+  // a teardown that then throws its own TypeError reports a second failure for
+  // the same cause and hides the first.
   afterAll(async () => {
     await worker?.stop();
-    await queue.close();
+
+    if (queue) await queue.close();
   });
 
   it('accepts a job and refuses the same idempotency key twice', async () => {

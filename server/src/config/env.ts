@@ -183,14 +183,54 @@ const rawSchema = z.object({
   RETRIEVAL_LIMIT: withDefault(z.coerce.number().int().positive().max(500).default(50)),
 
   /**
-   * Batched reranking (section 8.2 stage 2): off, measured against the
-   * per-pair scorer, or used. `shadow` costs one extra call per run against
-   * the N the per-pair scorer already makes, which is what makes measuring it
-   * on real traffic affordable.
+   * Candidates per rerank call. One huge prompt reasons worse, and fails bigger.
+   *
+   * `RERANK_MODE` used to sit here. Batched reranking is no longer a mode: it
+   * is the semantic scorer, the per-pair scorer it was measured against has
+   * been retired, and a flag whose only other setting is "score nothing" is
+   * not a flag. A deployment that still sets it is warned at boot.
    */
-  RERANK_MODE: withDefault(z.enum(['off', 'shadow', 'on']).default('shadow')),
-  /** Candidates per rerank call. One huge prompt reasons worse, and fails bigger. */
   RERANK_BATCH_SIZE: withDefault(z.coerce.number().int().positive().max(100).default(20)),
+
+  /**
+   * The adjudication agent (section 8.6): off, run and recorded but not acted
+   * on, or allowed to decide. `shadow` is the default for the same reason the
+   * two stages before it default to it, and here the reason is sharper: this
+   * is the only stage that can turn a pair the pipeline called a match into
+   * one it does not.
+   */
+  ADJUDICATION_MODE: withDefault(z.enum(['off', 'shadow', 'on']).default('shadow')),
+  /**
+   * The uncertainty band, as a normalised pipeline score.
+   *
+   * Above the top of it a pair is certain enough to confirm without paying for
+   * an agent run; below the bottom it is not worth one. Only what falls
+   * between is adjudicated, which is what keeps the expensive stage rare.
+   */
+  ADJUDICATION_BAND_LOW: withDefault(z.coerce.number().int().min(0).max(100).default(60)),
+  ADJUDICATION_BAND_HIGH: withDefault(z.coerce.number().int().min(0).max(100).default(85)),
+  /** Tool calls one run may make before it is stopped and reports what it has. */
+  ADJUDICATION_MAX_TOOL_CALLS: withDefault(z.coerce.number().int().positive().max(30).default(8)),
+  /**
+   * Wall clock for a whole run, across every model call and tool call.
+   *
+   * The default is chosen against the budget above it, not in isolation. This
+   * stage is awaited inside a `match.item` attempt killed at 120 seconds, and
+   * retrieval, scoring and rerank have already spent most of that, so a
+   * generous number here buys a verdict at the price of the matching run it
+   * was meant to improve.
+   */
+  ADJUDICATION_DEADLINE_MS: withDefault(
+    z.coerce.number().int().positive().max(300_000).default(20_000),
+  ),
+  /**
+   * How sure the agent must be before its verdict is allowed to move a pair.
+   *
+   * Applies in `on` mode only, and to both directions: a confirmation and a
+   * rejection are both decisions, and a decision made at 30 percent confidence
+   * is one the deterministic score should have kept.
+   */
+  ADJUDICATION_MIN_CONFIDENCE: withDefault(z.coerce.number().int().min(0).max(100).default(70)),
 
   YOLO_SERVICE_URL: withDefault(z.string().url().default('http://localhost:5000')),
   YOLO_SERVICE_TOKEN: optionalString,
@@ -288,9 +328,15 @@ export interface AppEnv {
     /** See RETRIEVAL_MODE. `shadow` measures without changing what is scored. */
     retrievalMode: 'off' | 'shadow' | 'on';
     retrievalLimit: number;
-    /** See RERANK_MODE. `shadow` measures without changing any score. */
-    rerankMode: 'off' | 'shadow' | 'on';
     rerankBatchSize: number;
+    /** See ADJUDICATION_MODE. `shadow` records a verdict and acts on none. */
+    adjudicationMode: 'off' | 'shadow' | 'on';
+    /** The score band a pair must fall in to be worth an agent run. */
+    adjudicationBandLow: number;
+    adjudicationBandHigh: number;
+    adjudicationMaxToolCalls: number;
+    adjudicationDeadlineMs: number;
+    adjudicationMinConfidence: number;
   };
   embeddings: {
     /** False turns the feature off entirely; nothing is computed and nothing is stored. */
@@ -422,6 +468,37 @@ function collectRequirementProblems(raw: RawEnv): string[] {
 }
 
 /**
+ * A variable that no longer does anything.
+ *
+ * Silence would be worse than a warning here: an operator who set
+ * `RERANK_MODE=off` to stop paying for the reranker would get the opposite of
+ * what they asked for, because it is now the only semantic scorer there is.
+ */
+function collectRetiredSettingProblems(raw: NodeJS.ProcessEnv): string[] {
+  if (!raw.RERANK_MODE) return [];
+
+  return [
+    `RERANK_MODE is set to "${raw.RERANK_MODE}" and is no longer read. Batched reranking is the semantic scorer; the per-pair scorer it was measured against has been retired. Remove the variable.`,
+  ];
+}
+
+/**
+ * An inverted or empty adjudication band.
+ *
+ * Not fatal, because the pipeline reads the band as "low <= score < high" and
+ * an empty band simply means nothing is ever adjudicated. That is a quiet way
+ * for a feature to be off, so it is said out loud at boot.
+ */
+function collectAdjudicationProblems(raw: RawEnv): string[] {
+  if (raw.ADJUDICATION_MODE === 'off') return [];
+  if (raw.ADJUDICATION_BAND_LOW < raw.ADJUDICATION_BAND_HIGH) return [];
+
+  return [
+    `ADJUDICATION_BAND_LOW (${raw.ADJUDICATION_BAND_LOW}) is not below ADJUDICATION_BAND_HIGH (${raw.ADJUDICATION_BAND_HIGH}), so the uncertainty band is empty and no pair is ever adjudicated.`,
+  ];
+}
+
+/**
  * Blockchain is opt-in and its recording step is already non-blocking in
  * `handover.service.ts`, so a missing key degrades the handover record rather
  * than stopping the server.
@@ -458,7 +535,12 @@ export function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
 
   if (fatal.length > 0) throw new EnvValidationError(fatal);
 
-  const problems = [...collectRequirementProblems(raw), ...collectBlockchainProblems(raw)];
+  const problems = [
+    ...collectRequirementProblems(raw),
+    ...collectRetiredSettingProblems(source),
+    ...collectAdjudicationProblems(raw),
+    ...collectBlockchainProblems(raw),
+  ];
 
   return Object.freeze({
     nodeEnv: raw.NODE_ENV,
@@ -529,8 +611,13 @@ export function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
     matching: Object.freeze({
       retrievalMode: raw.RETRIEVAL_MODE,
       retrievalLimit: raw.RETRIEVAL_LIMIT,
-      rerankMode: raw.RERANK_MODE,
       rerankBatchSize: raw.RERANK_BATCH_SIZE,
+      adjudicationMode: raw.ADJUDICATION_MODE,
+      adjudicationBandLow: raw.ADJUDICATION_BAND_LOW,
+      adjudicationBandHigh: raw.ADJUDICATION_BAND_HIGH,
+      adjudicationMaxToolCalls: raw.ADJUDICATION_MAX_TOOL_CALLS,
+      adjudicationDeadlineMs: raw.ADJUDICATION_DEADLINE_MS,
+      adjudicationMinConfidence: raw.ADJUDICATION_MIN_CONFIDENCE,
     }),
     embeddings: Object.freeze({
       enabled: raw.EMBEDDINGS_ENABLED,

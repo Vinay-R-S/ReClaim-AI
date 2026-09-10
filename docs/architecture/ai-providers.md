@@ -70,14 +70,35 @@ always configured wrong.
 | ---------------- | ---------------------------------- | ------ | -------- | ------------------------------------------------ |
 | `item.analyze`   | Report and add-item image analysis | No     | 35s      | Needs vision. A user is waiting on it            |
 | `item.enhance`   | Description enhancement for Lost   | No     | 35s      | Text only, falls back to what the user typed     |
-| `match.semantic` | The matching pipeline              | 1 hour | 90s      | The high-volume one, and the reason cache exists |
+| `match.rerank`    | Stage 2, one call per batch, and the only semantic scorer | No | 45s | A batch is unique to one run, so a cache would store what nothing reads. The reranker bounds itself at 60s across batches as well |
+| `match.adjudicate`| Stage 3, one call per agent turn   | No     | 15s      | Several per run; the run's own budget is `ADJUDICATION_DEADLINE_MS`     |
 | `cctv.describe`  | Describing a detected object       | No     | 35s      | Needs vision                                     |
 | `cctv.verify`    | Detection against a lost report    | No     | 35s      | Text only                                        |
 
-The deadline is per call, across every provider and attempt. A per-attempt
-timeout bounds nothing useful once the fallback list is as long as the
-registry: six providers at fifteen seconds each is a minute and a half on a
-form the user is watching.
+The deadline is per call, across every provider and attempt, and it is a real
+bound rather than a check between attempts: an attempt is capped at whatever is
+left of the deadline when it starts, and a schema-constrained call shares one
+deadline across both its legs. Without either, a task with a 45 second deadline
+and a 20 second timeout could run 65 seconds, or 130 for a reply that needed
+repairing. A per-attempt timeout alone bounds nothing useful once the fallback
+list is as long as the registry: six providers at fifteen seconds each is a
+minute and a half on a form the user is watching.
+
+`match.adjudicate` is the one task where the per-call deadline is not the bound
+that matters. One agent run makes several calls in sequence, so the run is
+bounded by `ADJUDICATION_DEADLINE_MS` and by a tool-call budget, both enforced
+by the agent itself and again by the pipeline that awaits it. All three exist
+because the whole matching run happens inside a job attempt killed at 120
+seconds.
+
+No task asks for caching. `match.semantic` did, because the same two items were
+re-scored on every matching run, and it was retired in phase 25 with the
+per-pair scorer that was its only caller. Nothing that replaced it recurs: a
+rerank batch is a set of candidates for one subject at one moment, an agent step
+carries the transcript of the steps before it, and the rest are one-offs a user
+is waiting on. The router keeps the capability, and a TTL appearing on a task
+should be a decision somebody made rather than one that arrived with a copied
+policy block.
 
 The admin `aiProvider` setting still chooses the order of providers, which is
 what it has always meant. `groq_only` still means only Groq; `groq_with_fallback`

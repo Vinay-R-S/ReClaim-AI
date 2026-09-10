@@ -49,14 +49,37 @@ describe('DEFAULT_POLICIES', () => {
   });
 
   /**
-   * A pair score is asked for over and over as an item stays Pending, and the
-   * answer for an unchanged pair does not change. Anything a user is waiting
-   * on is a one-off and caching it would only serve them a stale reply.
+   * No task caches, and each one has its own reason.
+   *
+   * The per-pair semantic scorer was the one that did, because the same two
+   * items were re-scored on every matching run. It was retired with the
+   * LLM-per-candidate path, and nothing that replaced it recurs: a rerank
+   * batch is a set of candidates for one subject at one moment, an agent step
+   * carries the transcript of the steps before it, and everything else is a
+   * one-off a user is waiting on, where a cache would only serve a stale reply.
+   *
+   * The router keeps the capability. This says nothing currently asks for it,
+   * so a TTL appearing on a task is a decision somebody made rather than one
+   * that arrived with a copied policy block.
    */
-  it('caches pair scoring and nothing a user is waiting on', () => {
-    expect(DEFAULT_POLICIES['match.semantic'].cacheTtlSeconds).toBeGreaterThan(0);
-    expect(DEFAULT_POLICIES['item.analyze'].cacheTtlSeconds).toBe(0);
-    expect(DEFAULT_POLICIES['item.enhance'].cacheTtlSeconds).toBe(0);
+  it('asks for no caching, because nothing left recurs', () => {
+    AI_TASKS.forEach((task) => {
+      expect(DEFAULT_POLICIES[task].cacheTtlSeconds).toBe(0);
+    });
+  });
+
+  /**
+   * The deadline is the bound on the whole call, so it has to be able to hold
+   * the attempts the same policy asks for. `match.rerank` shipped for one round
+   * with a 40 second deadline and two 30 second attempts, which is a documented
+   * ceiling the code could exceed by half again.
+   */
+  it('gives every task a deadline its own attempts can fit inside', () => {
+    AI_TASKS.forEach((task) => {
+      const policy = DEFAULT_POLICIES[task];
+
+      expect(policy.deadlineMs).toBeGreaterThanOrEqual(policy.timeoutMs * policy.attempts);
+    });
   });
 
   it('bounds every attempt', () => {

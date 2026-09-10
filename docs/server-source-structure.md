@@ -37,9 +37,13 @@ The rules.
 - `item.service.ts` reporting, approval, rejection and the item lifecycle.
 - `match.service.ts` the admin decision on a proposed match, including the
   false-claim penalty.
-- `matching/` the pipeline itself: `matching.pipeline.ts` orchestrates,
-  `semanticScorer.service.ts` and `visualScorer.service.ts` score, and
-  `matching.types.ts` holds the shared shapes.
+- `matching/` the pipeline itself, one directory per stage.
+  `matching.pipeline.ts` orchestrates and `matching.types.ts` holds the shared
+  shapes; `retrieval/` narrows the field by dense and lexical retrieval fused
+  by rank; `rerank/` scores every remaining candidate in one batched call and
+  is the only semantic scorer; `adjudicate/` runs a bounded tool-using agent on
+  the single best pair when the score is genuinely unsure;
+  `visualScorer.service.ts` is the image component.
 - `autoMatch.service.ts` runs the pipeline when an item is approved.
 - `clarifaiMatch.service.ts` image similarity, optional: without a key it
   scores 0 rather than failing the run.

@@ -504,6 +504,7 @@ export class ItemService {
         location: item.location,
         date: new Date(item.date),
         category: item.category,
+        reportedBy: item.reportedBy,
       });
 
       log.info(`[MATCHING] Finished for ${itemId}, best ${result?.highestScore ?? 0}%`);

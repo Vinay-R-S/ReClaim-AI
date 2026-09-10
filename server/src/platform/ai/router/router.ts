@@ -67,6 +67,24 @@ function breakerKey(providerId: string, task: AiTask): string {
   return `${providerId}:${task}`;
 }
 
+/** Two legs of one structured call, reported as one. */
+function combine(first: RouterResponse, second: RouterResponse): RouterResponse {
+  const usage =
+    first.usage || second.usage
+      ? {
+          inputTokens: (first.usage?.inputTokens ?? 0) + (second.usage?.inputTokens ?? 0),
+          outputTokens: (first.usage?.outputTokens ?? 0) + (second.usage?.outputTokens ?? 0),
+        }
+      : undefined;
+
+  return {
+    ...second,
+    usage,
+    costUsd: first.costUsd + second.costUsd,
+    attempts: first.attempts + second.attempts,
+  };
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms).unref();
@@ -87,6 +105,14 @@ export class AiRouter {
     private readonly breaker = new CircuitBreaker(),
     private readonly limiter = new RateLimiter(env.ai.requestsPerMinute),
     private readonly costs = new CostMeter(),
+    /**
+     * Composition seam, the same as the five above it.
+     *
+     * A policy is resolved rather than read, so a test can pin one without
+     * reaching into the module that holds the defaults. Production passes
+     * nothing and gets `policyFor`.
+     */
+    private readonly policies: (task: AiTask) => Promise<TaskPolicy> = policyFor,
   ) {}
 
   /**
@@ -131,7 +157,23 @@ export class AiRouter {
   }
 
   async chat(task: AiTask, request: RouterRequest): Promise<RouterResponse> {
-    const policy = await policyFor(task);
+    return this.chatWithin(task, request);
+  }
+
+  /**
+   * `chat`, against a deadline that may have been set by an earlier leg.
+   *
+   * `chatStructured` is two calls, and each one computing its own fresh
+   * deadline made the task's ceiling twice what the policy says: a 45 second
+   * deadline meant 90 seconds for a reply that needed repairing. The deadline
+   * belongs to the call the caller made, so both legs share one.
+   */
+  private async chatWithin(
+    task: AiTask,
+    request: RouterRequest,
+    sharedDeadline?: number,
+  ): Promise<RouterResponse> {
+    const policy = await this.policies(task);
     const providers = this.candidates(policy, request);
 
     if (providers.length === 0) {
@@ -156,7 +198,7 @@ export class AiRouter {
     // A per-attempt timeout is not a bound on the call: with a fallback list as
     // long as the registry, a task a user is waiting on could spend one timeout
     // per provider before it gave up.
-    const deadline = Date.now() + policy.deadlineMs;
+    const deadline = sharedDeadline ?? Date.now() + policy.deadlineMs;
 
     for (const provider of providers) {
       const cached = await this.readCache(provider, chatRequest, policy);
@@ -198,7 +240,14 @@ export class AiRouter {
         attempts += 1;
 
         try {
-          const response = await this.callOnce(task, provider, chatRequest, policy, attempt);
+          const response = await this.callOnce(
+            task,
+            provider,
+            chatRequest,
+            policy,
+            attempt,
+            deadline,
+          );
 
           return { ...response, cached: false, attempts };
         } catch (error) {
@@ -238,7 +287,8 @@ export class AiRouter {
     request: RouterRequest,
     spec: StructuredSpec<T>,
   ): Promise<{ value: T; response: RouterResponse }> {
-    const first = await this.chat(task, { ...request, structured: spec });
+    const deadline = Date.now() + (await this.policies(task)).deadlineMs;
+    const first = await this.chatWithin(task, { ...request, structured: spec }, deadline);
     const parsed = spec.schema.safeParse(extractJson(first.content));
 
     if (parsed.success) return { value: parsed.data, response: first };
@@ -254,22 +304,30 @@ export class AiRouter {
     // for its whole TTL and every later call pays for the same repair.
     if (first.cacheKey) await this.cache.delete(first.cacheKey);
 
-    const repair = await this.chat(task, {
-      ...request,
-      structured: spec,
-      messages: [
-        ...request.messages,
-        { role: 'assistant', content: first.content.slice(0, 2000) },
-        {
-          role: 'user',
-          content: `That did not match the required schema (${parsed.error.issues[0]?.message ?? 'invalid'}). Reply with the JSON object only.`,
-        },
-      ],
-    });
+    const repair = await this.chatWithin(
+      task,
+      {
+        ...request,
+        structured: spec,
+        messages: [
+          ...request.messages,
+          { role: 'assistant', content: first.content.slice(0, 2000) },
+          {
+            role: 'user',
+            content: `That did not match the required schema (${parsed.error.issues[0]?.message ?? 'invalid'}). Reply with the JSON object only.`,
+          },
+        ],
+      },
+      deadline,
+    );
 
     const second = spec.schema.safeParse(extractJson(repair.content));
 
-    if (second.success) return { value: second.data, response: repair };
+    // The repair is a second paid call, so the response reports what the whole
+    // structured call cost rather than what its last leg cost. Returning the
+    // repair alone under-reported every repaired call, which matters most
+    // where a caller persists the number as the cost of a stage.
+    if (second.success) return { value: second.data, response: combine(first, repair) };
 
     throw new StructuredOutputError(
       repair.providerId,
@@ -298,6 +356,7 @@ export class AiRouter {
     request: ChatRequest,
     policy: TaskPolicy,
     attempt: number,
+    deadline: number,
   ): Promise<RouterResponse> {
     // Both guards can refuse before a call is made. The breaker may have
     // handed out a half-open probe to get here, and a probe that is taken and
@@ -328,9 +387,18 @@ export class AiRouter {
     const startedAt = Date.now();
 
     try {
+      // Clamped to what is left of the deadline, not the per-attempt ceiling
+      // alone. The loop above only checks the deadline before starting an
+      // attempt, so an attempt that starts just inside it used to run a full
+      // timeout past it: a task with a 40 second deadline and a 30 second
+      // timeout could take 70. The deadline is supposed to be the bound on the
+      // whole call, and this is what makes it one.
+      const remaining = deadline - startedAt;
+      const budget = Math.max(1, Math.min(policy.timeoutMs, remaining));
+
       const response = await withTimeout(
         provider.chat({ ...request, signal: controller.signal }),
-        policy.timeoutMs,
+        budget,
         `${provider.id} ${task}`,
       );
 
@@ -357,7 +425,16 @@ export class AiRouter {
       // and send the router off to buy the same answer again.
       await this.record(task, provider, response, costUsd, key, policy);
 
-      return { ...response, cached: false, costUsd, attempts: attempt, cacheKey: key };
+      return {
+        ...response,
+        cached: false,
+        costUsd,
+        attempts: attempt,
+        // Only when the task caches. Handing back a key for a reply nothing
+        // stored made `chatStructured` issue a Redis round trip to delete
+        // something that was never written.
+        cacheKey: policy.cacheTtlSeconds > 0 ? key : undefined,
+      };
     } catch (error) {
       // A timeout abandons the promise; the abort is what stops the request in
       // flight. The tokens are already committed either way.

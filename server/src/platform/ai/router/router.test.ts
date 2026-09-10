@@ -27,7 +27,7 @@ vi.mock('../../../repositories/settings.repository.js', () => ({
 
 const { AiRouter } = await import('./router.js');
 const { CircuitBreaker } = await import('./breaker.js');
-const { resetPolicyCache } = await import('./policy.js');
+const { policyFor, resetPolicyCache } = await import('./policy.js');
 const { defineStructured } = await import('../structured.js');
 const { BudgetExceededError, NoProviderAvailableError, ProviderError } =
   await import('../ai.errors.js');
@@ -103,12 +103,32 @@ function routerWith(
     breaker?: InstanceType<typeof CircuitBreaker>;
     limiter?: { tryAcquire: (key: string) => Promise<boolean> };
     costs?: ReturnType<typeof fakeCosts>;
+    /**
+     * Fields to override on whatever policy the task resolves to.
+     *
+     * No shipped task enables the response cache: the one that did was the
+     * per-pair semantic scorer, retired with the LLM-per-candidate path. The
+     * router still has the capability and a task can still ask for it, so the
+     * tests that exercise it say so here rather than depending on a default
+     * that happens to be non-zero.
+     */
+    policy?: Partial<import('./policy.js').TaskPolicy>;
   } = {},
 ) {
   const cache = parts.cache ?? fakeCache();
   const breaker = parts.breaker ?? new CircuitBreaker();
   const limiter = parts.limiter ?? allowAll;
   const costs = parts.costs ?? fakeCosts();
+  // Only the per-attempt timeout is pinned, and only so a test that never
+  // resolves a provider call finishes in milliseconds rather than in the
+  // shipped budget. Everything else — attempts, deadline, cache TTL — comes
+  // from the task the test names, so these tests still exercise the real
+  // policy and a retune that breaks one of them says so.
+  const policies = async (task: any) => ({
+    ...(await policyFor(task)),
+    timeoutMs: 200,
+    ...(parts.policy ?? {}),
+  });
 
   return {
     router: new AiRouter(
@@ -117,6 +137,7 @@ function routerWith(
       breaker,
       limiter as any,
       costs as any,
+      policies as any,
     ),
     cache,
     breaker,
@@ -149,7 +170,7 @@ describe('routing', () => {
     const gemini = provider('gemini');
     const { router } = routerWith([groq, gemini]);
 
-    const response = await router.chat('match.semantic', {
+    const response = await router.chat('match.rerank', {
       messages: [{ role: 'user', content: 'hello' }],
     });
 
@@ -169,7 +190,7 @@ describe('routing', () => {
     const { router } = routerWith([gemini, groq]);
 
     await expect(
-      router.chat('match.semantic', { messages: [{ role: 'user', content: 'hi' }] }),
+      router.chat('match.rerank', { messages: [{ role: 'user', content: 'hi' }] }),
     ).rejects.toThrow('down');
     expect(groq.chat).not.toHaveBeenCalled();
   });
@@ -183,7 +204,7 @@ describe('routing', () => {
     const gemini = provider('gemini');
     const { router } = routerWith([groq, gemini]);
 
-    const response = await router.chat('match.semantic', {
+    const response = await router.chat('match.rerank', {
       messages: [{ role: 'user', content: 'hi' }],
     });
 
@@ -200,7 +221,7 @@ describe('routing', () => {
     });
     const { router } = routerWith([provider('groq', { chat }), provider('gemini')]);
 
-    await router.chat('match.semantic', { messages: [{ role: 'user', content: 'hi' }] });
+    await router.chat('match.rerank', { messages: [{ role: 'user', content: 'hi' }] });
 
     expect(chat).toHaveBeenCalledTimes(1);
   });
@@ -225,7 +246,7 @@ describe('routing', () => {
 
     vi.useFakeTimers();
 
-    const call = router.chat('match.semantic', { messages: [{ role: 'user', content: 'hi' }] });
+    const call = router.chat('match.rerank', { messages: [{ role: 'user', content: 'hi' }] });
 
     await vi.advanceTimersByTimeAsync(16_000);
     await vi.advanceTimersByTimeAsync(1_000);
@@ -246,7 +267,7 @@ describe('routing', () => {
     const gemini = provider('gemini');
     const { router } = routerWith([provider('groq', { chat }), gemini]);
 
-    const response = await router.chat('match.semantic', {
+    const response = await router.chat('match.rerank', {
       messages: [{ role: 'user', content: 'hi' }],
     });
 
@@ -284,7 +305,7 @@ describe('routing', () => {
     const { router } = routerWith([]);
 
     await expect(
-      router.chat('match.semantic', { messages: [{ role: 'user', content: 'hi' }] }),
+      router.chat('match.rerank', { messages: [{ role: 'user', content: 'hi' }] }),
     ).rejects.toThrow(/no provider is configured/);
   });
 });
@@ -329,9 +350,10 @@ describe('circuit breaker', () => {
     const groq = provider('groq');
     const { router } = routerWith([groq], { breaker });
 
-    breaker.recordFailure('groq:match.rerank');
+    // A different task on the same provider.
+    breaker.recordFailure('groq:cctv.verify');
 
-    const response = await router.chat('match.semantic', {
+    const response = await router.chat('match.rerank', {
       messages: [{ role: 'user', content: 'hi' }],
     });
 
@@ -345,9 +367,9 @@ describe('circuit breaker', () => {
     const gemini = provider('gemini');
     const { router } = routerWith([groq, gemini], { breaker });
 
-    breaker.recordFailure('groq:match.semantic');
+    breaker.recordFailure('groq:match.rerank');
 
-    const response = await router.chat('match.semantic', {
+    const response = await router.chat('match.rerank', {
       messages: [{ role: 'user', content: 'hi' }],
     });
 
@@ -362,9 +384,9 @@ describe('circuit breaker', () => {
     });
     const { router } = routerWith([provider('groq', { chat }), provider('gemini')], { breaker });
 
-    await router.chat('match.semantic', { messages: [{ role: 'user', content: 'hi' }] });
+    await router.chat('match.rerank', { messages: [{ role: 'user', content: 'hi' }] });
 
-    expect(breaker.state('groq:match.semantic')).toBe('open');
+    expect(breaker.state('groq:match.rerank')).toBe('open');
   });
 });
 
@@ -372,12 +394,12 @@ describe('cache', () => {
   it('returns a cached answer without calling the provider again', async () => {
     const cache = fakeCache();
     const groq = provider('groq');
-    const { router } = routerWith([groq], { cache });
+    const { router } = routerWith([groq], { cache, policy: { cacheTtlSeconds: 3_600 } });
 
-    const first = await router.chat('match.semantic', {
+    const first = await router.chat('match.rerank', {
       messages: [{ role: 'user', content: 'same question' }],
     });
-    const second = await router.chat('match.semantic', {
+    const second = await router.chat('match.rerank', {
       messages: [{ role: 'user', content: 'same question' }],
     });
 
@@ -401,10 +423,10 @@ describe('cache', () => {
 
   it('treats a different question as a different key', async () => {
     const groq = provider('groq');
-    const { router } = routerWith([groq]);
+    const { router } = routerWith([groq], { policy: { cacheTtlSeconds: 3_600 } });
 
-    await router.chat('match.semantic', { messages: [{ role: 'user', content: 'a' }] });
-    await router.chat('match.semantic', { messages: [{ role: 'user', content: 'b' }] });
+    await router.chat('match.rerank', { messages: [{ role: 'user', content: 'a' }] });
+    await router.chat('match.rerank', { messages: [{ role: 'user', content: 'b' }] });
 
     expect(groq.chat).toHaveBeenCalledTimes(2);
   });
@@ -415,14 +437,14 @@ describe('cost', () => {
     const costs = fakeCosts();
     const { router } = routerWith([provider('groq')], { costs });
 
-    const response = await router.chat('match.semantic', {
+    const response = await router.chat('match.rerank', {
       messages: [{ role: 'user', content: 'hi' }],
     });
 
     // 1000 input at $1/MTok plus 500 output at $2/MTok.
     expect(response.costUsd).toBeCloseTo(0.002, 6);
     expect(costs.record).toHaveBeenCalledWith(
-      expect.objectContaining({ task: 'match.semantic', providerId: 'groq' }),
+      expect.objectContaining({ task: 'match.rerank', providerId: 'groq' }),
     );
   });
 
@@ -440,7 +462,7 @@ describe('cost', () => {
     const { router } = routerWith([provider('groq'), gemini], { costs });
 
     await expect(
-      router.chat('match.semantic', { messages: [{ role: 'user', content: 'hi' }] }),
+      router.chat('match.rerank', { messages: [{ role: 'user', content: 'hi' }] }),
     ).rejects.toBeInstanceOf(BudgetExceededError);
     expect(gemini.chat).not.toHaveBeenCalled();
   });
@@ -453,7 +475,7 @@ describe('rate limiting', () => {
     const gemini = provider('gemini');
     const { router } = routerWith([groq, gemini], { limiter });
 
-    const response = await router.chat('match.semantic', {
+    const response = await router.chat('match.rerank', {
       messages: [{ role: 'user', content: 'hi' }],
     });
 
@@ -474,7 +496,7 @@ describe('structured output', () => {
     const { router } = routerWith([groq]);
 
     const { value } = await router.chatStructured(
-      'match.semantic',
+      'match.rerank',
       { messages: [{ role: 'user', content: 'compare' }] },
       VERDICT,
     );
@@ -493,7 +515,7 @@ describe('structured output', () => {
     const { router } = routerWith([groq]);
 
     const { value } = await router.chatStructured(
-      'match.semantic',
+      'match.rerank',
       { messages: [{ role: 'user', content: 'compare' }] },
       VERDICT,
     );
@@ -555,7 +577,7 @@ describe('structured output', () => {
     const { router } = routerWith([groq]);
 
     const { value } = await router.chatStructured(
-      'match.semantic',
+      'match.rerank',
       { messages: [{ role: 'user', content: 'compare' }] },
       VERDICT,
     );
@@ -583,7 +605,7 @@ describe('structured output', () => {
     const { router } = routerWith([groq, openai]);
 
     const { response } = await router.chatStructured(
-      'match.semantic',
+      'match.rerank',
       { messages: [{ role: 'user', content: 'compare' }] },
       VERDICT,
     );
@@ -611,7 +633,7 @@ describe('structured output', () => {
     const { router } = routerWith([groq, grok, openai]);
 
     const { response } = await router.chatStructured(
-      'match.semantic',
+      'match.rerank',
       { messages: [{ role: 'user', content: 'compare' }] },
       VERDICT,
     );
@@ -636,10 +658,15 @@ describe('structured output', () => {
         providerId: 'groq',
         model: 'm',
       });
-    const { router } = routerWith([provider('groq', { chat })], { cache });
+    // Only meaningful for a task that caches, which no shipped task does; the
+    // router keeps the capability and this is what exercises it.
+    const { router } = routerWith([provider('groq', { chat })], {
+      cache,
+      policy: { cacheTtlSeconds: 3_600 },
+    });
 
     await router.chatStructured(
-      'match.semantic',
+      'match.rerank',
       { messages: [{ role: 'user', content: 'compare' }] },
       VERDICT,
     );

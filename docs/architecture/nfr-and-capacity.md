@@ -9,28 +9,28 @@ production yet, and each row names what would measure it.
 | Requirement           | Target                                      | Measured by                                | Status                                                                     |
 | --------------------- | ------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------- |
 | Report submission p95 | Under 400 ms server time                    | API histogram, excluding the client upload | Plausible today: the response returns before matching runs                 |
-| Match completion p95  | Under 20 s from submission                  | Job queue timing                           | Not met. Matching is one LLM call per candidate, inline                    |
-| Match recall@10       | Above 0.90 on the labelled set              | Offline eval in CI                         | No eval set exists yet                                                     |
-| Match precision@1     | Above 0.80                                  | Offline eval in CI                         | No eval set exists yet                                                     |
+| Match completion p95  | Under 20 s from submission                  | Job queue timing                           | Unmeasured. Matching runs in a worker and makes one batched call for the whole field, bounded at 60 s, plus up to 25 s of adjudication when a pair is in the band |
+| Match recall@10       | Above 0.90 on the labelled set              | Offline eval in CI                         | Measured in CI since phase 24. Recall@1 0.889 on the labelled set; recall@10 is not yet reported separately |
+| Match precision@1     | Above 0.80                                  | Offline eval in CI                         | Measured in CI since phase 24, at 0.667. Below target       |
 | Handover verify p95   | Under 300 ms                                | API histogram                              | Plausible: one document get and one transaction                            |
 | Chat delivery p95     | Under 1 s                                   | Client-side timing                         | Chat is not built                                                          |
 | API availability      | 99.5 percent monthly                        | Uptime probe                               | No probe yet                                                               |
 | Ledger correctness    | Balance always equals the sum of the ledger | Nightly reconciliation                     | The transaction makes it true on write. Nothing verifies it after the fact |
-| LLM spend             | A hard monthly ceiling, alert at 60 percent | Cost meter per provider                    | No meter. No ceiling                                                       |
+| LLM spend             | A hard monthly ceiling, alert at 60 percent | Cost meter per provider                    | Meter and daily and monthly ceilings since phase 21, in `aiUsage`. Both ceilings default to zero, which means off; no alerting |
 | Cold start            | Under 3 s                                   | Deployment probe                           | Not measured                                                               |
 
-The honest summary: the requirements that depend on work already done are
-plausible but unmeasured, and every requirement that depends on the worker, the
-eval harness or the cost meter is unmet because those do not exist. There is no
-observability tier, which is itself the first thing phase 20 needs to fix.
+The honest summary: the worker, the eval harness and the cost meter now exist,
+so those rows have moved from "does not exist" to "unmeasured in production" or
+to a number. What is still missing is the observability tier that would turn
+the plausible rows into measured ones, and alerting on the spend ceiling.
 
 ## Where the current design breaks down
 
 | Dimension         | Today                                                       | Breaks at                 | Root cause                                                  |
 | ----------------- | ----------------------------------------------------------- | ------------------------- | ----------------------------------------------------------- |
-| Match latency     | One LLM round trip per candidate, awaited in-process        | About 20 pending items    | O(N) LLM calls                                              |
-| Match cost        | N LLM calls per report                                      | Any real traffic          | No retrieval stage, no cache, no cap                        |
-| Match quality     | A model verdict plus weighted signals, with no ground truth | Immediately               | No eval set, no metrics                                     |
+| Match latency     | One batched call for the whole field, in a worker           | Not at this corpus size   | Bounded at 60 s for the rerank and 25 s for adjudication, inside a 120 s job attempt |
+| Match cost        | Two calls per report, plus one agent run for a pair in the band | Not at this corpus size | Retrieval caps the field at `RETRIEVAL_LIMIT`; the band keeps the agent rare |
+| Match quality     | A batched model verdict plus weighted signals               | Precision@1 is 0.667      | Measured against a labelled set; the number is below target |
 | Write reliability | Side effects run inline and partially, with no compensation | The first partial failure | No outbox, no saga                                          |
 | Read scale        | Cursor-paginated lists and aggregate dashboards             | Comfortable now           | Fixed in phase 16. Was full-collection reads in the browser |
 | Availability      | One process does HTTP, matching, email and chain writes     | Any slow dependency       | No worker tier, no bulkheads                                |

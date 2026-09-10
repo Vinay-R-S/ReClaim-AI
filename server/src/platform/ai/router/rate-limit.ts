@@ -42,7 +42,7 @@ export class RateLimiter {
     const bucket = Math.floor(now / (WINDOW_SECONDS * 1000));
 
     try {
-      const redis = getSharedRedis();
+      const redis = await getSharedRedis();
 
       if (redis) {
         const redisKey = `ai:rate:${key}:${bucket}`;

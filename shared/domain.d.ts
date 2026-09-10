@@ -133,6 +133,52 @@ export interface ItemInput {
 /** `rejected` is an admin refusal of a proposal, kept rather than deleted. */
 export type MatchStatus = 'matched' | 'claimed' | 'rejected';
 
+/**
+ * The adjudication agent's verdict on a pair (section 8.6).
+ *
+ * Present only on a match the agent was actually asked about: one whose score
+ * fell in the uncertainty band while `ADJUDICATION_MODE` was not `off`. Every
+ * string in here is model-written text derived from what members of the public
+ * typed, so it is rendered as text and never as markup.
+ */
+export type AdjudicationDecision = 'match' | 'no_match' | 'needs_human_review';
+
+/**
+ * Why an agent run stopped.
+ *
+ * There is no value for a model failure: a run whose model call failed reached
+ * no verdict at all and is not persisted. A stored trace always carries a
+ * verdict the model actually gave.
+ */
+export type AdjudicationStop = 'verdict' | 'tool_budget' | 'deadline';
+
+export interface AdjudicationStepRecord {
+  tool: string;
+  args: Record<string, unknown>;
+  result: string;
+  failed: boolean;
+}
+
+export interface AdjudicationRecord {
+  decision: AdjudicationDecision;
+  /** 0-100, the agent's confidence in its own verdict. */
+  confidence: number;
+  evidence: string[];
+  contradictions: string[];
+  steps: AdjudicationStepRecord[];
+  toolCalls: number;
+  stoppedBy: AdjudicationStop;
+  model: string;
+  provider: string;
+  promptVersion: string;
+  costUsd: number;
+  ms: number;
+  /** `shadow` means the verdict was recorded and acted on by nothing. */
+  mode: 'shadow' | 'on';
+  /** The deterministic score that put the pair in the band. */
+  pipelineScore: number;
+}
+
 export interface Match<TTime = unknown> {
   id: string;
   lostItemId: string;
@@ -149,6 +195,14 @@ export interface Match<TTime = unknown> {
   timeScore?: number;
   imageScore: number;
   status: MatchStatus;
+  /** The agent's reasoning, when this pair was adjudicated. */
+  adjudication?: AdjudicationRecord;
+  /**
+   * True when the adjudication agent stopped the automatic handover and left
+   * the pair for an admin. The status stays `matched`; this is what tells the
+   * two apart without opening the record.
+   */
+  handoverHeld?: boolean;
   /** True for a live match, false for one read out of `matchHistory`. */
   isActive?: boolean;
   createdAt: TTime;

@@ -66,7 +66,9 @@ export class BullMqJobWorker implements JobWorker {
   async stop(): Promise<void> {
     await Promise.all(this.workers.map((worker) => worker.close()));
     this.workers.length = 0;
-    await this.connection.quit();
+    // Same guard as the producer's: a `quit` that cannot be written must still
+    // close the connection rather than fail the shutdown that asked for it.
+    await this.connection.quit().catch(() => this.connection.disconnect());
   }
 
   private async process(job: Job<JobEnvelope>): Promise<void> {

@@ -22,6 +22,10 @@ export type { Coordinates };
 export type { AIProvider, LlmProviderName, MapCenter } from '../../../shared/domain.js';
 
 export type {
+  AdjudicationDecision,
+  AdjudicationRecord,
+  AdjudicationStepRecord,
+  AdjudicationStop,
   AdminAuditAction,
   CreditBalance,
   CreditReason,

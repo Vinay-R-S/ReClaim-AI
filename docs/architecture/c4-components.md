@@ -43,13 +43,12 @@ flowchart LR
 
     subgraph pipeline["MatchingService"]
         filter["Stage 0 filter<br/>opposite type, open status,<br/>time window, geo bounds"]
-        retrieve["Stage 1 retrieve (planned)<br/>dense KNN + BM25,<br/>reciprocal rank fusion"]
-        rerank["Stage 2 rerank<br/>semantic scorer"]
-        adjudicate["Stage 3 adjudicate (planned)<br/>tool-using agent,<br/>structured verdict"]
+        retrieve["Stage 1 retrieve<br/>dense KNN + BM25,<br/>reciprocal rank fusion"]
+        rerank["Stage 2 rerank<br/>one batched call,<br/>the only semantic scorer"]
+        adjudicate["Stage 3 adjudicate<br/>tool-using agent,<br/>structured verdict"]
     end
 
     subgraph scorers["Scorers"]
-        semantic["semanticScorer<br/>LLM verdict and score"]
         visual["visualScorer<br/>Clarifai concepts"]
         structured["scoring.ts<br/>colour, location, time"]
     end
@@ -57,22 +56,24 @@ flowchart LR
     persist["Write match record<br/>move both items to Matched"]
     handover["Open one handover"]
 
-    trigger --> filter --> rerank --> persist --> handover
-    filter -.-> retrieve -.-> rerank
-    rerank -.-> adjudicate -.-> persist
-    rerank --> semantic
+    trigger --> filter --> retrieve --> rerank --> adjudicate --> persist --> handover
     rerank --> visual
     rerank --> structured
-
-    classDef planned stroke-dasharray: 5 5
-    class retrieve,adjudicate planned
 ```
 
-Today stage 0 is a Firestore query for pending items of the opposite type and
-stage 2 scores every survivor. There is no retrieval stage, so the number of
-LLM calls is the number of candidates. The four-stage target and the arithmetic
-behind it are in [requirements and capacity](nfr-and-capacity.md) and
-[ADR 002](../adr/0002-retrieve-then-rerank.md).
+All four stages exist. Stage 0 is a Firestore query for pending items of the
+opposite type; stage 1 narrows the survivors by dense and lexical retrieval
+fused by rank, behind `RETRIEVAL_MODE`; stage 2 scores every remaining
+candidate in one batched call and is the only semantic scorer, the per-pair
+scorer having been retired in phase 25; stage 3 runs a bounded tool-using agent
+on the single best pair when its score falls in the uncertainty band, behind
+`ADJUDICATION_MODE`. Both flags default to `shadow`, which runs the stage and
+acts on none of it.
+
+The reasoning behind the shape is in [ADR 002](../adr/0002-retrieve-then-rerank.md);
+the stages have their own documents in [hybrid retrieval](retrieval.md),
+[reranking and eval](reranking-and-eval.md) and
+[the adjudication agent](adjudication.md).
 
 What is already true and worth keeping:
 

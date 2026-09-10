@@ -108,9 +108,12 @@ fail a report that is already saved. Each job carries its own retry policy and
 dead-letters when it gives up. See
 [Jobs, the outbox, and tracing](jobs-and-outbox.md).
 
-What is still wrong is the loop. One LLM call per candidate means cost and
-latency grow with the corpus; phase 23 replaces it with retrieval, and phase 22
-puts the embeddings behind it.
+The loop that used to grow with the corpus is gone. Retrieval narrows the
+field before anything expensive runs (phase 23, on the embeddings phase 22 put
+behind it), and the batched reranker scores what is left in one call rather
+than one per candidate (phase 24, made the only semantic scorer in phase 25).
+A report costs two model calls, plus one bounded agent run when a pair lands in
+the uncertainty band.
 
 ## Where the rest of the work still runs
 
