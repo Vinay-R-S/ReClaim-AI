@@ -60,6 +60,7 @@ export const collections = {
   handoverEvents: db.collection('handoverEvents'), // Every handover state transition, append-only
   handoverSteps: db.collection('handoverSteps'), // One row per completed saga step, for idempotency
   escalations: db.collection('escalations'), // Saga steps that gave up and need a person
+  disputes: db.collection('disputes'), // A completed handover either party says is wrong
   adminAudit: db.collection('adminAudit'), // Moderation and match verification decisions
   outbox: db.collection('outbox'), // Domain events written with the state change that raised them
   jobClaims: db.collection('jobClaims'), // Idempotency keys held by a running job

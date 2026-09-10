@@ -439,6 +439,65 @@ export async function sendHandoverCompletedNotice(
 }
 
 /**
+ * Tell one party that a completed handover has been reverted.
+ *
+ * The compensation for the completion notice, and the only one available: an
+ * email cannot be recalled, so the correction is another email. Written to
+ * each side separately, carrying nothing about the other person, for the same
+ * reason the completion notice does.
+ *
+ * The reason is the admin's own words and is rendered as text, never as
+ * markup: it is typed into an admin form and read by two members of the
+ * public.
+ */
+export async function sendHandoverCorrectionNotice(
+  email: string,
+  itemName: string,
+  reason: string,
+): Promise<boolean> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #ea4335, #fbbc05); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; }
+        .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; }
+        .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ea4335; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Correction: Handover Reversed</h1>
+        </div>
+        <div class="content">
+          <p>We told you earlier that the handover for <strong>${escapeHtml(itemName)}</strong> was complete. An administrator has since reversed it, and this notice corrects that message.</p>
+          <div class="info-box">
+            <p style="margin: 0;"><strong>Reason given:</strong> ${escapeHtml(reason)}</p>
+            <p style="margin: 10px 0 0 0;">Any credits awarded for this handover have been reversed, and the reports have been returned to their previous state.</p>
+          </div>
+          <p>If you believe this reversal is wrong, reply to this notice or contact support quoting the item name above.</p>
+        </div>
+        <div class="footer">
+          <p>ReClaim AI - Secure Handover</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `Correction: handover reversed for ${itemName}`,
+    html,
+    text: `We told you earlier that the handover for "${itemName}" was complete. An administrator has since reversed it. Reason given: ${reason}. Any credits awarded have been reversed and the reports returned to their previous state. If you believe this is wrong, contact support quoting the item name.`,
+  });
+}
+
+/**
  * Check if email service is configured (either Resend or NodeMailer)
  */
 export function isEmailConfigured(): boolean {

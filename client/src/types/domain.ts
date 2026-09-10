@@ -12,6 +12,7 @@ import type {
   AdminAuditEntry as SharedAdminAuditEntry,
   CreditTransaction as SharedCreditTransaction,
   HandoverItemSnapshot as SharedHandoverItemSnapshot,
+  HandoverDispute as SharedHandoverDispute,
   HandoverRecord as SharedHandoverRecord,
   Item as SharedItem,
   ItemInput as SharedItemInput,
@@ -36,6 +37,9 @@ export type {
   MapCenter,
   SystemSettings,
   SystemSettingsResponse,
+  DisputeOutcome,
+  DisputeReason,
+  DisputeStatus,
   HandoverActorRole,
   HandoverCodeStatus,
   HandoverPersonSnapshot,
@@ -57,6 +61,7 @@ export type {
 
 export type Item = SharedItem<Timestamp>;
 export type Match = SharedMatch<Timestamp>;
+export type HandoverDispute = SharedHandoverDispute<SerializedTimestamp>;
 export type User = SharedUser<Timestamp>;
 
 /**

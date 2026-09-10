@@ -28,6 +28,34 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 /**
+ * What to call a session, preferring the machine state.
+ *
+ * `verified` is the one that matters: it means the credential was accepted and
+ * the completion saga has not finished, which is a session waiting on the
+ * system rather than on a person. Calling it "awaiting the code", which is
+ * what its legacy status projects to, sends an admin looking for a party who
+ * has already done their part.
+ */
+const STATE_LABEL: Record<string, string> = {
+  code_issued: 'Awaiting the code',
+  awaiting_meet: 'Awaiting confirmation',
+  verified: 'Completing',
+  blocked: 'Blocked',
+  expired: 'Expired',
+  cancelled: 'Cancelled',
+  disputed: 'Disputed',
+  reverted: 'Reverted',
+};
+
+/** Colours for the states the legacy status cannot express. */
+const STATE_STYLES: Record<string, string> = {
+  verified: 'bg-blue-50 text-blue-700 border-blue-200',
+  disputed: 'bg-amber-50 text-amber-800 border-amber-200',
+  reverted: 'bg-gray-100 text-gray-700 border-gray-200',
+  cancelled: 'bg-gray-100 text-gray-700 border-gray-200',
+};
+
+/**
  * The state the session is really in.
  *
  * `expired` is only written when somebody tries a code after the deadline, so
@@ -40,6 +68,60 @@ function effectiveStatus(session: HandoverSession): HandoverSession['status'] {
   if (!session.expiresAt) return session.status;
 
   return new Date(session.expiresAt).getTime() < Date.now() ? 'expired' : 'pending';
+}
+
+/**
+ * Whether this session needs an admin to reopen it.
+ *
+ * Read from `state` where the server sends it. `status` cannot answer the
+ * question: a session stranded at `verified` — its completion saga gave up —
+ * projects to the legacy `pending`, so a check on `status` alone hides the
+ * reopen button on exactly the session that needs it.
+ *
+ * A live session is deliberately excluded: re-issuing while a code is out
+ * would invalidate the one the owner is holding.
+ */
+function needsReopening(session: HandoverSession): boolean {
+  // `disputed` is under review and the transition table has no way out of it
+  // except a decision, so offering the button there is offering a 400.
+  if (session.state === 'disputed') return false;
+
+  // Still clock-aware. `expire` is written lazily, only by somebody submitting
+  // a code after the deadline, so a session nobody ever attempted sits at
+  // `code_issued` with its expiry long past — and reading the state alone hid
+  // the button on every timed-out handover.
+  if (session.state === 'code_issued' || session.state === 'awaiting_meet') {
+    return effectiveStatus(session) === 'expired';
+  }
+
+  if (session.state) return true;
+
+  return effectiveStatus(session) !== 'pending';
+}
+
+/**
+ * What to call a session, and which colour to give it.
+ *
+ * One function for both, because they were read from different sources and
+ * disagreed: the label came from the machine state and the colour from the
+ * legacy status, so a lapsed session read "Awaiting the code" in expired
+ * colours.
+ */
+function presentation(session: HandoverSession): { label: string; style: string } {
+  const lapsed = effectiveStatus(session) === 'expired';
+  const state = session.state && lapsed && session.state === 'code_issued' ? 'expired' : session.state;
+
+  const label =
+    (state ? STATE_LABEL[state] : undefined) ??
+    STATUS_LABEL[effectiveStatus(session)] ??
+    session.status;
+
+  const style =
+    (state ? STATE_STYLES[state] : undefined) ??
+    STATUS_STYLES[effectiveStatus(session)] ??
+    'bg-gray-100 text-gray-700 border-gray-200';
+
+  return { label, style };
 }
 
 function formatDate(value: string | null): string {
@@ -166,11 +248,10 @@ export function HandoverSessions() {
                 <span
                   className={cn(
                     'text-xs font-medium px-2 py-1 rounded-full border',
-                    STATUS_STYLES[effectiveStatus(session)] ??
-                      'bg-gray-100 text-gray-700 border-gray-200',
+                    presentation(session).style,
                   )}
                 >
-                  {STATUS_LABEL[effectiveStatus(session)] ?? session.status}
+                  {presentation(session).label}
                 </span>
 
                 <div className="min-w-0 flex-1">
@@ -194,7 +275,7 @@ export function HandoverSessions() {
 
                 {/* Not offered while a code is live: re-issuing then would
                     invalidate the one the owner is holding. */}
-                {effectiveStatus(session) !== 'pending' && (
+                {needsReopening(session) && (
                   <button
                     onClick={() => void reissue(session)}
                     disabled={

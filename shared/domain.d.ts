@@ -257,7 +257,17 @@ export type CreditReason =
   | 'successful_match_finder'
   | 'successful_match_owner'
   | 'false_claim'
-  | 'manual_adjustment';
+  | 'manual_adjustment'
+  /**
+   * The reversal of a handover award, posted when a handover is reverted.
+   *
+   * Its own reason rather than a `manual_adjustment`, because a ledger whose
+   * reversals are indistinguishable from an admin topping somebody up cannot
+   * be reconciled. Never an edit of the original entry: the ledger is
+   * append-only, so undoing an award is a second, negative entry that
+   * references the same item.
+   */
+  | 'handover_reverted';
 
 /** What `GET /api/credits/:userId` answers with. */
 export interface CreditBalance {
@@ -325,6 +335,46 @@ export type HandoverTransition =
 
 /** Who caused a transition. `system` is the pipeline or a worker. */
 export type HandoverActorRole = 'system' | 'owner' | 'finder' | 'admin';
+
+/**
+ * Why a handover was disputed, as the person raising it chose.
+ *
+ * A closed list rather than free text, because it is the field an admin queue
+ * is sorted and triaged by. The reason in the person's own words goes in
+ * `note`, which is shown but never branched on.
+ */
+export type DisputeReason =
+  | 'never_received'
+  | 'wrong_item'
+  | 'item_damaged'
+  | 'not_my_item'
+  | 'other';
+
+/** What an admin decided about a dispute. */
+export type DisputeOutcome = 'upheld' | 'rejected';
+
+export type DisputeStatus = 'open' | 'resolved';
+
+/**
+ * A dispute, as the admin queue reads it.
+ *
+ * One per handover: a second person disputing the same handover joins the open
+ * one rather than opening a second, so an admin resolves a handover once
+ * rather than racing themselves across two rows.
+ */
+export interface HandoverDispute<TTime = unknown> {
+  handoverId: string;
+  raisedBy: string;
+  raisedByRole: 'owner' | 'finder' | 'admin';
+  reason: DisputeReason;
+  note: string | null;
+  status: DisputeStatus;
+  outcome?: DisputeOutcome;
+  resolvedBy?: string;
+  resolutionNote?: string;
+  raisedAt: TTime;
+  resolvedAt?: TTime;
+}
 
 /** One row of the append-only handover event log. */
 export interface HandoverEvent<TTime = unknown> {
@@ -398,6 +448,14 @@ export interface HandoverSession {
   lostItemId: string;
   foundItemId: string;
   status: HandoverCodeStatus;
+  /**
+   * The machine state.
+   *
+   * Read in preference to `status`, which cannot tell an open session from one
+   * stranded at `verified`: both project to `pending`, and only one of them
+   * needs an admin to reopen it. Absent from a server that predates phase 26.
+   */
+  state?: HandoverState;
   attempts: number;
   expiresAt: string | null;
   blockedAt: string | null;

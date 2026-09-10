@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { HandoverSessions } from '../../components/admin/HandoverSessions';
+import { DisputeQueue } from '../../components/admin/DisputeQueue';
 import type { HandoverRecord } from '../../types/domain';
 import { toDate, type TimestampLike } from '../../lib/timestamps';
 
@@ -86,6 +87,14 @@ export function HandoversPage() {
       </div>
 
       <HandoverSessions />
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900">Disputes</h2>
+        <p className="text-gray-500 text-sm mt-1 mb-4">
+          Completed handovers a party says are wrong. Upholding one reverts it.
+        </p>
+        <DisputeQueue />
+      </div>
 
       {loading ? (
         <div className="flex justify-center py-12">

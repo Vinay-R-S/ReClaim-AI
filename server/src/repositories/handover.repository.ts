@@ -177,6 +177,77 @@ export class HandoverRepository {
     return handoverRef;
   }
 
+  /** One completed handover, for a revert or a dispute to read. */
+  async findCompletedById(matchId: string): Promise<Record<string, unknown> | null> {
+    const doc = await this.handovers.doc(matchId).get();
+
+    if (!doc.exists) return null;
+
+    return { ...(doc.data() as Record<string, unknown>), id: doc.id };
+  }
+
+  /**
+   * A revocation of a chain attestation.
+   *
+   * Written beside the attestation rather than over it: the chain is
+   * append-only, so the honest record of a withdrawn attestation is a second
+   * record that references the first, not an absent one.
+   */
+  async recordChainRevocation(
+    matchId: string,
+    revocation: {
+      revokesTxHash: string;
+      reason: string;
+      revokedBy: string;
+      onChain: boolean;
+    },
+  ): Promise<void> {
+    await this.handovers.doc(matchId).set(
+      {
+        blockchainRevocation: { ...revocation, revokedAt: FieldValue.serverTimestamp() },
+      },
+      { merge: true },
+    );
+  }
+
+  /**
+   * Hold the credits awarded for a handover while a dispute is open.
+   *
+   * A hold, not a reversal. Reversing on a dispute would decide it in advance,
+   * and the whole point of `disputed` is that nobody has decided yet. The flag
+   * is on the handover record because that is what a revert and a rejection
+   * both read; the ledger is untouched, as an append-only ledger must be.
+   *
+   * Nothing spends credits today, so this is a marker rather than an
+   * enforcement point. Phase 28 rewrites the ledger and owns making a hold
+   * bind; until then it is what tells an admin, and that phase, which awards
+   * are contested.
+   */
+  async freezeHandoverCredits(matchId: string, actorId: string, reason: string): Promise<void> {
+    const ref = this.handovers.doc(matchId);
+
+    // Updated, not merge-set. A merge-set would create a document in the
+    // completed-handovers collection for a handover that has none, which is
+    // the stub hazard that shadowed legacy sessions in the phase before this.
+    // A handover with no record has no credits to hold either.
+    await ref
+      .update({
+        creditsHeld: true,
+        creditsHeldReason: reason,
+        creditsHeldBy: actorId,
+        creditsHeldAt: FieldValue.serverTimestamp(),
+      })
+      .catch(() => undefined);
+  }
+
+  /** Release a hold, when a dispute is rejected or the credits are reversed. */
+  async unfreezeHandoverCredits(matchId: string): Promise<void> {
+    await this.handovers
+      .doc(matchId)
+      .update({ creditsHeld: false, creditsReleasedAt: FieldValue.serverTimestamp() })
+      .catch(() => undefined);
+  }
+
   /** The chain attestation, once the write has actually landed. */
   async recordChainAttestation(matchId: string, txHash: string): Promise<void> {
     await this.handovers.doc(matchId).set(

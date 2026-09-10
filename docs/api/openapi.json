@@ -2240,7 +2240,8 @@
                 "schema": {
                   "type": "object",
                   "required": [
-                    "events"
+                    "events",
+                    "predatesLog"
                   ],
                   "properties": {
                     "events": {
@@ -2248,6 +2249,10 @@
                       "items": {
                         "$ref": "#/components/schemas/HandoverEvent"
                       }
+                    },
+                    "predatesLog": {
+                      "type": "boolean",
+                      "description": "The session exists but has no events, so it predates the log and the backfill has not run for it. False for a session that does not exist at all, which is indistinguishable here from one with events"
                     }
                   }
                 }
@@ -2276,6 +2281,262 @@
             "description": "Match id, which is the session id"
           }
         ]
+      }
+    },
+    "/handover/revert": {
+      "post": {
+        "operationId": "revertHandover",
+        "summary": "Undo a completed handover",
+        "tags": [
+          "Handover"
+        ],
+        "description": "Undo a completed handover. Runs four compensations in order: a chain revocation record, reversing ledger entries, the match restored to the active collection, and both items returned to the status captured before they were claimed. The correction notice to both parties runs last, after the handover really is reverted, because it is the only step that cannot be taken back. Never a delete: the ledger and the chain are append-only, so undoing an award is a negative entry and undoing an attestation is a linked revocation. Admin only, idempotent, and the reason is required because it reaches two members of the public and the audit trail. A partial revert answers 409 with the compensations that did run. A handover that predates the step log answers 200 saying nothing was undone, and raises an escalation.",
+        "responses": {
+          "200": {
+            "description": "Reverted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverRevertResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "No such handover, not in a revertible state, or the revert stopped partway. A missing handover is a 409 rather than a 404: the endpoint answers about a state transition, not about a resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverRevertResult"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "matchId",
+                  "reason"
+                ],
+                "properties": {
+                  "matchId": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/handover/dispute": {
+      "post": {
+        "operationId": "disputeHandover",
+        "summary": "Dispute a completed handover",
+        "tags": [
+          "Handover"
+        ],
+        "description": "Either party says a completed handover is wrong. Decides nothing: it freezes the credits, moves the handover to `disputed` and routes it to the admin queue. Which party the caller is gets resolved from the handover itself rather than trusted from the body, and somebody who is neither party is refused. Disputes close HANDOVER_DISPUTE_WINDOW_DAYS after the handover; an admin is not bound by that window. A second person disputing the same handover joins the open dispute rather than opening a second one.",
+        "responses": {
+          "200": {
+            "description": "Dispute raised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Not in a disputable state, or the window has closed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "matchId",
+                  "reason"
+                ],
+                "properties": {
+                  "matchId": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "never_received",
+                      "wrong_item",
+                      "item_damaged",
+                      "not_my_item",
+                      "other"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "The person's own words. Shown to an admin, never branched on."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/handover/dispute/resolve": {
+      "post": {
+        "operationId": "resolveHandoverDispute",
+        "summary": "Decide a dispute",
+        "tags": [
+          "Handover"
+        ],
+        "description": "An admin decides a dispute. `upheld` runs the revert; `rejected` returns the handover to `completed` and releases the credit hold. The note is required and is recorded on the dispute and in the audit trail.",
+        "responses": {
+          "200": {
+            "description": "Decided",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverRevertResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "No open dispute, or the revert stopped partway"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "matchId",
+                  "outcome",
+                  "note"
+                ],
+                "properties": {
+                  "matchId": {
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "upheld",
+                      "rejected"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/handover/disputes": {
+      "get": {
+        "operationId": "listHandoverDisputes",
+        "summary": "The open dispute queue",
+        "tags": [
+          "Handover"
+        ],
+        "description": "Every handover with an open dispute, for the admin queue. Admin only: it names both parties.",
+        "responses": {
+          "200": {
+            "description": "Open disputes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "disputes"
+                  ],
+                  "properties": {
+                    "disputes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/HandoverDispute"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
       }
     }
   },
@@ -3020,7 +3281,7 @@
       },
       "HandoverSession": {
         "type": "object",
-        "description": "An open, blocked or expired session. The code hash is never included",
+        "description": "An open, blocked or expired session. The code hash is never included. `status` is the legacy field; `state` is the state machine and is the one to branch on",
         "properties": {
           "matchId": {
             "type": "string"
@@ -3061,6 +3322,25 @@
               "string",
               "null"
             ]
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "code_issued",
+              "awaiting_meet",
+              "verified",
+              "completed",
+              "blocked",
+              "expired",
+              "cancelled",
+              "disputed",
+              "reverted",
+              null
+            ],
+            "description": "Null for a session written before the machine existed and not yet backfilled"
           }
         }
       },
@@ -4392,6 +4672,128 @@
               "null"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "HandoverCompensation": {
+        "type": "object",
+        "description": "What one compensation did during a revert.",
+        "required": [
+          "step",
+          "status",
+          "detail"
+        ],
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": [
+              "handover.items",
+              "handover.archive",
+              "handover.credits",
+              "handover.notify",
+              "handover.chain"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "compensated",
+              "nothing_to_undo",
+              "failed"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      },
+      "HandoverRevertResult": {
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "compensations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HandoverCompensation"
+            },
+            "description": "In the order they ran, which is step 6 back to step 1."
+          }
+        }
+      },
+      "HandoverDispute": {
+        "type": "object",
+        "required": [
+          "handoverId",
+          "raisedBy",
+          "raisedByRole",
+          "reason",
+          "status"
+        ],
+        "properties": {
+          "handoverId": {
+            "type": "string"
+          },
+          "raisedBy": {
+            "type": "string"
+          },
+          "raisedByRole": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "finder",
+              "admin"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "never_received",
+              "wrong_item",
+              "item_damaged",
+              "not_my_item",
+              "other"
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "resolved"
+            ]
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "upheld",
+              "rejected"
+            ]
+          },
+          "resolvedBy": {
+            "type": "string"
+          },
+          "resolutionNote": {
+            "type": "string"
+          },
+          "raisedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "resolvedAt": {
+            "$ref": "#/components/schemas/Timestamp"
           }
         }
       }

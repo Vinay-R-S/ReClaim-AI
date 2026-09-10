@@ -76,6 +76,7 @@ const {
   creditKey,
   getUserCredits,
   penalizeFalseClaim,
+  reverseHandoverCredits,
 } = await import('./credits.service.js');
 
 const { CREDIT_VALUES } = await import('../types/index.js');
@@ -258,5 +259,104 @@ describe('CREDIT_VALUES', () => {
     expect(Math.abs(CREDIT_VALUES.FALSE_CLAIM)).toBeGreaterThan(
       CREDIT_VALUES.SUCCESSFUL_MATCH_OWNER,
     );
+  });
+});
+
+describe('reverseHandoverCredits', () => {
+  /**
+   * The only code in the system that takes credits away automatically, so the
+   * things worth pinning are the sign, the guard, and the idempotency key.
+   * Every one of them is a way to take credits off somebody who earned them.
+   */
+  it('posts the exact negative of the award, and moves the balance by it', async () => {
+    store.set('users/finder', { credits: 100, email: 'finder@example.com' });
+    await awardFinderCredits('finder', 'item-1');
+
+    const afterAward = store.get('users/finder')?.credits;
+
+    const result = await reverseHandoverCredits(
+      'finder',
+      'SUCCESSFUL_MATCH_FINDER',
+      'item-1',
+      'reverted',
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.amount).toBe(-CREDIT_VALUES.SUCCESSFUL_MATCH_FINDER);
+    expect(store.get('users/finder')?.credits).toBe(
+      (afterAward as number) - CREDIT_VALUES.SUCCESSFUL_MATCH_FINDER,
+    );
+    expect(store.get('users/finder')?.credits).toBe(100);
+  });
+
+  it('writes a reversing entry beside the award rather than editing it', async () => {
+    store.set('users/finder', { credits: 0, email: 'finder@example.com' });
+    await awardFinderCredits('finder', 'item-1');
+    await reverseHandoverCredits('finder', 'SUCCESSFUL_MATCH_FINDER', 'item-1', 'reverted');
+
+    const entries = ledgerEntries();
+
+    // The award is still there. An append-only ledger whose reversals edit the
+    // original is a balance that is right and a history that is a lie.
+    expect(entries).toHaveLength(2);
+    expect(entries.some((entry) => entry.reason === 'successful_match_finder')).toBe(true);
+    expect(entries.some((entry) => entry.reason === 'handover_reverted')).toBe(true);
+  });
+
+  it('refuses to reverse an award that was never made', async () => {
+    // A handover whose credits step was skipped or escalated. Posting the
+    // negative anyway takes credits the person never received.
+    store.set('users/finder', { credits: 100, email: 'finder@example.com' });
+
+    const result = await reverseHandoverCredits(
+      'finder',
+      'SUCCESSFUL_MATCH_FINDER',
+      'item-1',
+      'reverted',
+    );
+
+    expect(result.amount).toBe(0);
+    expect(store.get('users/finder')?.credits).toBe(100);
+    expect(ledgerEntries()).toHaveLength(0);
+  });
+
+  it('reverses once, however many times it is run', async () => {
+    store.set('users/finder', { credits: 0, email: 'finder@example.com' });
+    await awardFinderCredits('finder', 'item-1');
+
+    await reverseHandoverCredits('finder', 'SUCCESSFUL_MATCH_FINDER', 'item-1', 'reverted');
+    await reverseHandoverCredits('finder', 'SUCCESSFUL_MATCH_FINDER', 'item-1', 'reverted');
+
+    expect(store.get('users/finder')?.credits).toBe(0);
+    expect(ledgerEntries()).toHaveLength(2);
+  });
+
+  it('does not fail the revert when the account has since been deleted', async () => {
+    // Treating this as an error made a revert permanently unfinishable: the
+    // credit step runs before the two that put the item back on the board.
+    const result = await reverseHandoverCredits(
+      'gone',
+      'SUCCESSFUL_MATCH_OWNER',
+      'item-1',
+      'reverted',
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.amount).toBe(0);
+  });
+
+  it('records the balance the reversal left behind', async () => {
+    store.set('users/owner', { credits: 50, email: 'owner@example.com' });
+    await applyCredits('owner', 'SUCCESSFUL_MATCH_OWNER', {
+      idempotencyKey: creditKey('SUCCESSFUL_MATCH_OWNER', 'owner', 'item-9'),
+      relatedItemId: 'item-9',
+    });
+
+    await reverseHandoverCredits('owner', 'SUCCESSFUL_MATCH_OWNER', 'item-9', 'reverted');
+
+    const reversal = ledgerEntries().find((entry) => entry.reason === 'handover_reverted');
+
+    expect(reversal?.balanceAfter).toBe(50);
+    expect(reversal?.relatedItemId).toBe('item-9');
   });
 });

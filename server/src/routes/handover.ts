@@ -23,7 +23,10 @@ import {
 } from '../middleware/index.js';
 import {
   handoverConfirmSchema,
+  handoverDisputeResolveSchema,
+  handoverDisputeSchema,
   handoverReissueSchema,
+  handoverRevertSchema,
   handoverVerifySchema,
   matchIdParamsSchema,
   userIdParamsSchema,
@@ -86,6 +89,50 @@ router.get(
   validateParams(matchIdParamsSchema),
   asyncHandler(handoverController.qr),
 );
+
+/**
+ * POST /revert - admin: undo a completed handover.
+ *
+ * Runs the compensations backwards, posts reversing ledger entries, writes a
+ * chain revocation and sends both parties a correction notice. Never a delete.
+ * The schema requires a typed reason because it reaches two members of the
+ * public and the audit trail.
+ */
+router.post(
+  '/revert',
+  authMiddleware,
+  requireAdmin,
+  validate(handoverRevertSchema),
+  asyncHandler(handoverController.revert),
+);
+
+/**
+ * POST /dispute - either party: say a completed handover is wrong.
+ *
+ * Decides nothing. It freezes the credits, moves the handover to `disputed`
+ * and routes it to the admin queue. The controller resolves which party the
+ * caller is from the handover itself, and refuses somebody who is neither.
+ */
+router.post(
+  '/dispute',
+  authMiddleware,
+  requireActiveUser,
+  handoverVerifyLimiter,
+  validate(handoverDisputeSchema),
+  asyncHandler(handoverController.dispute),
+);
+
+/** POST /dispute/resolve - admin: uphold a dispute and revert, or reject it */
+router.post(
+  '/dispute/resolve',
+  authMiddleware,
+  requireAdmin,
+  validate(handoverDisputeResolveSchema),
+  asyncHandler(handoverController.resolveDispute),
+);
+
+/** GET /disputes - admin: the open dispute queue */
+router.get('/disputes', authMiddleware, requireAdmin, asyncHandler(handoverController.disputes));
 
 /** GET /timeline/:matchId - admin: every transition this handover has made */
 router.get(

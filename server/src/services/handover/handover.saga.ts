@@ -117,7 +117,7 @@ function stepId(handoverId: string, step: SagaStep): string {
 export interface StepRecord {
   handoverId: string;
   step: SagaStep;
-  status: 'started' | 'done' | 'skipped' | 'escalated';
+  status: 'started' | 'done' | 'skipped' | 'escalated' | 'reverted';
   detail?: string;
   /**
    * What the compensation will need.
@@ -127,6 +127,11 @@ export interface StepRecord {
    * the item document no longer has it.
    */
   undo?: Record<string, unknown>;
+  /** Set when a revert has undone this step. The forward record stays. */
+  compensatedAt?: unknown;
+  compensationDetail?: string;
+  /** Held while one revert is running this step's compensation. */
+  compensationClaimedAt?: unknown;
 }
 
 export class HandoverSagaRepository {
@@ -222,6 +227,99 @@ export class HandoverSagaRepository {
         .map((doc) => doc.data() as StepRecord)
         .filter((record) => record.status === 'done' || record.status === 'skipped')
         .map((record) => record.step),
+    );
+  }
+
+  /** Whether this step has already been undone by a revert. */
+  async isCompensated(handoverId: string, step: SagaStep): Promise<boolean> {
+    const snapshot = await this.steps.doc(stepId(handoverId, step)).get();
+
+    return snapshot.exists && Boolean((snapshot.data() as StepRecord).compensatedAt);
+  }
+
+  /**
+   * Take exclusive ownership of undoing one step.
+   *
+   * Transactional, because the read-then-write it replaces let two admins
+   * acting on the same escalation within the same second both pass the check
+   * and both run the compensation: two correction emails to each party, two
+   * item restores, two match writes. Only the credit reversal was safe, and
+   * only because the ledger key made it so.
+   *
+   * Returns false when somebody else already holds it or has finished it.
+   */
+  async claimCompensation(handoverId: string, step: SagaStep): Promise<boolean> {
+    const ref = this.steps.doc(stepId(handoverId, step));
+
+    return this.steps.firestore.runTransaction(async (tx) => {
+      const snapshot = await tx.get(ref);
+      const record = snapshot.exists ? (snapshot.data() as StepRecord) : undefined;
+
+      if (record?.compensatedAt || record?.compensationClaimedAt) return false;
+
+      tx.set(
+        ref,
+        { handoverId, step, compensationClaimedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      );
+
+      return true;
+    });
+  }
+
+  /**
+   * Give a claim back, for a compensation that did nothing.
+   *
+   * A step that could not run for want of data is not undone, and marking it
+   * so would make it unretryable forever: the data may arrive, the config may
+   * be corrected, and the revert has to be able to finish afterwards.
+   */
+  async releaseCompensationClaim(handoverId: string, step: SagaStep): Promise<void> {
+    await this.steps
+      .doc(stepId(handoverId, step))
+      .set({ compensationClaimedAt: FieldValue.delete() }, { merge: true });
+  }
+
+  /**
+   * Undo the forward record, so a re-verified handover runs its saga again.
+   *
+   * `reverted` is not `done`. Without this the step rows still read `done`
+   * after a revert, so re-issuing a code and verifying it again short-circuits
+   * all five handlers and `completeIfReady` moves the handover back to
+   * `completed` — with the items never re-claimed, no credits, no email and no
+   * attestation. The `undo` capture is left in place: it is evidence, and the
+   * next forward run captures its own.
+   */
+  async resetForRevert(handoverId: string): Promise<void> {
+    const snapshot = await this.steps.where('handoverId', '==', handoverId).get();
+
+    if (snapshot.empty) return;
+
+    const batch = this.steps.firestore.batch();
+
+    snapshot.docs.forEach((doc) => {
+      batch.set(doc.ref, { status: 'reverted', revertedAt: FieldValue.serverTimestamp() }, { merge: true });
+    });
+
+    await batch.commit();
+  }
+
+  /**
+   * Record that a step has been undone.
+   *
+   * On the step row rather than replacing it: the forward record is what says
+   * the step ran, and a revert does not make that untrue. Both halves are
+   * readable afterwards, which is what a dispute needs.
+   */
+  async markCompensated(handoverId: string, step: SagaStep, detail: string): Promise<void> {
+    await this.steps.doc(stepId(handoverId, step)).set(
+      {
+        handoverId,
+        step,
+        compensatedAt: FieldValue.serverTimestamp(),
+        compensationDetail: detail,
+      },
+      { merge: true },
     );
   }
 

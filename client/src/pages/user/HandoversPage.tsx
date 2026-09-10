@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { UserLayout } from '../../components/layout/UserLayout';
 import { useAuth } from '../../context/AuthContext';
-import { Package, Calendar, User, ExternalLink } from 'lucide-react';
+import { Package, Calendar, User, ExternalLink, AlertTriangle } from 'lucide-react';
+import { RaiseDisputeDialog } from '../../components/user/RaiseDisputeDialog';
 import { authGet } from '../../lib/api';
 import type { HandoverRecord } from '../../types/domain';
 import { toDate, type TimestampLike } from '../../lib/timestamps';
@@ -94,6 +95,7 @@ interface HandoverCardProps {
 function HandoverCard({ handover, currentUserId, formatDate }: HandoverCardProps) {
   const isLostPerson = handover.lostPersonDetails.userId === currentUserId;
   const isFoundPerson = handover.foundPersonDetails.userId === currentUserId;
+  const [disputing, setDisputing] = useState(false);
 
   return (
     <div className="card p-6 hover:shadow-md transition-shadow">
@@ -144,6 +146,30 @@ function HandoverCard({ handover, currentUserId, formatDate }: HandoverCardProps
           </div>
         </div>
       </div>
+
+      {/* Only a party can dispute, and the server checks that again. This is
+          the one route into the dispute queue: without it the queue only ever
+          filled from an admin acting on somebody's behalf. */}
+      {(isLostPerson || isFoundPerson) && (
+        <div className="flex justify-end pt-3 mt-3 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => setDisputing(true)}
+            className="flex items-center gap-1.5 text-sm font-medium text-amber-700 hover:text-amber-800"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            Something was wrong with this handover
+          </button>
+        </div>
+      )}
+
+      {disputing && (
+        <RaiseDisputeDialog
+          matchId={handover.matchId}
+          itemName={handover.lostItemDetails.name}
+          onClose={() => setDisputing(false)}
+        />
+      )}
     </div>
   );
 }

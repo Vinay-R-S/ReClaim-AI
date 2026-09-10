@@ -1,10 +1,26 @@
 import { ApiError, apiGet, apiPost, authGet, authPost, withCriteriaFailure } from '../lib/api';
 import type {
+  DisputeOutcome,
+  DisputeReason,
+  HandoverDispute,
   HandoverRecord,
   HandoverSession,
   HandoverStatus,
   VerifyCodeResult,
 } from '../types/domain';
+
+/** What one compensation did during a revert, as the admin screen shows it. */
+export interface HandoverCompensation {
+  step: string;
+  status: 'compensated' | 'nothing_to_undo' | 'failed';
+  detail: string;
+}
+
+export interface HandoverRevertResult {
+  success: boolean;
+  message: string;
+  compensations?: HandoverCompensation[];
+}
 
 export const handoverService = {
   /**
@@ -29,6 +45,38 @@ export const handoverService = {
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;
     }
+  },
+
+  /**
+   * Undo a completed handover (admin).
+   *
+   * The reason is required by the server and reaches both parties in a
+   * correction notice, so the form asks for it rather than sending a default.
+   */
+  revert: (matchId: string, reason: string): Promise<HandoverRevertResult> =>
+    authPost('/api/handover/revert', { matchId, reason }),
+
+  /** Say a completed handover is wrong. Either party, within the window. */
+  dispute: (
+    matchId: string,
+    reason: DisputeReason,
+    note?: string,
+  ): Promise<{ success: boolean; message: string }> =>
+    authPost('/api/handover/dispute', { matchId, reason, note }),
+
+  /** Decide a dispute (admin): uphold it and revert, or reject it. */
+  resolveDispute: (
+    matchId: string,
+    outcome: DisputeOutcome,
+    note: string,
+  ): Promise<HandoverRevertResult> =>
+    authPost('/api/handover/dispute/resolve', { matchId, outcome, note }),
+
+  /** The open dispute queue (admin). */
+  getDisputes: async (): Promise<HandoverDispute[]> => {
+    const data = await authGet<{ disputes?: HandoverDispute[] }>('/api/handover/disputes');
+
+    return data.disputes ?? [];
   },
 
   /** Sessions that have not completed: open, blocked or expired (admin). */

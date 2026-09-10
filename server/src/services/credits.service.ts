@@ -249,6 +249,104 @@ export async function penalizeFalseClaim(userId: string, itemId: string): Promis
  * Repeatable by design, so it carries no idempotency key and its own ledger
  * reason rather than borrowing one of the automatic ones.
  */
+/**
+ * Undo a handover award, without touching the entry that made it.
+ *
+ * The ledger is append-only, so a reversal is a second entry of the opposite
+ * sign referencing the same item, not an edit and never a delete. That is the
+ * compensation the plan specifies for step 4, and it is the only one that
+ * leaves a reconcilable trail: an edited entry makes the balance right and the
+ * history a lie.
+ *
+ * Idempotent on its own key, so a revert that is retried — or run twice by two
+ * admins racing the same escalation — posts one reversal.
+ */
+export async function reverseHandoverCredits(
+  userId: string,
+  reason: 'SUCCESSFUL_MATCH_FINDER' | 'SUCCESSFUL_MATCH_OWNER',
+  itemId: string,
+  note: string,
+): Promise<CreditResult> {
+  const amount = -CREDIT_VALUES[reason];
+  const idempotencyKey = `reversal:${creditKey(reason, userId, itemId)}`;
+
+  try {
+    const userRef = creditRepository.userRef(userId);
+    const ledgerRef = creditRepository.ledgerRef(idempotencyKey);
+    const originalRef = creditRepository.ledgerRef(creditKey(reason, userId, itemId));
+
+    const outcome = await creditRepository.runTransaction(async (tx) => {
+      const [userSnapshot, ledgerSnapshot, originalSnapshot] = await Promise.all([
+        tx.get(userRef),
+        tx.get(ledgerRef),
+        tx.get(originalRef),
+      ]);
+
+      if (!userSnapshot.exists) return { missing: true, applied: false, newBalance: 0 };
+
+      // Nothing was ever awarded, so there is nothing to reverse. Posting the
+      // negative anyway would take credits the person never received.
+      if (!originalSnapshot.exists) return { missing: false, applied: false, newBalance: 0 };
+
+      if (ledgerSnapshot.exists) {
+        return {
+          missing: false,
+          applied: false,
+          newBalance: (userSnapshot.data()?.credits as number | undefined) ?? 0,
+        };
+      }
+
+      const current = (userSnapshot.data()?.credits as number | undefined) ?? 0;
+      const newBalance = current + amount;
+
+      tx.set(
+        userRef,
+        { credits: newBalance, updatedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      );
+
+      tx.set(ledgerRef, {
+        userId,
+        amount,
+        reason: 'handover_reverted',
+        balanceAfter: newBalance,
+        relatedItemId: itemId,
+        note,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      return { missing: false, applied: true, newBalance };
+    });
+
+    if (outcome.missing) {
+      // Not a failure the caller should retry forever. There is no balance to
+      // adjust on an account that no longer exists, and treating it as an
+      // error made a revert permanently unfinishable: the credit step is third
+      // of four, so the two that put the item back on the board never ran.
+      log.warn('Credit reversal skipped, the account no longer exists', { userId, reason });
+
+      return { success: true, newBalance: 0, amount: 0, alreadyApplied: true };
+    }
+
+    if (!outcome.applied) {
+      log.info('Credit reversal skipped, nothing to reverse or already reversed', {
+        userId,
+        reason,
+      });
+
+      return { success: true, newBalance: outcome.newBalance, amount: 0, alreadyApplied: true };
+    }
+
+    log.info('Handover credits reversed', { userId, reason, amount });
+
+    return { success: true, newBalance: outcome.newBalance, amount, alreadyApplied: false };
+  } catch (error) {
+    log.error('Error reversing handover credits:', error);
+
+    return { success: false, newBalance: 0, amount, alreadyApplied: false };
+  }
+}
+
 export async function adjustCredits(
   userId: string,
   amount: number,

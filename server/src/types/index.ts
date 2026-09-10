@@ -22,6 +22,10 @@ export type { Coordinates };
 export type { AIProvider, LlmProviderName, MapCenter } from '../../../shared/domain.js';
 
 export type {
+  DisputeOutcome,
+  DisputeReason,
+  DisputeStatus,
+  HandoverDispute as SharedHandoverDispute,
   AdjudicationDecision,
   AdjudicationRecord,
   AdjudicationStepRecord,
