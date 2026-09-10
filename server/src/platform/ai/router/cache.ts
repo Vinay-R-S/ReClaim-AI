@@ -51,7 +51,7 @@ export class ResponseCache {
       // Inside the try: the first call constructs the client, and a
       // construction failure here would escape a path documented as best
       // effort and fail a call the cache was only meant to speed up.
-      const redis = getSharedRedis();
+      const redis = await getSharedRedis();
 
       if (redis) {
         const raw = await redis.get(key);
@@ -81,7 +81,7 @@ export class ResponseCache {
     if (ttlSeconds <= 0) return;
 
     try {
-      const redis = getSharedRedis();
+      const redis = await getSharedRedis();
 
       if (redis) {
         await redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
@@ -116,7 +116,7 @@ export class ResponseCache {
     this.memory.delete(key);
 
     try {
-      const redis = getSharedRedis();
+      const redis = await getSharedRedis();
 
       await redis?.del(key);
     } catch (error) {

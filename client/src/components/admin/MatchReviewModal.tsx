@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Package, AlertTriangle } from 'lucide-react';
 import { verifyMatch } from '@/services/matchService';
+import { AdjudicationPanel } from './AdjudicationPanel';
 import type { Item, Match } from '@/types/domain';
 
 interface MatchReviewModalProps {
@@ -169,6 +170,13 @@ export function MatchReviewModal({
               ))}
             </div>
           </div>
+
+          {match.adjudication && (
+            <AdjudicationPanel
+              adjudication={match.adjudication}
+              handoverHeld={match.handoverHeld}
+            />
+          )}
 
           {criteriaFailure && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">

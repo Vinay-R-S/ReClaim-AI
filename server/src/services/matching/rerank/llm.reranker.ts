@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { aiRouter, defineStructured } from '../../../platform/ai/index.js';
 import { createLogger } from '../../../utils/logger.js';
 import { env } from '../../../config/env.js';
-import { chunk } from '../../../utils/async.js';
+import { chunk, withTimeout } from '../../../utils/async.js';
 import {
   buildRerankPrompt,
   flagInjection,
@@ -26,6 +26,22 @@ import type { Item } from '../../../types/index.js';
 import type { MatchSubject } from '../matching.types.js';
 
 const log = createLogger('matching:rerank');
+
+/**
+ * Wall clock for the whole rerank, across every batch.
+ *
+ * Enforced by cutting a batch off at whatever is left of it, not by checking
+ * the clock between batches. Checking between batches bounds nothing: a batch
+ * that starts one millisecond inside the budget runs to its own ceiling, and
+ * that ceiling is larger than it looks — `chatStructured` makes two router
+ * calls, the original and the repair, each with its own fresh deadline. Two
+ * batches of that is minutes, inside a `match.item` attempt killed at two
+ * minutes and shared with adjudication.
+ *
+ * Reaching the budget is not a failure. The batches that answered are kept,
+ * and a candidate with no verdict is a candidate rather than a match.
+ */
+const TOTAL_BUDGET_MS = 60_000;
 
 const VERDICTS = ['same', 'likely', 'unlikely', 'different'] as const;
 
@@ -97,9 +113,31 @@ export class LlmReranker implements Reranker {
     // context the model reasons about worse and a single failure that costs
     // every candidate at once.
     const batches = chunk(prompted, env.matching.rerankBatchSize);
+    const deadline = started + TOTAL_BUDGET_MS;
 
     for (const batch of batches) {
-      const result = await this.scoreBatch(subject, batch);
+      const remaining = deadline - Date.now();
+
+      if (remaining <= 0) {
+        log.warn('Rerank ran out of time; the remaining candidates were not scored', {
+          scored: scores.size,
+          of: prompted.length,
+        });
+
+        break;
+      }
+
+      // The batch is cut off at what is left, so the budget is a bound on this
+      // loop rather than a suggestion checked between iterations.
+      const result = await withTimeout(
+        this.scoreBatch(subject, batch),
+        remaining,
+        'rerank batch',
+      ).catch((error: unknown) => {
+        log.warn('Rerank batch exceeded the remaining budget', { error });
+
+        return null;
+      });
 
       if (!result) continue;
 

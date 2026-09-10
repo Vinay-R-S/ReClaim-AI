@@ -7,6 +7,7 @@
  * stranger a code that hands over someone else's property.
  */
 
+import { toDate } from '../utils/firestore.js';
 import { calculateTimeDifference, haversineDistance } from '../utils/scoring.js';
 import type { Item } from '../types/index.js';
 
@@ -17,33 +18,8 @@ export const HANDOVER_CONFIG = {
   TIME_WINDOW_HOURS: 2, // +/- 2 hours
 };
 
-/**
- * Read whatever a date field holds.
- *
- * A report date arrives as a Firestore `Timestamp` from a document, a `Date`
- * from a service call, or a string from a request that has been through JSON.
- */
-export function toDate(val: unknown): Date | null {
-  if (val instanceof Date) return Number.isNaN(val.getTime()) ? null : val;
-
-  if (val && typeof val === 'object') {
-    const candidate = val as { toDate?: () => Date; seconds?: number };
-
-    if (typeof candidate.toDate === 'function') {
-      const converted = candidate.toDate();
-      return Number.isNaN(converted.getTime()) ? null : converted;
-    }
-
-    if (typeof candidate.seconds === 'number') return new Date(candidate.seconds * 1000);
-  }
-
-  if (typeof val === 'string' || typeof val === 'number') {
-    const parsed = new Date(val);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  return null;
-}
+/** Re-exported for the callers that have always imported it from here. */
+export { toDate };
 
 function sameLocationText(a?: string, b?: string): boolean {
   if (!a || !b) return false;

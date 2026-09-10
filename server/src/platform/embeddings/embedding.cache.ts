@@ -34,7 +34,7 @@ export class EmbeddingCache {
 
   async get(key: string): Promise<Float32Array | null> {
     try {
-      const redis = getSharedRedis();
+      const redis = await getSharedRedis();
 
       if (redis) {
         // Base64 of the raw buffer, not JSON: a 384-float vector is 1.5 KB of
@@ -54,7 +54,7 @@ export class EmbeddingCache {
 
   async set(key: string, vector: Float32Array): Promise<void> {
     try {
-      const redis = getSharedRedis();
+      const redis = await getSharedRedis();
 
       if (redis) {
         await redis.set(key, encode(vector), 'EX', TTL_SECONDS);

@@ -22,8 +22,8 @@ const log = createLogger('ai:policy');
 export const AI_TASKS = [
   'item.analyze',
   'item.enhance',
-  'match.semantic',
   'match.rerank',
+  'match.adjudicate',
   'cctv.describe',
   'cctv.verify',
 ] as const;
@@ -87,36 +87,52 @@ export const DEFAULT_POLICIES: Record<AiTask, TaskPolicy> = {
     cacheTtlSeconds: 0,
     attempts: 1,
   },
-  'match.semantic': {
-    primary: 'groq',
-    fallbacks: [],
-    temperature: 0.2,
-    maxTokens: 2048,
-    timeoutMs: 15_000,
-    // Generous, because nobody is waiting: this runs in a worker, and the old
-    // backstop around the same call was 40s for a single provider.
-    deadlineMs: 90_000,
-    cacheTtlSeconds: 3_600,
-    attempts: 2,
-  },
   /**
    * One call for a whole batch, so it is allowed to be slower and larger than
    * the per-pair scorer it replaces and still cost less overall.
    *
    * Not cached. The key would be the whole batch, and a batch is a set of
    * candidates for one subject at one moment: the same batch essentially never
-   * recurs, so a cache would store entries nothing ever reads. The per-pair
-   * task keeps its cache because a pair genuinely does recur.
+   * recurs, so a cache would store entries nothing ever reads.
+   *
+   * Tightened when the per-pair scorer was retired. This is now the only
+   * semantic scorer, so it sits in front of every match the system makes,
+   * inside a `match.item` attempt killed at two minutes that it shares with
+   * retrieval, the visual scorer and adjudication. The reranker bounds itself
+   * across batches as well; this bounds one of them.
    */
   'match.rerank': {
     primary: 'groq',
     fallbacks: [],
     temperature: 0.1,
     maxTokens: 4096,
-    timeoutMs: 45_000,
-    deadlineMs: 120_000,
+    timeoutMs: 20_000,
+    deadlineMs: 45_000,
     cacheTtlSeconds: 0,
     attempts: 2,
+  },
+  /**
+   * One step of an agent run, not a whole one.
+   *
+   * The agent makes several of these in sequence, so the per-step budget is
+   * small and the bound that matters is the run deadline in
+   * `ADJUDICATION_DEADLINE_MS`, which the agent enforces itself across every
+   * step and tool call. Uncached, because a step's prompt carries the
+   * transcript of the steps before it and therefore never recurs.
+   *
+   * `attempts` is 1 on purpose. A retried step is a step whose partial work
+   * may already be in the transcript, and the run's own deadline is the better
+   * place to spend the time.
+   */
+  'match.adjudicate': {
+    primary: 'groq',
+    fallbacks: [],
+    temperature: 0.1,
+    maxTokens: 2048,
+    timeoutMs: 12_000,
+    deadlineMs: 15_000,
+    cacheTtlSeconds: 0,
+    attempts: 1,
   },
   'cctv.describe': {
     primary: 'groq',

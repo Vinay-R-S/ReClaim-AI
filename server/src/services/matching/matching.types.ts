@@ -12,6 +12,14 @@ import { Coordinates, Item } from '../../types/index.js';
  */
 export interface MatchSubject {
   id?: string;
+  /**
+   * Who filed the report.
+   *
+   * Read by the adjudication agent's claim-history tool and by nothing else.
+   * It never reaches a prompt: that tool takes an item id and resolves the
+   * reporter itself, so a uid is never disclosed to a model.
+   */
+  reportedBy?: string;
   name: string;
   description: string;
   tags?: string[];
@@ -70,11 +78,6 @@ export interface MatchingRunOptions {
   maxScoredCandidates?: number;
   /** Concurrent third-party calls. */
   concurrency?: number;
-}
-
-export interface SemanticScorer {
-  /** 0-100 similarity, or null when the provider could not answer. */
-  score(a: MatchSubject, b: Item): Promise<number | null>;
 }
 
 export interface VisualScorer {

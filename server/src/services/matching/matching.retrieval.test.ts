@@ -31,7 +31,6 @@ vi.mock('../../repositories/item.repository.js', () => ({
 }));
 
 const mode = vi.fn(() => 'shadow');
-const rerankMode = vi.fn(() => 'off');
 
 vi.mock('../../config/env.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../config/env.js')>();
@@ -40,12 +39,7 @@ vi.mock('../../config/env.js', async (importOriginal) => {
     ...actual,
     env: {
       ...actual.env,
-      matching: {
-        ...actual.env.matching,
-        get rerankMode() {
-          return rerankMode();
-        },
-      },
+      matching: { ...actual.env.matching, adjudicationMode: 'off' },
     },
   };
 });
@@ -92,10 +86,20 @@ function pipelineWith(retrieved: string[]) {
   const scored: string[] = [];
 
   const semantic = {
-    score: vi.fn(async (_subject: unknown, candidate: any) => {
-      scored.push(candidate.id);
+    rerank: vi.fn(async (_subject: unknown, candidates: any[]) => {
+      candidates.forEach((candidate) => scored.push(candidate.id));
 
-      return 90;
+      return {
+        scores: new Map(
+          candidates.map((candidate) => [
+            candidate.id,
+            { id: candidate.id, score: 90, verdict: 'likely' as const },
+          ]),
+        ),
+        model: 'test-model',
+        requested: candidates.length,
+        ms: 5,
+      };
     }),
   };
 
@@ -116,7 +120,7 @@ function pipelineWith(retrieved: string[]) {
 
   return {
     service: new MatchingService({
-      semantic: semantic as any,
+      reranker: semantic as any,
       visual: visual as any,
       retrieval: retrieval as any,
     }),
@@ -137,10 +141,20 @@ function realPipeline() {
   const scored: string[] = [];
 
   const semantic = {
-    score: vi.fn(async (_subject: unknown, candidate: any) => {
-      scored.push(candidate.id);
+    rerank: vi.fn(async (_subject: unknown, candidates: any[]) => {
+      candidates.forEach((candidate) => scored.push(candidate.id));
 
-      return 90;
+      return {
+        scores: new Map(
+          candidates.map((candidate) => [
+            candidate.id,
+            { id: candidate.id, score: 90, verdict: 'likely' as const },
+          ]),
+        ),
+        model: 'test-model',
+        requested: candidates.length,
+        ms: 5,
+      };
     }),
   };
 
@@ -156,7 +170,7 @@ function realPipeline() {
 
   return {
     service: new MatchingService({
-      semantic: semantic as any,
+      reranker: semantic as any,
       visual: { isConfigured: () => false, score: vi.fn(async () => null) } as any,
       retrieval,
     }),
@@ -172,7 +186,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   listPendingByType.mockResolvedValue(CANDIDATES);
   mode.mockReturnValue('shadow');
-  rerankMode.mockReturnValue('off');
 });
 
 describe('RETRIEVAL_MODE', () => {
@@ -253,12 +266,15 @@ describe('RETRIEVAL_MODE', () => {
 });
 
 /**
- * The rerank stage, in each mode.
+ * The rerank stage, which is the only semantic scorer there is.
  *
- * Same argument as retrieval: `shadow` must not change a single score, or
- * the numbers it logs describe a system nobody is running.
+ * The per-pair scorer it used to be measured against is gone, and with it the
+ * fallback that caught a rerank failure. What replaces those tests is the
+ * behaviour that now matters: a candidate the batch answered for is scored
+ * from that answer, and a candidate it did not answer for is a candidate and
+ * never a match, however well it scores on colour, place and time.
  */
-describe('RERANK_MODE', () => {
+describe('rerank', () => {
   function reranker(scores: Record<string, number>) {
     return {
       rerank: vi.fn(async () => ({
@@ -276,114 +292,109 @@ describe('RERANK_MODE', () => {
   }
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
-  function pipeline(batch: Record<string, number>, perPair = 40) {
-    const semantic = { score: vi.fn(async () => perPair) };
+  function pipeline(batch: Record<string, number>) {
     const rerank = reranker(batch);
 
     return {
       service: new MatchingService({
-        semantic: semantic as any,
         visual: { isConfigured: () => false, score: vi.fn(async () => null) } as any,
         reranker: rerank as any,
+        // Injected so these tests do not run the real retrieval stage, which
+        // would pull in the embeddings stack and make them depend on whatever
+        // a developer has EMBEDDINGS_ENABLED set to.
+        retrieval: { retrieve: vi.fn(async () => ({ candidates: [], filtered: 0, denseUsed: false, ms: 0 })) } as any,
       }),
-      semantic,
       rerank,
     };
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
-  it('does not call the reranker at all when it is off', async () => {
-    const { service, rerank, semantic } = pipeline({ 'lexical-first': 95 });
+  /** One call for the whole field, which is the saving the stage exists for. */
+  it('asks once for every candidate rather than once per candidate', async () => {
+    const { service, rerank } = pipeline({ 'lexical-first': 95, 'dense-first': 95 });
 
     await service.run(SUBJECT, 'Lost');
 
-    expect(rerank.rerank).not.toHaveBeenCalled();
-    expect(semantic.score).toHaveBeenCalledTimes(2);
-  });
-
-  /**
-   * Shadow costs one extra call, not N extra: the batch runs once and every
-   * candidate still gets the per-pair call whose score actually counts.
-   */
-  it('runs the reranker in shadow but scores from the per-pair scorer', async () => {
-    rerankMode.mockReturnValue('shadow');
-
-    const { service, rerank, semantic } = pipeline({ 'lexical-first': 95, 'dense-first': 95 });
-    const result = await service.run(SUBJECT, 'Lost');
-
     expect(rerank.rerank).toHaveBeenCalledTimes(1);
-    expect(semantic.score).toHaveBeenCalledTimes(2);
-
-    // The per-pair scorer said 40, the batch said 95. The score is the 40.
-    const semanticComponent = result.best!.breakdown.semantic;
-
-    expect(Math.round((semanticComponent.score / semanticComponent.weight) * 100)).toBe(40);
+    expect(rerank.rerank.mock.calls[0][1]).toHaveLength(2);
   });
 
-  it('produces the same scores in shadow as with the reranker off', async () => {
-    rerankMode.mockReturnValue('off');
-    const off = await pipeline({ 'lexical-first': 95 }).service.run(SUBJECT, 'Lost');
+  it('scores a candidate from the verdict the batch gave it', async () => {
+    const { service } = pipeline({ 'lexical-first': 95, 'dense-first': 95 });
 
-    rerankMode.mockReturnValue('shadow');
-    const shadow = await pipeline({ 'lexical-first': 95 }).service.run(SUBJECT, 'Lost');
-
-    expect(shadow.matches.map((entry) => entry.score)).toEqual(
-      off.matches.map((entry) => entry.score),
-    );
-    expect(shadow.best?.score).toBe(off.best?.score);
-  });
-
-  /** The saving: the batch answers, so the per-pair call is not made at all. */
-  it('replaces the per-pair calls entirely when it is on', async () => {
-    rerankMode.mockReturnValue('on');
-
-    const { service, semantic } = pipeline({ 'lexical-first': 95, 'dense-first': 95 });
     const result = await service.run(SUBJECT, 'Lost');
-
-    expect(semantic.score).not.toHaveBeenCalled();
 
     // The weighted component, not a round trip back to 0-100: the component is
     // an integer share of a weight of 50, so it carries two points of
     // resolution and 95 stores as 48 rather than as itself.
-    const semanticComponent = result.best!.breakdown.semantic;
+    const semantic = result.best!.breakdown.semantic;
 
-    expect(semanticComponent.score).toBe(Math.round((95 / 100) * semanticComponent.weight));
+    expect(semantic.applicable).toBe(true);
+    expect(semantic.score).toBe(Math.round((95 / 100) * semantic.weight));
   });
 
-  /** A candidate the batch did not answer for still gets its per-pair call. */
-  it('falls back per candidate for anything the batch skipped', async () => {
-    rerankMode.mockReturnValue('on');
+  it('leaves a candidate the batch skipped without a semantic component', async () => {
+    const { service } = pipeline({ 'lexical-first': 95 });
 
-    const { service, semantic } = pipeline({ 'lexical-first': 95 });
+    const result = await service.run(SUBJECT, 'Lost');
+    const skipped = result.matches.find((entry) => entry.item.id === 'dense-first');
 
-    await service.run(SUBJECT, 'Lost');
-
-    expect(semantic.score).toHaveBeenCalledTimes(1);
+    // Evaluated, ranked, and not a match: nothing established it is the same
+    // object, and place and time alone cannot establish that.
+    expect(result.evaluated).toBe(2);
+    expect(skipped).toBeUndefined();
   });
 
-  it('falls back to the per-pair scorer when the reranker throws', async () => {
-    rerankMode.mockReturnValue('on');
-
-    const { service, rerank, semantic } = pipeline({});
+  it('produces candidates and no matches when the reranker throws', async () => {
+    const { service, rerank } = pipeline({});
 
     rerank.rerank.mockRejectedValue(new Error('provider down'));
 
     const result = await service.run(SUBJECT, 'Lost');
 
-    expect(semantic.score).toHaveBeenCalledTimes(2);
+    // The safe direction, and the same one a provider outage already took
+    // before the per-pair scorer was retired: two reports in the same place at
+    // the same time are not the same object.
     expect(result.evaluated).toBe(2);
+    expect(result.matches).toHaveLength(0);
   });
 
-  it('falls back when the reranker answers nothing', async () => {
-    rerankMode.mockReturnValue('on');
+  /**
+   * Normalising over the components that applied is right, and it means an
+   * unanswered candidate is scored out of a smaller denominator than an
+   * answered one. 44 of 50 reads as 88; the same evidence plus a reranked 85
+   * reads as 86. So the highest number in a run is not necessarily a candidate
+   * anybody assessed, and `best` has to be the one that was.
+   */
+  it('does not call an unassessed candidate the best, however well it scores', async () => {
+    const { service } = pipeline({ 'lexical-first': 60 });
 
-    const { service, rerank, semantic } = pipeline({});
+    const result = await service.run(SUBJECT, 'Lost');
+
+    expect(result.best?.item.id).toBe('lexical-first');
+    expect(result.best?.breakdown.semantic.applicable).toBe(true);
+  });
+
+  it('has no best candidate at all when nothing was assessed', async () => {
+    const { service } = pipeline({});
+
+    const result = await service.run(SUBJECT, 'Lost');
+
+    // Writing a score here would stamp the item with a percentage for a pair
+    // on which nothing checked whether the two objects are the same thing.
+    expect(result.evaluated).toBe(2);
+    expect(result.best).toBeNull();
+  });
+
+  it('produces candidates and no matches when the reranker answers nothing', async () => {
+    const { service, rerank } = pipeline({});
 
     rerank.rerank.mockResolvedValue(null);
 
-    await service.run(SUBJECT, 'Lost');
+    const result = await service.run(SUBJECT, 'Lost');
 
-    expect(semantic.score).toHaveBeenCalledTimes(2);
+    expect(result.evaluated).toBe(2);
+    expect(result.matches).toHaveLength(0);
   });
 });
 

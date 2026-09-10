@@ -9,6 +9,7 @@
 
 import { Redis } from 'ioredis';
 import { createLogger } from '../../utils/logger.js';
+import { trackReady } from '../redis/ready.js';
 
 const log = createLogger('redis');
 
@@ -21,9 +22,18 @@ export function createRedisConnection(url: string, role: 'producer' | 'consumer'
     // awaited inside a request or a drain pass cannot hang forever waiting for
     // a client-side buffer to flush. A consumer keeps the buffer, because
     // BullMQ's blocking reads have to survive a reconnect rather than reject.
+    //
+    // The one moment that is not an outage is the opening handshake, which is
+    // what `redis/ready.ts` exists for. BullMQ awaits its own `waitUntilReady`
+    // before every command, so the queue itself does not need the gate; code
+    // holding this connection and issuing a raw command does.
     enableOfflineQueue: role === 'consumer',
     connectionName: `reclaim-${role}`,
   });
+
+  // Watched from creation, so the gate knows whether this connection has ever
+  // opened rather than only whether it is open right now.
+  trackReady(connection);
 
   connection.on('error', (error: unknown) => log.error('Redis connection error', { role, error }));
   connection.on('end', () => log.warn('Redis connection closed', { role }));

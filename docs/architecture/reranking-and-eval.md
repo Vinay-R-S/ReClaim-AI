@@ -94,30 +94,53 @@ rescore the wrong pair.
 The deterministic guards outside the model — distance, time, type, and the
 minimum applicable weight — are what keep this safe when all three fail.
 
-## Rollout
+## It is the semantic scorer, not a mode
 
-`RERANK_MODE`, defaulting to the middle setting, exactly as retrieval does.
+It shipped in phase 24 behind `RERANK_MODE`, defaulting to `shadow`, so it
+could be measured against the per-pair scorer on real traffic before anything
+depended on it. Phase 25 retired the per-pair scorer, which is what the phase
+table meant by "retires the LLM-per-candidate path". The flag went with it: a
+setting whose only alternative is "score nothing" is not a flag. A deployment
+that still sets `RERANK_MODE` is warned at boot and otherwise ignored.
 
-| Mode     | Batch call | Per-pair calls | What decides        |
-| -------- | ---------- | -------------- | ------------------- |
-| `off`    | No         | N              | The per-pair scorer |
-| `shadow` | 1          | N              | The per-pair scorer |
-| `on`     | 1          | 0              | The batch           |
+What that changes, and what it does not:
 
-Shadow costs **one extra call per run, not N extra**, which is what makes
-measuring it on real traffic affordable. It logs the disagreement:
+| | Before | After |
+| ---- | ------ | ----- |
+| Model calls to score 25 candidates | 25, or 26 in shadow | 2 |
+| Scores that count | The per-pair scorer's | The batch's |
+| A batch that fails | Fell back to 25 per-pair calls | Those candidates get no semantic score |
+| A candidate with no semantic score | Could still match on the per-pair score | Is a candidate, never a match |
 
-```
-Rerank shadow { compared: 18, meanGap: 11, thresholdFlips: 2, model: 'qwen/qwen3.6-27b' }
-```
+Losing the fallback is the part worth being explicit about. It reads like a
+reduction in resilience and mostly is not: the two scorers shared a provider
+and a circuit breaker, so they failed together, and the case where the per-pair
+path saved a run was rare enough that nothing measured it. What remains is the
+degradation that matters — batches are independent, so a batch that fails costs
+its own candidates and not the run, and the reranker keeps whatever the other
+batches answered.
 
-`thresholdFlips` is the number to watch. A pair the per-pair scorer put above
-the threshold and the batch put below — or the reverse — is a match that would
-appear or disappear the day the flag is flipped.
+Where it does bite, the direction is the safe one. A run with no semantic
+component produces candidates and no matches (`REQUIRE_SEMANTIC_FOR_MATCH`),
+because two reports in the same place at the same time are not thereby the same
+object. A provider outage already produced exactly that before the per-pair
+scorer was retired.
 
-Every failure falls back to the per-pair scorer. A run with no semantic
-component produces no matches at all (`REQUIRE_SEMANTIC_FOR_MATCH`), so a
-reranker that cannot answer must never be the reason matching stops.
+Three bounds, because it is now in front of every match the system makes and
+the whole matching run happens inside a job attempt killed at two minutes:
+
+- an attempt is capped at 20 seconds, and at whatever is left of the deadline
+  when it starts, so an attempt beginning just inside the deadline can no
+  longer run a full timeout past it;
+- a call is capped at 45 seconds across providers and retries, and a
+  schema-constrained call shares one deadline across both its legs. Each leg
+  computing its own was how a 45 second ceiling became 90 for any reply that
+  needed repairing;
+- the reranker caps the operation at 60 seconds by cutting each batch off at
+  what is left, not by checking the clock between batches. Checking between
+  batches bounds nothing: a batch that starts one millisecond inside the budget
+  runs to its own ceiling. Reaching the cap keeps what answered and leaves the
+  rest unscored.
 
 ## The evaluation harness
 

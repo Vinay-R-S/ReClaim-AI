@@ -21,6 +21,9 @@ import type {
 } from '../../../shared/domain';
 
 export type {
+  AdjudicationDecision,
+  AdjudicationRecord,
+  AdjudicationStepRecord,
   AdminAuditAction,
   AIProvider,
   CreditBalance,

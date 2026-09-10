@@ -46,6 +46,7 @@ erDiagram
         string foundItemId FK
         number matchScore
         string status "matched, claimed, rejected"
+        map adjudication "stage 3 verdict and trace, when it ran"
         timestamp createdAt
     }
     handoverCodes {
@@ -80,7 +81,7 @@ erDiagram
 | -------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | `users`              | Firebase uid             | Profile, role, status, cached credit balance, report counters                                                       | Read its own document, and an admin any document. No listing, no writes at all |
 | `items`              | auto                     | The report: text, type, status, moderation, location, coordinates, images, tags                                     | Nothing. Closed entirely; every screen reads `GET /api/v1/items`               |
-| `matches`            | auto                     | An open proposed or verified pair, with the per-signal scores                                                       | Admin read                                                                     |
+| `matches`            | auto                     | An open proposed or verified pair, with the per-signal scores and, when the pair was adjudicated, the agent's trace | Admin read                                                                     |
 | `matchHistory`       | the match id             | A match archived on completion, so dashboards keep counting it                                                      | Admin read                                                                     |
 | `handoverCodes`      | the match id             | The hashed code, attempt count, expiry, override markers                                                            | Nothing, either direction                                                      |
 | `handovers`          | auto                     | The completed handover: both item snapshots, both people, score, chain hash, `participantIds`                       | Admin read                                                                     |

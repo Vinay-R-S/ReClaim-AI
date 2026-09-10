@@ -56,8 +56,10 @@ key stops a redelivered job from running twice; the matching-run claim on the
 item stops two different events, such as an approval and a rematch a second
 later, from scoring the same item at once.
 
-Where this still breaks: the loop. One LLM call per candidate means cost and
-latency grow with the corpus. Phase 23 replaces it with retrieval.
+The loop that used to grow with the corpus is gone: retrieval narrows the
+field, and one batched call scores what is left. What the diagram does not show
+is the last stage, which runs only when the best pair scores inside the
+uncertainty band — see [the adjudication agent](adjudication.md).
 
 ## Match to handover to completion
 
