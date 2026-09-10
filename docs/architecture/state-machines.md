@@ -114,8 +114,6 @@ the world to protect its own bookkeeping.
 A step that exhausts its retries writes an escalation carrying its own
 compensation text, because past the point where the credential was accepted the
 physical handover has already happened and no amount of retrying changes that.
-The compensations are declared but not yet driven: the admin revert and the
-dispute flow that call them are phase 27.
 
 Each step captures what its compensation will need *before* it runs, not after.
 "Restore the prior status of both items" needs the prior status, and the item
@@ -123,6 +121,64 @@ documents stop carrying it the moment the step commits — so a worker that died
 between the write and the acknowledgement would, on redelivery, record the
 values the first run had already written and leave the revert restoring
 `Claimed` to `Claimed`.
+
+### Undoing one
+
+Phase 27 drives the compensations. Two entry points, and the difference is who
+is allowed to be sure.
+
+A **dispute** is either party saying something is wrong. It decides nothing: it
+moves the handover to `disputed`, holds the credits, and routes it to an admin
+queue. The credits are held rather than reversed, because reversing them would
+decide the dispute in advance and the whole point of `disputed` is that nobody
+has. Which party the caller is gets resolved from the handover rather than
+trusted from the request, and somebody who is neither is refused. Disputes
+close after `HANDOVER_DISPUTE_WINDOW_DAYS`; an admin is not bound by that.
+
+A **revert** is an admin deciding. It runs the four recoverable compensations
+backwards: the chain revocation, then the reversing ledger entries, then the
+match, then the items. Backwards because the forward order is the order of
+increasing commitment: the items are what the physical world is told about, so
+they are the last thing undone. Then the state transition, and only then the
+correction notice.
+
+The notice is deliberately not first. It is the one step that cannot be taken
+back, so sending it before the compensations meant a revert that failed at, say,
+the credit reversal had already told two members of the public that their
+credits were reversed and their reports restored, while both were still exactly
+as they had been. Telling somebody something false is worse than telling them
+late.
+
+A revert of a handover that predates the step log finds nothing captured, so
+every compensation reports nothing to undo. That is not success: the handover
+is marked reverted while the items are still claimed and the credits still
+awarded. It raises an escalation and says so in the result.
+
+Three properties hold:
+
+- **It is never a delete.** Three of the five cannot be, even in principle. The
+  ledger is append-only, so undoing an award is a second negative entry that
+  references the same item. The chain is append-only, so undoing an attestation
+  is a linked revocation record. An email cannot be recalled, so undoing a
+  notification is a correction notice.
+- **It refuses to guess.** An item whose prior status nobody captured is left
+  alone and reported, rather than being set to a plausible-looking `Pending`;
+  an award that was never made is not reversed. Putting a claimed item back on
+  the board, or taking credits off somebody who never received them, is worse
+  than telling an admin which record needs a decision.
+- **It stops where it fails.** A compensation that throws ends the revert
+  there, with what ran recorded and the handover left in its current state. The
+  remaining steps are the ones closer to the physical world, and running them
+  against a half-undone handover is worse than stopping and saying so. Neither
+  party has been told at that point, because the notice runs last.
+- **It runs once, whoever runs it.** Each compensation is claimed
+  transactionally before it acts and marked only if it did real work, so two
+  admins deciding the same dispute produce one reversal rather than two. A
+  compensation that throws releases its claim, so a retry can pick it up.
+
+Rejecting a dispute uses the `disputed -> completed` edge and releases the
+credit hold. That edge exists for exactly this, which is why completion from
+the saga is pinned to `verified` only:
 
 Completion moves the handover only from `verified`. The table also allows
 `disputed -> completed`, for a dispute an admin did not uphold, and that

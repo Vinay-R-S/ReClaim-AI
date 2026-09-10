@@ -15,9 +15,14 @@ import { HandoverRepository, handoverRepository } from '../repositories/handover
 import { settingsRepository } from '../repositories/settings.repository.js';
 import { AppError } from '../middleware/errorHandler.middleware.js';
 import type { AuthRequest } from '../middleware/auth.middleware.js';
+import { handoverRevertService } from '../services/handover/handover.revert.js';
+import { stateOf } from '../services/handover/handover.machine.js';
 import type {
   HandoverConfirmBody,
+  HandoverDisputeBody,
+  HandoverDisputeResolveBody,
   HandoverReissueBody,
+  HandoverRevertBody,
   HandoverVerifyBody,
 } from '../schemas/index.js';
 
@@ -126,17 +131,139 @@ export class HandoverController {
     return res.json({ token: token.token, expiresAt: token.expiresAt.toISOString() });
   };
 
-  /** The event log for one handover. Admin only: it names both parties. */
+  /**
+   * The event log for one handover. Admin only: it names both parties.
+   *
+   * An empty log is answered as empty rather than as an error, and said so
+   * explicitly. A session that predates the event log has no history until the
+   * state backfill runs, and an admin deciding a dispute about one needs to
+   * know they are looking at a gap in the record rather than at a handover
+   * nothing ever happened to.
+   */
   timeline = async (req: AuthRequest, res: Response): Promise<Response> => {
-    const events = await getHandoverHistory(req.params.matchId);
+    const { matchId } = req.params;
+    const [events, session] = await Promise.all([
+      getHandoverHistory(matchId),
+      this.handovers.findSessionByMatch(matchId),
+    ]);
 
     return res.json({
       events: events.map((event) => ({
         ...event,
         at: event.at ? event.at.toISOString() : null,
       })),
+      // True when the session exists but has no log: the backfill has not run
+      // for it. False for a session that does not exist at all.
+      predatesLog: Boolean(session) && events.length === 0,
     });
   };
+
+  /**
+   * Undo a completed handover.
+   *
+   * Admin only, and the reason is required by the schema: it is written into
+   * the correction notice both parties receive and into the audit trail a
+   * later dispute is read from.
+   *
+   * A partial revert answers 409 rather than 200 with a failure inside it. The
+   * compensations that ran are recorded and the admin is told where it
+   * stopped, because a half-undone handover is a thing somebody has to act on
+   * rather than a result to be read past.
+   */
+  revert = async (req: AuthRequest, res: Response): Promise<Response> => {
+    const { matchId, reason } = req.body as HandoverRevertBody;
+    const uid = req.user?.uid;
+
+    if (!uid) throw new AppError('Authentication required', 401);
+
+    const result = await handoverRevertService.revert(matchId, reason, uid);
+
+    if (!result.success) {
+      throw new AppError(result.message, 409, { compensations: result.compensations });
+    }
+
+    return res.json(result);
+  };
+
+  /**
+   * Either party says a completed handover is wrong.
+   *
+   * The caller's role is resolved from the handover rather than trusted from
+   * the body, and somebody who is neither party is refused: a dispute freezes
+   * credits and reopens a settled record, so it is not something a passer-by
+   * can raise about somebody else's handover.
+   */
+  dispute = async (req: AuthRequest, res: Response): Promise<Response> => {
+    const { matchId, reason, note } = req.body as HandoverDisputeBody;
+    const uid = req.user?.uid;
+
+    if (!uid) throw new AppError('Authentication required', 401);
+
+    const party = await this.partyFor(matchId, uid, req.user?.role === 'admin');
+
+    if (!party) {
+      throw new AppError('Only a party to this handover can dispute it', 403);
+    }
+
+    const result = await handoverRevertService.raiseDispute(
+      matchId,
+      uid,
+      party,
+      reason,
+      note ?? null,
+    );
+
+    if (!result.success) throw new AppError(result.message, 409);
+
+    return res.json(result);
+  };
+
+  /** An admin decides a dispute: uphold it and revert, or reject it. */
+  resolveDispute = async (req: AuthRequest, res: Response): Promise<Response> => {
+    const { matchId, outcome, note } = req.body as HandoverDisputeResolveBody;
+    const uid = req.user?.uid;
+
+    if (!uid) throw new AppError('Authentication required', 401);
+
+    const result = await handoverRevertService.resolveDispute(matchId, uid, outcome, note);
+
+    if (!result.success) {
+      throw new AppError(result.message, 409, { compensations: result.compensations });
+    }
+
+    return res.json(result);
+  };
+
+  /** The open disputes, for the admin queue. */
+  disputes = async (_req: AuthRequest, res: Response): Promise<Response> => {
+    return res.json({ disputes: await handoverRevertService.listOpenDisputes() });
+  };
+
+  /**
+   * Which side of a handover a caller is on, if either.
+   *
+   * Resolved from the two items rather than from the request, for the same
+   * reason confirmation is: the body is written by whoever is calling.
+   */
+  private async partyFor(
+    matchId: string,
+    uid: string,
+    isAdmin: boolean,
+  ): Promise<'owner' | 'finder' | 'admin' | null> {
+    const session = await this.handovers.findSessionByMatch(matchId);
+
+    if (!session) throw new AppError('Handover session not found', 404);
+
+    const [owner, finder] = await Promise.all([
+      this.handovers.ownerOf(session.lostItemId),
+      this.handovers.ownerOf(session.foundItemId),
+    ]);
+
+    if (owner === uid) return 'owner';
+    if (finder === uid) return 'finder';
+
+    return isAdmin ? 'admin' : null;
+  }
 
   status = async (req: Request, res: Response): Promise<Response> => {
     const status = await getHandoverStatus(req.params.matchId);
@@ -160,6 +287,11 @@ export class HandoverController {
       lostItemId: session.lostItemId,
       foundItemId: session.foundItemId,
       status: session.status,
+      // The machine state as well as the legacy projection. Without it the
+      // admin list cannot tell an open session from one stranded at
+      // `verified` — both project to `pending` — and the stranded one is
+      // exactly the session that needs the reopen button.
+      state: stateOf(session as unknown as Record<string, unknown>),
       attempts: session.attempts ?? 0,
       expiresAt: toIso(session.expiresAt),
       blockedAt: toIso(session.blockedAt),

@@ -113,7 +113,15 @@ describe('running a step', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       { apply } as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      { resolveCodeRefById: async () => ({ id: 'code-ref' }) } as any,
+      {
+        resolveCodeRefById: async () => ({
+          id: 'code-ref',
+          // A settled handover. `runStep` reads the state before it does
+          // anything, because a reverted or disputed handover must not have
+          // its forward steps re-run whatever the step rows say.
+          get: async () => ({ exists: true, data: () => ({ state: 'verified' }) }),
+        }),
+      } as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       {} as any,
     );
@@ -165,6 +173,37 @@ describe('running a step', () => {
     expect(markDone).not.toHaveBeenCalled();
   });
 
+  it('does not run a forward step against a handover that has been reverted', async () => {
+    // Three of the five do not block completion, so a handover can reach
+    // `completed` — and then be reverted — while one of them is still
+    // retrying. Re-running it afterwards awards credits on a reverted
+    // handover, or attests one that has just been revoked.
+    const markDone = vi.fn(async () => undefined);
+
+    const steps = new HandoverSteps(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { isDone: async () => false, markDone, completed: async () => new Set() } as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { apply: vi.fn() } as any,
+      {
+        resolveCodeRefById: async () => ({
+          id: 'code-ref',
+          get: async () => ({ exists: true, data: () => ({ state: 'reverted' }) }),
+        }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      {} as any,
+    );
+
+    const action = vi.fn(async () => ({ status: 'done' as const }));
+
+    await steps.runStep('handover.credits', payload, action);
+
+    expect(action).not.toHaveBeenCalled();
+    expect(markDone).not.toHaveBeenCalled();
+  });
+
   it('records a skip, so a step that had nothing to do is not retried forever', async () => {
     const { steps, markDone } = build(false);
     const action = vi.fn(async () => ({ status: 'skipped' as const, detail: 'blockchain disabled' }));
@@ -191,7 +230,15 @@ describe('completing the handover', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       { apply } as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      { resolveCodeRefById: async () => ({ id: 'code-ref' }) } as any,
+      {
+        resolveCodeRefById: async () => ({
+          id: 'code-ref',
+          // A settled handover. `runStep` reads the state before it does
+          // anything, because a reverted or disputed handover must not have
+          // its forward steps re-run whatever the step rows say.
+          get: async () => ({ exists: true, data: () => ({ state: 'verified' }) }),
+        }),
+      } as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       {} as any,
     );

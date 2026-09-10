@@ -19,6 +19,12 @@ const REASON_LABELS: Record<CreditReason, string> = {
   successful_match_owner: 'Claimed your lost item',
   false_claim: 'False claim penalty',
   manual_adjustment: 'Adjusted by an admin',
+  // The reversal of a handover award. Named for what happened rather than for
+  // the arithmetic: somebody reading their own ledger after a reverted
+  // handover needs to know why the credits went, not that a negative entry was
+  // posted. The original award stays in the list above it, because the ledger
+  // is append-only and both are true.
+  handover_reverted: 'Handover reversed',
 };
 
 interface CreditHistoryProps {

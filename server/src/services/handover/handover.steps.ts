@@ -27,7 +27,8 @@ import {
   STEP_DEFINITIONS,
   type SagaStep,
 } from './handover.saga.js';
-import { handoverMachine, HandoverMachine } from './handover.machine.js';
+import { handoverMachine, HandoverMachine, stateOf } from './handover.machine.js';
+import type { HandoverState } from './handover.states.js';
 import type { HandoverStepPayload } from '../../platform/jobs/job.types.js';
 
 const log = createLogger('handover:steps');
@@ -334,6 +335,14 @@ export class HandoverSteps {
     return { status: 'done', undo: { txHash: result.txHash } };
   }
 
+  /** Where the handover is now, for a step deciding whether to run at all. */
+  private async stateOfHandover(handoverId: string): Promise<HandoverState> {
+    const ref = await this.handovers.resolveCodeRefById(handoverId);
+    const snapshot = await ref.get();
+
+    return stateOf(snapshot.exists ? (snapshot.data() as Record<string, unknown>) : undefined);
+  }
+
   /**
    * The score to attest to, whether or not the match still exists.
    *
@@ -367,6 +376,25 @@ export class HandoverSteps {
     payload: HandoverStepPayload,
     action: (payload: HandoverStepPayload) => Promise<StepResult>,
   ): Promise<void> {
+    // A handover that has been reverted or is under dispute must not have its
+    // forward steps run, whatever the step rows say. Three of the five do not
+    // block completion, so a handover can reach `completed` — and then be
+    // reverted — while one of them is still retrying or waiting on an
+    // operator. Re-running it afterwards awards credits on a reverted
+    // handover, emails "completed" after the correction notice, or attests a
+    // handover that has just been revoked.
+    const state = await this.stateOfHandover(payload.handoverId);
+
+    if (state === 'reverted' || state === 'disputed') {
+      log.warn('Skipping a saga step: the handover is no longer settled', {
+        handoverId: payload.handoverId,
+        step,
+        state,
+      });
+
+      return;
+    }
+
     if (await this.saga.isDone(payload.handoverId, step)) {
       log.info('Saga step already done', { handoverId: payload.handoverId, step });
 

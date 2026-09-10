@@ -134,6 +134,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Disputes. Closed to the browser in both directions: the row names both
+    // parties and carries the reason one of them gave, and a client that could
+    // write it could close its own dispute or open one on somebody else's
+    // handover. Raising and resolving both go through the API.
+    match /disputes/{handoverId} {
+      allow read, write: if false;
+    }
+
     // Model spend per day and per month. Written by the server only, and not
     // read from the browser: the admin screen that will show it goes through
     // the API like every other admin read.

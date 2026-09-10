@@ -134,6 +134,16 @@ const rawSchema = z.object({
   HANDOVER_ATTEMPT_BACKOFF_MS: withDefault(
     z.coerce.number().int().min(0).max(600_000).default(2_000),
   ),
+  /**
+   * How long after a handover either party may still dispute it.
+   *
+   * A window rather than forever, because a dispute is a state transition that
+   * freezes credits and reopens a settled record; one raised a year later is a
+   * support conversation. An admin is not bound by it.
+   */
+  HANDOVER_DISPUTE_WINDOW_DAYS: withDefault(
+    z.coerce.number().int().positive().max(365).default(30),
+  ),
 
   CLOUDINARY_CLOUD_NAME: optionalString,
   CLOUDINARY_API_KEY: optionalString,
@@ -305,6 +315,8 @@ export interface AppEnv {
     twoParty: boolean;
     qrTtlSeconds: number;
     attemptBackoffMs: number;
+    /** See HANDOVER_DISPUTE_WINDOW_DAYS. An admin is not bound by it. */
+    disputeWindowDays: number;
   };
   cloudinary: {
     cloudName?: string;
@@ -594,6 +606,7 @@ export function buildEnv(source: NodeJS.ProcessEnv): AppEnv {
       twoParty: raw.HANDOVER_TWO_PARTY,
       qrTtlSeconds: raw.HANDOVER_QR_TTL_SECONDS,
       attemptBackoffMs: raw.HANDOVER_ATTEMPT_BACKOFF_MS,
+      disputeWindowDays: raw.HANDOVER_DISPUTE_WINDOW_DAYS,
     }),
     cloudinary: Object.freeze({
       cloudName: raw.CLOUDINARY_CLOUD_NAME,
